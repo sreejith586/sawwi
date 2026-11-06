@@ -1,12 +1,10 @@
 import type { PdfPage, TextItem } from "./types";
 
-// pdf.js (pure JS, no native binary) in Node: text with positions, attachments, and QR
-// images decoded with jsQR. Pages are never rendered, so the optional canvas package
+// pdf.js (pure JS, no native binary) in Node: text with positions, attachments, QR
+// images decoded with jsQR, and scanned page images for OCR (decoded by pdf.js itself). Pages are never rendered, so the optional canvas package
 // pdf.js would use for rendering isn't installed (see pnpm-workspace.yaml).
 
 export const MAX_PAGES = 200;
-
-export const SCANNED_MESSAGE = "This PDF is a scanned image. Export it as CSV/Excel, or upload a text PDF.";
 
 export class PdfInputError extends Error {}
 
@@ -42,8 +40,12 @@ export type LoadedPdf = {
   imageCount(pages: number[]): Promise<number>;
   /** Decodes QR codes drawn as images on the given pages. */
   qrCodes(pages: number[]): Promise<string[]>;
+  /** The largest image on each page, as RGBA: the scan itself on an image-only page. */
+  pageImages(pages: number[]): Promise<PageImage[]>;
   close(): Promise<void>;
 };
+
+export type PageImage = { page: number; pageWidth: number; pageHeight: number; width: number; height: number; rgba: Uint8ClampedArray };
 
 export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
   const lib = await pdfjs();
@@ -104,7 +106,7 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
   }
 
   async function images(pageNumbers: number[]) {
-    const out: { width: number; height: number; kind: number; data: Uint8Array }[] = [];
+    const out: { page: number; width: number; height: number; kind: number; data: Uint8Array }[] = [];
     let count = 0;
     for (const n of pageNumbers) {
       if (n < 1 || n > doc.numPages) continue;
@@ -123,7 +125,7 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
               })
             : arg;
         const data = img as { width?: number; height?: number; kind?: number; data?: Uint8Array };
-        if (data?.data && data.width && data.height) out.push({ width: data.width, height: data.height, kind: data.kind ?? 0, data: data.data });
+        if (data?.data && data.width && data.height) out.push({ page: n, width: data.width, height: data.height, kind: data.kind ?? 0, data: data.data });
       }
     }
     return { count, images: out };
@@ -145,14 +147,25 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
       }
       return codes;
     },
+    pageImages: async (n) => {
+      const out: PageImage[] = [];
+      const all = (await images(n)).images;
+      for (const pageNumber of n) {
+        const biggest = all.filter((i) => i.page === pageNumber).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+        const rgba = biggest && toRgba(biggest, 40_000_000);
+        const page = pages[pageNumber - 1];
+        if (biggest && rgba && page) out.push({ page: pageNumber, pageWidth: page.width, pageHeight: page.height, width: biggest.width, height: biggest.height, rgba });
+      }
+      return out;
+    },
     close: () => task!.destroy(),
   };
 }
 
 /** pdf.js image kinds: 1 = 1-bit grayscale, 2 = RGB, 3 = RGBA. */
-function toRgba(img: { width: number; height: number; kind: number; data: Uint8Array }): Uint8ClampedArray | undefined {
+function toRgba(img: { width: number; height: number; kind: number; data: Uint8Array }, maxPixels = 4_000_000): Uint8ClampedArray | undefined {
   const px = img.width * img.height;
-  if (px > 4_000_000) return undefined;
+  if (px > maxPixels) return undefined;
   const out = new Uint8ClampedArray(px * 4);
   if (img.kind === 3) out.set(img.data.subarray(0, px * 4));
   else if (img.kind === 2) {

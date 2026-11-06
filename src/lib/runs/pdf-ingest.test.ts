@@ -64,6 +64,19 @@ describe("PDF uploads in a run", () => {
     expect(buildRunView(run.id)!.openQuestions.some((o) => o.id === q.id)).toBe(false);
   });
 
+  it("OCRs a scanned statement locally and says so in the chat", async () => {
+    const run = store.createRun("pdf-co-4", "bank-payouts");
+    await ingestFile(run, "bank", "scan.pdf", await F.statementPdf({ opening: 10000, txns: F.JANUARY, scan: true }), ctx);
+    const view = buildRunView(run.id)!;
+    const bank = view.slots.find((s) => s.key === "bank")!;
+    expect(bank.file!.rowCount).toBe(4);
+    expect(bank.file!.pdf![0]).toMatchObject({ method: "ocr", kind: "statement" });
+    const chat = view.messages.map((m) => m.body).join("\n");
+    expect(chat).toContain("by OCR from its scanned pages, here on the server");
+    expect(chat).toContain("It's a scan, so I used OCR");
+    expect(view.usage.calls).toBe(0);
+  }, 60_000);
+
   it("reads a batch of supplier invoice PDFs into a line-level slot", async () => {
     const run = store.createRun("pdf-co-3", "p2p-three-way-match");
     const a = await F.invoicePdf({ number: "INV-1", date: "01/01/2026", po: "PO-1", lines: F.MOUSE_LINES.slice(0, 2) });

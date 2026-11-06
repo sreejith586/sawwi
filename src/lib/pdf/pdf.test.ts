@@ -163,13 +163,56 @@ describe("invoices", () => {
   });
 });
 
-describe("refused PDFs", () => {
-  it("refuses a scanned (image-only) PDF with a clear message", async () => {
-    await expect(parseUpload("scan.pdf", await F.scannedPdf())).rejects.toThrow(
-      new UnsupportedFileError("scan.pdf: This PDF is a scanned image. Export it as CSV/Excel, or upload a text PDF."),
-    );
-  });
+describe("scanned PDFs (local OCR)", () => {
+  // OCR may misread a character, so these assert the fields that matter rather than every cell.
+  it("reads a scanned statement: rows, metadata and balance checks", async () => {
+    const table = await parseUpload("scan.pdf", await F.statementPdf({ opening: 10000, txns: F.JANUARY, printTotals: true, scan: true }));
+    const info = table.pdf![0];
+    expect(info).toMatchObject({ kind: "statement", method: "ocr", pages: 1 });
+    expect(info.ocr!.pages).toBe(1);
+    expect(info.ocr!.confidence).toBeGreaterThan(80);
+    expect(table.headers).toEqual(STATEMENT_HEADERS);
+    expect(table.rows.map((r) => r[0])).toEqual(["02/01/2026", "03/01/2026", "05/01/2026", "07/01/2026"]);
+    expect(table.rows.map((r) => [r[3], r[4], r[5]])).toEqual([
+      ["", "2,500.00", "12,500.00"],
+      ["350.75", "", "12,149.25"],
+      ["", "1,200.00", "13,349.25"],
+      ["26.25", "", "13,323.00"],
+    ]);
+    expect(table.rows[1][1]).toMatch(/POS PURCHASE OFFICE SUPPLIES MARINA BRANCH/);
+    expect(info.meta.find((m) => m.label === "Closing balance")?.value).toBe("AED 13,323.00");
+    expect(info.checks.every((c) => c.ok)).toBe(true);
+  }, 60_000);
 
+  it("reads a scanned multi-page statement and flags rows to review", async () => {
+    const table = await parseUpload("scan-q1.pdf", await F.statementPdf({ opening: 5000, txns: F.QUARTER, rowsPerPage: 9, scan: true }));
+    const info = table.pdf![0];
+    expect(info.method).toBe("ocr");
+    expect(table.rows).toHaveLength(F.QUARTER.length);
+    expect(table.rows.map((r) => r[0])).toEqual(F.QUARTER.map((t) => t.date));
+    expect(info.checks.find((c) => c.id === "running_balance")?.ok).toBe(true);
+    expect(Array.isArray(info.ocr!.lowConfidenceRows)).toBe(true);
+  }, 90_000);
+
+  it("reads a scanned invoice and checks its VAT", async () => {
+    const pdf = await F.invoicePdf({ number: "INV-2026-0042", date: "15/01/2026", po: "PO-7781", lines: F.MOUSE_LINES, scan: true });
+    const table = await parseUpload("scan-inv.pdf", pdf, { pdf: { countries: ["AE"] } });
+    const row = Object.fromEntries(table.headers.map((h, i) => [h, table.rows[0][i]]));
+    expect(row).toMatchObject({ "Invoice number": "INV-2026-0042", "Supplier VAT number": "100123456700003", "Amount excl. VAT": "950.00", VAT: "47.50", "Total incl. VAT": "997.50" });
+    expect(table.pdf![0].checks.map((c) => [c.id, c.ok])).toEqual([
+      ["lines_subtotal", true],
+      ["vat_rate", true],
+      ["total", true],
+    ]);
+  }, 60_000);
+
+  it("refuses a scan it can't read, and scans over the page cap", async () => {
+    await expect(parseUpload("blank.pdf", await F.blankScanPdf())).rejects.toThrow(/couldn't read this scan/);
+    await expect(parseUpload("long.pdf", await F.longScanPdf(21))).rejects.toThrow(/has 21 pages\. Sawwi reads up to 20 scanned pages/);
+  }, 60_000);
+});
+
+describe("refused PDFs", () => {
   it("refuses a password-protected PDF", async () => {
     await expect(parseUpload("locked.pdf", F.passwordPdf())).rejects.toThrow(/password-protected/);
   });

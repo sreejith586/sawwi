@@ -192,6 +192,14 @@ export async function ingestFiles(run: Run, slotKey: string, files: { name: stri
   for (const pdf of table.pdf ?? []) {
     const failed = pdf.checks.filter((c) => !c.ok);
     if (failed.length) store.addQuestion(run.id, slotKey, { kind: "pdf_check", fileName: pdf.fileName, detail: failed.map((c) => c.detail).join(" ") });
+    // OCR can misread digits; with no balance or VAT check to catch that, the user confirms the rows.
+    else if (pdf.ocr && pdf.checks.length === 0) {
+      store.addQuestion(run.id, slotKey, {
+        kind: "pdf_check",
+        fileName: pdf.fileName,
+        detail: "It's a scan read by OCR, and it has no balances or VAT totals I could check the rows against.",
+      });
+    }
   }
   for (const q of questions) store.addQuestion(run.id, slotKey, q);
 
@@ -203,6 +211,7 @@ const METHOD_LABEL: Record<PdfFileInfo["method"], string> = {
   zatca_xml: "from its embedded ZATCA e-invoice XML",
   zatca_qr: "from its ZATCA QR code",
   text: "from its text layer",
+  ocr: "by OCR from its scanned pages, here on the server",
 };
 
 /** One or two sentences on how the PDF(s) were read and whether their checks passed. */
@@ -217,11 +226,23 @@ function pdfSummary(infos: PdfFileInfo[]): string {
     if (p.skipped) s += ` I set aside ${plural(p.skipped, "line")} that aren't transactions (opening/closing, carried forward, totals, repeated headers).`;
     const passed = p.checks.filter((c) => c.ok);
     if (p.checks.length && passed.length === p.checks.length) s += ` Checks pass: ${passed.map((c) => c.label.toLowerCase()).join("; ")}.`;
+    if (p.ocr) s += ` ${ocrNote(p.ocr)}`;
     return s;
   }
   const byMethod = Object.entries(Object.groupBy(infos, (i) => i.method)).map(([m, list]) => `${list!.length} ${METHOD_LABEL[m as PdfFileInfo["method"]]}`);
   const bad = infos.filter((i) => i.checks.some((c) => !c.ok)).length;
-  return `I read ${plural(infos.length, "PDF")} (${byMethod.join(", ")}), no AI needed.${bad ? ` ${bad} of them failed a check.` : infos.some((i) => i.checks.length) ? " All their checks pass." : ""}`;
+  const scanned = infos.filter((i) => i.ocr).length;
+  return (
+    `I read ${plural(infos.length, "PDF")} (${byMethod.join(", ")}), no AI needed.` +
+    (bad ? ` ${bad} of them failed a check.` : infos.some((i) => i.checks.length) ? " All their checks pass." : "") +
+    (scanned ? ` ${scanned === 1 ? "One was a scan" : `${scanned} were scans`}: check the OCR'd rows under Preview data.` : "")
+  );
+}
+
+function ocrNote(ocr: NonNullable<PdfFileInfo["ocr"]>): string {
+  const rows = ocr.lowConfidenceRows;
+  const which = rows.length ? ` ${rows.length === 1 ? "Row" : "Rows"} ${rows.slice(0, 8).join(", ")}${rows.length > 8 ? "…" : ""} had words I wasn't sure of.` : "";
+  return `It's a scan, so I used OCR (average confidence ${ocr.confidence}%).${which} OCR can misread digits: check the rows under Preview data.`;
 }
 
 // ─── Answers ──────────────────────────────────────────────────────────────

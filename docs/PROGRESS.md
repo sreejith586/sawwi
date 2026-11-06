@@ -25,7 +25,8 @@ _Updated in every commit. Newest first within each section._
 
 ## Recent changes
 
-- **Phase 5, PDF inputs** (D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Scanned and password-protected PDFs are refused with a message. 21 new tests with synthetic fixture PDFs and golden tables.
+- **Phase 5, PDF inputs** (D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Password-protected PDFs are refused with a message. 25 new tests with synthetic fixture PDFs (golden tables for text PDFs, key fields for OCR).
+- **Scanned PDFs: local OCR** (D-24, the user's decision on D-20): image-only pages (up to 20) are OCR'd on the server with `tesseract.js` (English + Arabic, bundled language data, nothing sent out). The OCR text goes through the same table reader, layout memory and checks; OCR files are marked (confidence, low-confidence rows) and a scan with nothing to check against holds the run.
 - **Process:** PR-based workflow, CI, PR template and living docs (`CLAUDE.md`, `docs/PROCESS.md`, `docs/DECISIONS.md`, this file).
 - **Purchasing templates (65d80c0):** "Purchasing & suppliers" group with 3 templates (23 in total). Onboarding now asks "buy from suppliers on POs?" and "import stock?". Engine: `value` expression on row rules, and `by` fields on duplicate checks.
 - **Repo:** `main` pushed to https://github.com/sreejith586/sawwi.git.
@@ -33,13 +34,11 @@ _Updated in every commit. Newest first within each section._
 ## Next
 
 1. Finish Phase 4 (see the scope above) and open its PR.
-2. Review and merge Phase 5 (PDF inputs). Then test it on real anonymised statements and invoices.
-3. Scanned PDFs, once the open question below is decided.
+2. Review and merge Phase 5 (PDF inputs). Then test it on real anonymised statements and invoices, text and scanned.
 
 ## Open questions
 
-- **Scanned PDFs:** may Claude vision transcribe page images (opt-in per workspace, with a cost estimate shown first), or should Sawwi use local OCR only? This goes beyond D-2 (see D-20). Until then they're refused with an "export as CSV/Excel" message.
-- **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text.
+- **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
 - **Anthropic API key:** not configured yet, so the Haiku mapping path has never run live. Heuristics and chips cover it meanwhile.
 - **Real sample exports** (Magento 1/2, Odoo, marketplace settlements) to test mappings against.

@@ -1,17 +1,64 @@
 // Synthetic PDF fixtures for tests (golden tables live in src/lib/pdf/pdf.test.ts).
-// Test-only: pdf-lib and qrcode are dev dependencies and nothing in the app imports this.
+// Test-only: pdf-lib, qrcode and pureimage are dev dependencies and nothing in the app imports this.
+import { createRequire } from "node:module";
+import path from "node:path";
+import { PassThrough } from "node:stream";
 import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import * as PImage from "pureimage";
 import QRCode from "qrcode";
 import { encodeZatcaQr } from "../zatca";
 
 type Cell = { text: string; x: number; align?: "left" | "right"; bold?: boolean };
-type Ctx = { page: PDFPage; font: PDFFont; bold: PDFFont; size: number };
+type Canvas = ReturnType<typeof PImage.make>;
+/** With `scan`, text is painted onto a page-sized bitmap instead: an image-only "scanned" page. */
+type Ctx = { page: PDFPage; font: PDFFont; bold: PDFFont; size: number; scan?: Canvas };
+
+/** Scan resolution: 2.5 × 72 = 180 dpi, a typical office scan. */
+const SCAN_SCALE = 2.5;
 
 function draw(ctx: Ctx, y: number, cells: Cell[]) {
   for (const c of cells) {
     const font = c.bold ? ctx.bold : ctx.font;
+    // Liberation Sans (used for scans) has the same metrics as Helvetica, so alignment matches.
     const width = font.widthOfTextAtSize(c.text, ctx.size);
-    ctx.page.drawText(c.text, { x: c.align === "right" ? c.x - width : c.x, y: ctx.page.getHeight() - y, size: ctx.size, font });
+    const x = c.align === "right" ? c.x - width : c.x;
+    if (ctx.scan) {
+      const g = ctx.scan.getContext("2d");
+      g.fillStyle = "#111111";
+      g.font = `${ctx.size * SCAN_SCALE}pt ${c.bold ? "ScanSansBold" : "ScanSans"}`;
+      g.fillText(c.text, x * SCAN_SCALE, y * SCAN_SCALE);
+    } else ctx.page.drawText(c.text, { x, y: ctx.page.getHeight() - y, size: ctx.size, font });
+  }
+}
+
+let fontsLoaded: Promise<void> | undefined;
+function loadScanFonts() {
+  fontsLoaded ??= (async () => {
+    const dir = path.join(path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json")), "standard_fonts");
+    await PImage.registerFont(path.join(dir, "LiberationSans-Regular.ttf"), "ScanSans").load();
+    await PImage.registerFont(path.join(dir, "LiberationSans-Bold.ttf"), "ScanSansBold").load();
+  })();
+  return fontsLoaded;
+}
+
+async function newScan(page: PDFPage): Promise<Canvas> {
+  await loadScanFonts();
+  const img = PImage.make(Math.round(page.getWidth() * SCAN_SCALE), Math.round(page.getHeight() * SCAN_SCALE));
+  const g = img.getContext("2d");
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, img.width, img.height);
+  return img;
+}
+
+/** Places each page's bitmap as a full-page image: the PDF has no text layer at all. */
+async function finishScans(doc: PDFDocument, scans: { page: PDFPage; img: Canvas }[]) {
+  for (const { page, img } of scans) {
+    const chunks: Buffer[] = [];
+    const out = new PassThrough();
+    out.on("data", (c: Buffer) => chunks.push(c));
+    await PImage.encodePNGToStream(img, out);
+    const png = await doc.embedPng(Buffer.concat(chunks));
+    page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
   }
 }
 
@@ -54,8 +101,16 @@ export async function statementPdf(opts: {
   /** Adds this much to one printed balance (row index) to make the running-balance check fail. */
   misprint?: { row: number; by: number };
   printTotals?: boolean;
+  /** Paint the pages as images (a scanned statement, for OCR). */
+  scan?: boolean;
 }): Promise<Uint8Array> {
   const { doc, font, bold } = await newDoc();
+  const scans: { page: PDFPage; img: Canvas }[] = [];
+  const pagesNeeded = Math.ceil(opts.txns.length / (opts.rowsPerPage ?? opts.txns.length));
+  for (let i = 0; opts.scan && i < pagesNeeded; i++) {
+    const page = doc.addPage([595, 842]);
+    scans.push({ page, img: await newScan(page) });
+  }
   const perPage = opts.rowsPerPage ?? opts.txns.length;
   const chunks: Txn[][] = [];
   for (let i = 0; i < opts.txns.length; i += perPage) chunks.push(opts.txns.slice(i, i + perPage));
@@ -64,8 +119,8 @@ export async function statementPdf(opts: {
   const totals = { debit: 0, credit: 0 };
 
   chunks.forEach((chunk, p) => {
-    const page = doc.addPage([595, 842]);
-    const ctx: Ctx = { page, font, bold, size: 9 };
+    const page = opts.scan ? scans[p].page : doc.addPage([595, 842]);
+    const ctx: Ctx = { page, font, bold, size: 9, scan: scans[p]?.img };
     let y = 50;
     if (p === 0) {
       draw({ ...ctx, size: 14 }, y, [{ text: "Gulf Example Bank PJSC", x: 40, bold: true }]);
@@ -115,6 +170,7 @@ export async function statementPdf(opts: {
     }
     draw(ctx, 810, [{ text: `Page ${p + 1} of ${chunks.length}`, x: 270 }]);
   });
+  await finishScans(doc, scans);
   return doc.save();
 }
 
@@ -143,10 +199,11 @@ export const MOUSE_LINES: InvoiceLineSpec[] = [
   { description: "Laptop Stand Aluminium", sku: "SKU-003", qty: 5, price: 90 },
 ];
 
-export async function invoicePdf(opts: { number: string; date: string; po?: string; lines: InvoiceLineSpec[]; vatRate?: number; vatOverride?: number }) {
+export async function invoicePdf(opts: { number: string; date: string; po?: string; lines: InvoiceLineSpec[]; vatRate?: number; vatOverride?: number; scan?: boolean }) {
   const { doc, font, bold } = await newDoc();
   const page = doc.addPage([595, 842]);
-  const ctx: Ctx = { page, font, bold, size: 10 };
+  const scan = opts.scan ? await newScan(page) : undefined;
+  const ctx: Ctx = { page, font, bold, size: 10, scan };
   const rate = opts.vatRate ?? 5;
   draw({ ...ctx, size: 15 }, 50, [{ text: "Example Trading LLC", x: 40, bold: true }]);
   draw(ctx, 68, [{ text: "Office 12, Business Bay, Dubai, UAE", x: 40 }]);
@@ -182,6 +239,7 @@ export async function invoicePdf(opts: { number: string; date: string; po?: stri
   draw(ctx, (y += 16), [{ text: `VAT ${rate}%`, x: 400 }, { text: money(vat), x: X.amount, align: "right" }]);
   draw(ctx, (y += 16), [{ text: "Total AED", x: 400, bold: true }, { text: money(net + vat), x: X.amount, align: "right", bold: true }]);
   draw(ctx, 790, [{ text: "Thank you for your business.", x: 40 }]);
+  if (scan) await finishScans(doc, [{ page, img: scan }]);
   return doc.save();
 }
 
@@ -271,11 +329,19 @@ export async function zatcaPdf(opts: { attachXml?: boolean; text?: boolean } = {
   return doc.save();
 }
 
-/** A "scanned" page: one image, no text layer. */
-export async function scannedPdf() {
+/** A scanned page with nothing readable on it: a blank sheet. */
+export async function blankScanPdf() {
   const { doc } = await newDoc();
   const page = doc.addPage([595, 842]);
-  await qrImage(doc, page, "scanned page placeholder, not a ZATCA payload", 100, 100);
+  await finishScans(doc, [{ page, img: await newScan(page) }]);
+  return doc.save();
+}
+
+/** A scan with more pages than Sawwi OCRs at once (each page holds a small image, never OCR'd). */
+export async function longScanPdf(pages: number) {
+  const { doc } = await newDoc();
+  const png = await doc.embedPng(await QRCode.toBuffer("page", { scale: 1 }));
+  for (let i = 0; i < pages; i++) doc.addPage([595, 842]).drawImage(png, { x: 0, y: 0, width: 595, height: 842 });
   return doc.save();
 }
 

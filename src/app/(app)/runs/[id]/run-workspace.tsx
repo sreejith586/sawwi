@@ -124,6 +124,8 @@ function SlotCard(props: {
 }) {
   const { slot } = props;
   const [uploading, setUploading] = useState(false);
+  // Scanned PDFs are OCR'd on the server, a few seconds a page: say so while it works.
+  const [slow, setSlow] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [tab, setTab] = useState<"mapping" | "preview">("mapping");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +134,8 @@ function SlotCard(props: {
   const upload = async (files: File[]) => {
     if (files.length === 0) return;
     setUploading(true);
+    const hasPdf = files.some((f) => f.name.toLowerCase().endsWith(".pdf"));
+    const timer = hasPdf ? setTimeout(() => setSlow(true), 2500) : undefined;
     props.onError(undefined);
     try {
       const body = new FormData();
@@ -144,6 +148,8 @@ function SlotCard(props: {
     } catch {
       props.onError("Upload failed. Check your connection and try again.");
     } finally {
+      clearTimeout(timer);
+      setSlow(false);
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -208,7 +214,7 @@ function SlotCard(props: {
                 {missingRequired > 0 && <Pill tone="high">{missingRequired} required missing</Pill>}
                 <label className="inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground">
                   {input}
-                  {uploading ? "Reading…" : "Replace"}
+                  {uploading ? (slow ? "Reading scanned pages…" : "Reading…") : "Replace"}
                 </label>
               </div>
               {slot.file.pdf && <PdfDetails infos={slot.file.pdf} />}
@@ -221,7 +227,9 @@ function SlotCard(props: {
             >
               {input}
               {uploading ? (
-                <span className="text-sm text-muted">Reading your file…</span>
+                <span className="text-sm text-muted" role="status">
+                  {slow ? "Reading scanned pages… OCR takes a few seconds a page." : "Reading your file…"}
+                </span>
               ) : (
                 <>
                   <span className="grid size-9 place-items-center rounded-full border border-border bg-surface text-muted shadow-sm">
@@ -277,6 +285,7 @@ const PDF_METHOD: Record<PdfFileInfo["method"], string> = {
   zatca_xml: "ZATCA e-invoice XML",
   zatca_qr: "ZATCA QR code",
   text: "text layer",
+  ocr: "scanned pages (OCR)",
 };
 
 /** How a PDF was read: what it is, its header facts (kept out of the rows) and the checks run before matching. */
@@ -292,6 +301,7 @@ function PdfDetails({ infos }: { infos: PdfFileInfo[] }) {
             {kinds} · read from {[...new Set(infos.map((i) => PDF_METHOD[i.method]))].join(" / ")}
           </span>
           {failed.length === 0 ? <Pill tone="ok">All checks pass</Pill> : <Pill tone="high">{failed.length} need a look</Pill>}
+          {infos.some((i) => i.ocr) && <Pill tone="medium">{infos.filter((i) => i.ocr).length} read by OCR · review rows</Pill>}
         </div>
         {failed.length > 0 && (
           <ul className="mt-2 space-y-1">
@@ -316,6 +326,7 @@ function PdfDetails({ infos }: { infos: PdfFileInfo[] }) {
           {info.skipped > 0 && ` · ${info.skipped} non-transaction line${info.skipped === 1 ? "" : "s"} set aside`}
         </span>
         {info.layout === "remembered" && <Pill tone="ok">PDF layout remembered</Pill>}
+        {info.ocr && <Pill tone="medium">OCR · {info.ocr.confidence}% confidence · review rows</Pill>}
       </div>
       {info.meta.length > 0 && (
         <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
@@ -467,6 +478,7 @@ function FilePreview({ runId, slotKey, fileName, pdf }: { runId: string; slotKey
   });
 
   const failed = (pdf ?? []).flatMap((p) => p.checks.filter((c) => !c.ok).map((c) => ({ ...c, file: p.fileName })));
+  const scanned = (pdf ?? []).filter((p) => p.ocr);
 
   return (
     <>
@@ -478,6 +490,25 @@ function FilePreview({ runId, slotKey, fileName, pdf }: { runId: string; slotKey
               <li key={`${c.file}-${c.id}`}>
                 {(pdf?.length ?? 0) > 1 && `${c.file}: `}
                 {c.label}. {c.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {scanned.length > 0 && (
+        <div className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+          <p className="font-medium">
+            {scanned.length === 1 && (pdf?.length ?? 0) === 1 ? "Read from scanned pages by OCR" : `${scanned.length} of these files were read from scans by OCR`}. OCR can misread digits:
+            check amounts, dates and references before running.
+          </p>
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {scanned.map((p) => (
+              <li key={p.fileName}>
+                {(pdf?.length ?? 0) > 1 && `${p.fileName}: `}
+                {p.ocr!.pages} page{p.ocr!.pages === 1 ? "" : "s"}, average confidence {p.ocr!.confidence}%
+                {p.ocr!.lowConfidenceRows.length > 0 &&
+                  `. Least certain: row${p.ocr!.lowConfidenceRows.length === 1 ? "" : "s"} ${p.ocr!.lowConfidenceRows.slice(0, 12).join(", ")}${p.ocr!.lowConfidenceRows.length > 12 ? "…" : ""}`}
+                .
               </li>
             ))}
           </ul>

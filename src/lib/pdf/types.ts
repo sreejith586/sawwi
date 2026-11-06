@@ -42,7 +42,7 @@ export interface LayoutMemory {
 }
 
 export type PdfKind = "statement" | "invoice" | "table";
-export type PdfMethod = "zatca_xml" | "zatca_qr" | "text";
+export type PdfMethod = "zatca_xml" | "zatca_qr" | "text" | "ocr";
 
 export type PdfCheck = { id: string; label: string; ok: boolean; detail: string };
 
@@ -58,6 +58,8 @@ export type PdfFileInfo = {
   checks: PdfCheck[];
   /** Rows set aside: brought/carried forward, totals, repeated headers. */
   skipped: number;
+  /** Set when the text came from local OCR of scanned pages: lower confidence, review the rows. */
+  ocr?: { pages: number; confidence: number; lowConfidenceRows: number[] };
 };
 
 export type InvoiceLine = {
