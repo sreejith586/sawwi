@@ -25,7 +25,7 @@ _Updated in every commit. Newest first within each section._
 
 ## Recent changes
 
-- **Plan: PDF inputs as Phase 5** (D-20, ARCHITECTURE §8). Usage/cost dashboard and connectors move to Phase 6.
+- **Plan: PDF inputs as Phase 5** (D-20, ARCHITECTURE §8). Scanned PDFs: local OCR only (user's decision). Usage/cost dashboard and connectors move to Phase 6.
 - **Process:** PR-based workflow, CI, PR template and living docs (`CLAUDE.md`, `docs/PROCESS.md`, `docs/DECISIONS.md`, this file).
 - **Purchasing templates (65d80c0):** "Purchasing & suppliers" group with 3 templates (23 in total). Onboarding now asks "buy from suppliers on POs?" and "import stock?". Engine: `value` expression on row rules, and `by` fields on duplicate checks.
 - **Repo:** `main` pushed to https://github.com/sreejith586/sawwi.git.
@@ -37,7 +37,6 @@ _Updated in every commit. Newest first within each section._
 
 ## Open questions
 
-- **Scanned PDFs:** may Claude vision transcribe page images (opt-in per workspace, with a cost estimate shown first), or should Sawwi use local OCR only? This goes beyond D-2 (see D-20).
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
 - **Anthropic API key:** not configured yet, so the Haiku mapping path has never run live. Heuristics and chips cover it meanwhile.
 - **Real sample exports** (Magento 1/2, Odoo, marketplace settlements) to test mappings against.
