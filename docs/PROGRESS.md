@@ -19,6 +19,7 @@ _Updated in every commit. Newest first within each section._
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
+| PDF inputs plan (D-20, §8 planned) | `docs/plan-pdf-inputs` | #3 | Phase 4 session |
 | Phase 5: PDF inputs | `phase-5-pdf-inputs` (worktree) | #4 | Phase 5 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
