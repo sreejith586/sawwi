@@ -12,7 +12,7 @@ const STATUS_TONE = { active: "ok", invited: "info", deactivated: "neutral" } as
 const field =
   "h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors placeholder:text-muted focus:border-foreground/40";
 
-export function MembersPanel({ rows, teams }: { rows: MemberRow[]; teams: { value: string; label: string }[] }) {
+export function MembersPanel({ rows, teams, canManage }: { rows: MemberRow[]; teams: { value: string; label: string }[]; canManage: boolean }) {
   const [pending, startTransition] = useTransition();
   const run = (fn: () => Promise<void>) => startTransition(fn);
 
@@ -23,11 +23,11 @@ export function MembersPanel({ rows, teams }: { rows: MemberRow[]; teams: { valu
       render: (r) => (
         <div className="flex items-center gap-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-surface-muted text-[11px] font-semibold text-muted">
-            {r.owner ? "★" : r.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+            {r.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
           </span>
           <div className="min-w-0">
             <p className="truncate font-medium">{r.name}</p>
-            <p className="truncate text-xs text-muted">{r.owner ? "Signed in on this browser" : r.email}</p>
+            <p className="truncate text-xs text-muted">{r.email}</p>
           </div>
         </div>
       ),
@@ -37,8 +37,8 @@ export function MembersPanel({ rows, teams }: { rows: MemberRow[]; teams: { valu
       key: "access",
       header: "Access",
       render: (r) =>
-        r.owner ? (
-          <span className="font-medium">Owner</span>
+        r.owner || !canManage ? (
+          <span className={r.owner ? "font-medium" : ""}>{r.access}</span>
         ) : (
           <select
             aria-label={`Access for ${r.name}`}
@@ -63,7 +63,7 @@ export function MembersPanel({ rows, teams }: { rows: MemberRow[]; teams: { valu
       sortable: false,
       align: "right",
       render: (r) =>
-        r.owner ? null : (
+        r.owner || !canManage ? null : (
           <div className="flex justify-end gap-1">
             <button
               type="button"
@@ -88,7 +88,11 @@ export function MembersPanel({ rows, teams }: { rows: MemberRow[]; teams: { valu
 
   return (
     <div className="space-y-8">
-      <InviteForm teams={teams} />
+      {canManage ? (
+        <InviteForm teams={teams} />
+      ) : (
+        <p className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">Only workspace owners and admins can invite or change teammates.</p>
+      )}
       <section>
         <h2 className="text-sm font-semibold">Team · {rows.length}</h2>
         <div className="mt-3">
@@ -128,7 +132,7 @@ function InviteForm({ teams }: { teams: { value: string; label: string }[] }) {
       id="invite-form"
       action={action} className="rounded-xl border border-border bg-surface p-5">
       <h2 className="text-sm font-semibold">Invite a teammate</h2>
-      <p className="mt-0.5 text-sm text-muted">They&apos;ll get access to this workspace&apos;s templates and reconciliations.</p>
+      <p className="mt-0.5 text-sm text-muted">They sign up with this email and land straight in this workspace.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1.3fr_0.9fr_1fr_auto] lg:items-start">
         <label className="block">
           <span className="sr-only">Name</span>
@@ -169,7 +173,7 @@ function InviteForm({ teams }: { teams: { value: string; label: string }[] }) {
         {state.invited ? (
           <span className="text-success">Added {state.invited} to the team.</span>
         ) : (
-          "Invites are saved to the team list. Email invitations and sign-in arrive with user accounts."
+          "No email is sent yet: share the sign-up link with them. They join this workspace as soon as they sign up with this address."
         )}
       </p>
     </form>

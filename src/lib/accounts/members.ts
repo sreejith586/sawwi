@@ -97,3 +97,30 @@ export function setMemberActive(orgKey: string, id: string, active: boolean) {
 export function removeMember(orgKey: string, id: string) {
   db().prepare("DELETE FROM members WHERE org_key = ? AND id = ?").run(orgKey, id);
 }
+
+export function countInvited(orgKey: string): number {
+  return Number((db().prepare("SELECT COUNT(*) AS n FROM members WHERE org_key = ? AND status = 'invited'").get(orgKey) as Row).n);
+}
+
+export function findMemberByEmail(orgKey: string, email: string): Member | undefined {
+  const r = db().prepare("SELECT * FROM members WHERE org_key = ? AND email = ?").get(orgKey, email.trim().toLowerCase()) as Row | undefined;
+  return r ? toMember(r) : undefined;
+}
+
+/** Open invites for an email across every workspace, oldest first (used at sign-up). */
+export function invitesForEmail(email: string): (Member & { orgKey: string })[] {
+  return (db().prepare("SELECT * FROM members WHERE email = ? AND status = 'invited' ORDER BY invited_at").all(email.trim().toLowerCase()) as Row[]).map((r) => ({
+    ...toMember(r),
+    orgKey: String(r.org_key),
+  }));
+}
+
+/** An invite becomes "active" once the person signs up and joins. */
+export function markMemberJoined(orgKey: string, email: string) {
+  db().prepare("UPDATE members SET status = 'active' WHERE org_key = ? AND email = ?").run(orgKey, email.trim().toLowerCase());
+}
+
+export function getMember(orgKey: string, id: string): Member | undefined {
+  const r = db().prepare("SELECT * FROM members WHERE org_key = ? AND id = ?").get(orgKey, id) as Row | undefined;
+  return r ? toMember(r) : undefined;
+}

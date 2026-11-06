@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/profile/session";
+import { runBlocker } from "@/lib/saas/session";
 import { getOwnedRun, orgKeyFor } from "@/lib/runs/access";
 import { answerQuestion, overrideMapping, RunInputError } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
@@ -17,6 +18,9 @@ export async function startRun(templateId: string) {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
   if (!getTemplate(templateId)) throw new Error("Unknown template");
+  // Plan, trial and role gate (a no-op while the paywall is off, except for viewers).
+  const blocked = await runBlocker();
+  if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
   const run = createRun(orgKeyFor(profile), templateId);
   redirect(`/runs/${run.id}`);
 }
@@ -42,6 +46,8 @@ export async function setFieldColumn(runId: string, slotKey: string, fieldKey: s
 }
 
 export async function reconcileRun(runId: string): Promise<RunActionResult> {
+  const blocked = await runBlocker();
+  if (blocked) return { error: blocked.message };
   return withRun(runId, (run, countries) => {
     runReconciliation(run, countries);
   });

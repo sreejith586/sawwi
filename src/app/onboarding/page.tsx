@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { getProfile } from "@/lib/profile/session";
+import { getCurrentSession } from "@/lib/saas/session";
 import { OnboardingWizard } from "./onboarding-wizard";
 
 export const metadata: Metadata = { title: "Set up" };
 
 async function Wizard() {
-  return <OnboardingWizard initial={await getProfile()} />;
+  const session = await getCurrentSession();
+  return <OnboardingWizard initial={session?.org.profile} defaultCompany={session?.org.name} />;
 }
 
 export default function OnboardingPage() {

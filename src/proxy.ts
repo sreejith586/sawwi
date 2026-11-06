@@ -1,22 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { decodeProfileCookie, PROFILE_COOKIE } from "@/lib/profile/profile";
+import { ONBOARDED_COOKIE, SESSION_COOKIE } from "@/lib/saas/cookies";
 
-// Route guards run here, before rendering, so pages never redirect mid-render
-// (which would block instant navigation). This is an optimistic check only;
-// server actions and route handlers still verify the profile themselves.
+// Optimistic route guards, run before rendering so pages never redirect mid-render.
+// Only cookie presence is checked here; every page, server action and route handler
+// re-validates the session against the database (src/lib/saas/session.ts).
 export function proxy(request: NextRequest) {
-  const hasProfile = Boolean(decodeProfileCookie(request.cookies.get(PROFILE_COOKIE)?.value));
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
+  const signedIn = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const onboarded = Boolean(request.cookies.get(ONBOARDED_COOKIE)?.value);
 
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL(hasProfile ? "/home" : "/onboarding", request.url));
+  if (!signedIn) {
+    const login = new URL("/login", request.url);
+    login.searchParams.set("next", pathname + search);
+    return NextResponse.redirect(login);
   }
-  if (!hasProfile) {
+  if (!onboarded && pathname !== "/onboarding" && !pathname.startsWith("/admin")) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
   }
   return NextResponse.next();
 }
 
+// Public: "/" (intro page), /login, /signup. Everything below needs an account.
 export const config = {
-  matcher: ["/", "/home", "/templates", "/runs/:path*", "/settings/:path*"],
+  matcher: ["/home", "/onboarding", "/templates/:path*", "/runs/:path*", "/settings/:path*", "/admin/:path*"],
 };

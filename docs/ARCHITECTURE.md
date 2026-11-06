@@ -172,6 +172,15 @@ Track per-run tokens (input, cache read, cache write, output) from day one so ca
 - **Anthropic SDK:** Haiku 5.5 / Sonnet 5.5, prompt caching, Batch API
 - **Job queue** (e.g. Inngest/BullMQ): long-running recos and scheduled repeat runs
 
+## 6a. Accounts, workspaces and paywall (SaaS groundwork)
+
+- **Public:** `/` intro page, `/signup`, `/login`. Everything else needs a session (`src/proxy.ts` does an optimistic cookie check; `src/lib/saas/session.ts` re-validates against the DB in every page, action and route).
+- **Accounts:** email + scrypt password, DB-backed sessions (only the token hash is stored). Each sign-up creates a workspace (`orgs`) whose fixed `key` files its runs, mappings and members; the business profile lives on the workspace. Invited emails join the inviting workspace on sign-up or login.
+- **Roles:** owner / admin (team, profile, plan) / editor (run reconciliations) / viewer (read reports only).
+- **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
+- **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend) and users, with Excel exports.
+- **Storage:** SQLite now (`src/lib/saas/store.ts` holds all SQL for this); port to Postgres with the rest.
+
 ## 7. Build phases
 
 Status: Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.

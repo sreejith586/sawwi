@@ -24,12 +24,12 @@ export const MEMBER_FILTERS = ["access", "status"];
 
 const dateLabel = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 
-export function memberRows(owner: { roleLabel: string }, members: Member[]): MemberRow[] {
+export function memberRows(owner: { name: string; email: string; roleLabel: string }, members: Member[]): MemberRow[] {
   return [
     {
       id: "owner",
-      name: "You",
-      email: "",
+      name: owner.name,
+      email: owner.email,
       access: "Owner",
       accessKey: "owner",
       team: owner.roleLabel,

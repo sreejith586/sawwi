@@ -3,8 +3,10 @@ import type { Profile } from "@/lib/profile/profile";
 import * as store from "./store";
 import type { Run } from "./types";
 
-// Until auth lands, a run belongs to the company in the profile cookie.
-export function orgKeyFor(profile: Profile): string {
+// Runs belong to the signed-in workspace. Its key is fixed at sign-up, so renaming the
+// company never orphans its runs; the name-derived fallback only covers old callers.
+export function orgKeyFor(profile: Profile & { orgKey?: string }): string {
+  if (profile.orgKey) return profile.orgKey;
   return profile.company.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "default";
 }
 

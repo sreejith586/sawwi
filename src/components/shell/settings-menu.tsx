@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { resetProfile } from "@/app/actions/profile";
+import { signOut } from "@/app/actions/auth";
 import { ChevronsIcon, PanelIcon, SettingsIcon, UserIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { toggleSidebar } from "@/lib/sidebar";
 
-export type MenuProfile = { company: string; role: string; initials: string };
+export type MenuProfile = { company: string; role: string; initials: string; userName: string; userEmail: string; isSuperadmin: boolean };
 
 const rowClass =
   "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-foreground transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30";
@@ -41,8 +41,11 @@ export function SettingsMenu({ profile }: { profile: MenuProfile }) {
           onClick={(e) => (e.target as HTMLElement).closest("a") && setOpen(false)}
         >
           <div className="px-2.5 pb-2 pt-1.5">
-            <p className="truncate text-sm font-medium">{profile.company}</p>
-            <p className="truncate text-xs text-muted">{profile.role}</p>
+            <p className="truncate text-sm font-medium">{profile.userName}</p>
+            <p className="truncate text-xs text-muted">{profile.userEmail}</p>
+            <p className="mt-1.5 truncate text-xs text-muted">
+              {profile.company} · {profile.role}
+            </p>
           </div>
           <div className="my-1 h-px bg-border" />
           <Link href="/settings" className={rowClass}>
@@ -53,6 +56,21 @@ export function SettingsMenu({ profile }: { profile: MenuProfile }) {
             <UserIcon className="size-4 text-muted" />
             Accounts
           </Link>
+          <Link href="/settings/billing" className={rowClass}>
+            <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2.5" y="4.5" width="15" height="11" rx="1.8" />
+              <path d="M2.5 8.5h15M6 12.5h3" />
+            </svg>
+            Plan &amp; billing
+          </Link>
+          {profile.isSuperadmin && (
+            <Link href="/admin" className={rowClass}>
+              <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 2.5 3.5 5v4.6c0 3.7 2.7 6.6 6.5 7.9 3.8-1.3 6.5-4.2 6.5-7.9V5L10 2.5Z" />
+              </svg>
+              Admin console
+            </Link>
+          )}
           <div className="flex h-10 items-center justify-between gap-2 px-2.5 text-sm">
             <span>Theme</span>
             <ThemeToggle />
@@ -64,8 +82,7 @@ export function SettingsMenu({ profile }: { profile: MenuProfile }) {
             <kbd className="ml-auto rounded border border-border px-1.5 font-sans text-[11px] text-muted">⌘B</kbd>
           </button>
           <div className="my-1 h-px bg-border" />
-          {/* Until real accounts exist, signing out forgets the business profile on this browser. */}
-          <form action={resetProfile}>
+          <form action={signOut}>
             <button type="submit" className={`${rowClass} text-danger hover:bg-danger-soft`}>
               <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 3.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 16.5h3M12.5 13.5 16 10l-3.5-3.5M16 10H8" />
@@ -88,8 +105,8 @@ export function SettingsMenu({ profile }: { profile: MenuProfile }) {
           {profile.initials}
         </span>
         <span className="min-w-0 flex-1 leading-tight collapsed:sr-only">
-          <span className="block truncate text-sm font-medium">{profile.company}</span>
-          <span className="block truncate text-xs text-muted">{profile.role}</span>
+          <span className="block truncate text-sm font-medium">{profile.userName}</span>
+          <span className="block truncate text-xs text-muted">{profile.company}</span>
         </span>
         <ChevronsIcon className="size-4 text-muted collapsed:hidden" />
       </button>

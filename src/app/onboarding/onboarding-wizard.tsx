@@ -61,8 +61,17 @@ function validateStep(step: StepId, d: Draft): ProfileErrors {
   return e;
 }
 
-export function OnboardingWizard({ initial, submitLabel = "Show my reconciliations" }: { initial?: Profile; submitLabel?: string }) {
-  const [draft, setDraft] = useState<Draft>(initial ?? EMPTY);
+export function OnboardingWizard({
+  initial,
+  defaultCompany = "",
+  submitLabel = "Show my reconciliations",
+}: {
+  initial?: Profile;
+  /** Prefills the company name for a new workspace (from sign-up). */
+  defaultCompany?: string;
+  submitLabel?: string;
+}) {
+  const [draft, setDraft] = useState<Draft>(initial ?? { ...EMPTY, company: defaultCompany });
   const [stepIndex, setStepIndex] = useState(0);
   const [localErrors, setLocalErrors] = useState<ProfileErrors>({});
   const [state, formAction, pending] = useActionState<SaveProfileState, FormData>(saveProfile, { errors: {} });
@@ -179,6 +188,8 @@ export function OnboardingWizard({ initial, submitLabel = "Show my reconciliatio
       {serverErrorStep && serverErrorStep !== current && (
         <p className="text-sm text-danger">Some answers need attention in “{STEP_TITLES[serverErrorStep]}”.</p>
       )}
+
+      {state.error && <p role="alert" className="text-sm text-danger">{state.error}</p>}
 
       <div className="flex items-center gap-3 border-t border-border pt-6">
         {index > 0 && (

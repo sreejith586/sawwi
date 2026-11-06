@@ -2,17 +2,19 @@ import { listMembers } from "@/lib/accounts/members";
 import { MEMBER_FILTERS, MEMBER_SEARCH, memberRows } from "@/lib/accounts/rows";
 import { tableWorkbook, xlsxResponse } from "@/lib/excel/sheet";
 import { labelOf, ROLES } from "@/lib/profile/options";
-import { getProfile } from "@/lib/profile/session";
+import { getCurrentSession } from "@/lib/saas/session";
+import { orgOwner } from "@/lib/saas/store";
 import { applyQuery, queryFromParams } from "@/lib/recon/table";
-import { orgKeyFor } from "@/lib/runs/access";
 
 // Excel download of the team list, filtered and sorted like the Accounts table.
 export async function GET(request: Request) {
-  const profile = await getProfile();
-  if (!profile) return Response.json({ error: "Set up your profile first." }, { status: 401 });
+  const session = await getCurrentSession();
+  if (!session) return Response.json({ error: "Log in first." }, { status: 401 });
+  const { org } = session;
+  const owner = orgOwner(org.id) ?? session.user;
   const params = new URL(request.url).searchParams;
   const rows = applyQuery(
-    memberRows({ roleLabel: labelOf(ROLES, profile.role) }, listMembers(orgKeyFor(profile))),
+    memberRows({ name: owner.name, email: owner.email, roleLabel: org.profile ? labelOf(ROLES, org.profile.role) : "" }, listMembers(org.key)),
     queryFromParams(params, MEMBER_FILTERS),
     [...MEMBER_SEARCH],
   );
@@ -28,5 +30,5 @@ export async function GET(request: Request) {
     ],
     rows,
   });
-  return xlsxResponse(bytes, `${orgKeyFor(profile)}-team`);
+  return xlsxResponse(bytes, `${org.key}-team`);
 }

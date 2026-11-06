@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/settings", label: "General" },
   { href: "/settings/accounts", label: "Accounts" },
+  { href: "/settings/billing", label: "Plan & billing" },
 ] as const;
 
 export function SettingsTabs({ static: isStatic = false }: { static?: boolean }) {

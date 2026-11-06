@@ -1,12 +1,19 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { parseProfile, PROFILE_COOKIE, type ProfileErrors } from "@/lib/profile/profile";
+import { parseProfile, type ProfileErrors } from "@/lib/profile/profile";
+import { canManageTeam, getCurrentSession, markOnboarded } from "@/lib/saas/session";
+import { saveOrgProfile } from "@/lib/saas/store";
 
-export type SaveProfileState = { errors: ProfileErrors };
+export type SaveProfileState = { errors: ProfileErrors; error?: string };
 
 export async function saveProfile(_prev: SaveProfileState, formData: FormData): Promise<SaveProfileState> {
+  const session = await getCurrentSession();
+  if (!session) redirect("/login");
+  if (session.org.profile && !canManageTeam(session.access)) {
+    return { errors: {}, error: "Only workspace owners and admins can change the business profile." };
+  }
+
   const { profile, errors } = parseProfile({
     company: formData.get("company"),
     role: formData.get("role"),
@@ -23,16 +30,7 @@ export async function saveProfile(_prev: SaveProfileState, formData: FormData): 
   });
   if (!profile) return { errors };
 
-  (await cookies()).set(PROFILE_COOKIE, JSON.stringify(profile), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  saveOrgProfile(session.org.id, profile);
+  await markOnboarded();
   redirect("/home");
-}
-
-export async function resetProfile() {
-  (await cookies()).delete(PROFILE_COOKIE);
-  redirect("/onboarding");
 }
