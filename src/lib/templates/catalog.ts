@@ -217,8 +217,9 @@ export const TEMPLATES: Template[] = [
       },
       {
         key: "received",
-        label: "Warehouse returns received (optional)",
-        description: "What actually arrived back in your warehouse.",
+        label: "Warehouse returns received",
+        description: "What actually arrived back in your warehouse. Optional, but needed to catch refunds for items that never came back.",
+        optional: true,
         examples: ["WMS goods-received report", "Returns inward register"],
         fields: [ORDER_ID, SKU, QTY, f("received_date", "Received date", "date"), f("condition", "Condition", "text")],
       },
@@ -692,7 +693,7 @@ export const TEMPLATES: Template[] = [
       },
     ],
     match: {
-      keys: [{ left: "invoices.invoice_no", right: "receipts.reference", normalize: ["trim", "upper", "strip_non_alnum"] }],
+      keys: [{ left: "invoices.invoice_no", right: "receipts.reference", normalize: ["upper", "strip_non_alnum"], mode: "contains" }],
       cardinality: "many_to_many",
       amount: { left: "invoice_amount", right: "amount", tolerance: 1 },
     },
@@ -888,7 +889,7 @@ export const TEMPLATES: Template[] = [
       bankStatement,
     ],
     match: {
-      keys: [{ left: "pdc_register.cheque_no", right: "bank.reference", normalize: ["trim", "strip_non_alnum", "strip_leading_zeros"] }],
+      keys: [{ left: "pdc_register.cheque_no", right: "bank.reference", normalize: ["strip_non_alnum", "strip_leading_zeros"], mode: "contains" }],
       cardinality: "one_to_many",
       amount: { left: "amount", right: "credit", tolerance: 0.5 },
       dateWindowDays: 7,

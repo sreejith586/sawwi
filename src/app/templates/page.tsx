@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { TemplateCard } from "@/components/template-card";
 import { COUNTRIES, labelOf, MARKETPLACES, WEBSTORE_PLATFORMS } from "@/lib/profile/options";
@@ -12,7 +11,17 @@ export const metadata: Metadata = { title: "Reconciliation templates" };
 
 async function Gallery() {
   const profile = await getProfile();
-  if (!profile) redirect("/onboarding");
+  // src/proxy.ts sends visitors without a profile to onboarding; this is the fallback.
+  if (!profile) {
+    return (
+      <p className="mt-4 text-muted">
+        <Link href="/onboarding" className="font-medium text-accent hover:text-accent-strong">
+          Set up your profile
+        </Link>{" "}
+        to see your reconciliations.
+      </p>
+    );
+  }
 
   const { recommended, others } = recommendTemplates(TEMPLATES, profile);
   const sellsOn = [

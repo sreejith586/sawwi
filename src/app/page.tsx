@@ -1,17 +1,12 @@
-import { redirect } from "next/navigation";
-import { Suspense } from "react";
-import { getProfile } from "@/lib/profile/session";
+import Link from "next/link";
 
-async function Entry() {
-  const profile = await getProfile();
-  redirect(profile ? "/templates" : "/onboarding");
-  return null;
-}
-
+// src/proxy.ts redirects "/" to onboarding or the template gallery; this only renders if it can't.
 export default function Home() {
   return (
-    <Suspense fallback={<p className="text-muted">Loading…</p>}>
-      <Entry />
-    </Suspense>
+    <p className="text-muted">
+      <Link href="/templates" className="font-medium text-accent hover:text-accent-strong">
+        Open your reconciliations
+      </Link>
+    </p>
   );
 }

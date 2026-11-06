@@ -18,6 +18,8 @@ export type SourceSlot = {
   description: string;
   /** Typical exports users upload into this slot. */
   examples: string[];
+  /** Optional slots don't block a run when no file is uploaded. */
+  optional?: boolean;
   fields: CanonicalField[];
 };
 
@@ -27,6 +29,8 @@ export type MatchKey = {
   left: `${string}.${string}`;
   right: `${string}.${string}`;
   normalize?: KeyNormalizer[];
+  /** "contains": the left key appears inside the right value, e.g. an invoice number in a bank narration. */
+  mode?: "equals" | "contains";
 };
 
 export type MatchSpec = {

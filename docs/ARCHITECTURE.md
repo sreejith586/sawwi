@@ -174,6 +174,9 @@ Track per-run tokens (input, cache read, cache write, output) from day one so ca
 
 ## 7. Build phases
 
+Status: Phase 1 done. Phase 2 done (upload, profiling, cached/heuristic/Haiku mapping, chip questions, cross-file key checks, saved answers). Phase 3 next.
+
+
 1. Onboarding, template catalogue (seeded specs) and gallery UI
 2. Upload, file profiling, mapping (cache + Haiku), chip-question chat
 3. DuckDB matching engine executing template specs, plus exceptions

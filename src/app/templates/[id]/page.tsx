@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { startRun } from "@/app/actions/runs";
 import { getTemplate, TEMPLATES } from "@/lib/templates/catalog";
 import { FREQUENCY_LABELS, GROUP_LABELS } from "@/lib/templates/types";
 
@@ -13,8 +15,16 @@ export async function generateMetadata(props: PageProps<"/templates/[id]">): Pro
   return { title: getTemplate(id)?.title ?? "Template" };
 }
 
-export default async function TemplatePage(props: PageProps<"/templates/[id]">) {
-  const { id } = await props.params;
+export default function TemplatePage(props: PageProps<"/templates/[id]">) {
+  return (
+    <Suspense fallback={<p className="text-muted">Loading template…</p>}>
+      <TemplateDetail params={props.params} />
+    </Suspense>
+  );
+}
+
+async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const template = getTemplate(id);
   if (!template) notFound();
 
@@ -99,17 +109,15 @@ export default async function TemplatePage(props: PageProps<"/templates/[id]">) 
         </ul>
       </section>
 
-      <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-border pt-6">
+      <form action={startRun.bind(null, template.id)} className="mt-10 flex flex-wrap items-center gap-3 border-t border-border pt-6">
         <button
-          type="button"
-          disabled
-          className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground opacity-60"
-          title="Upload and run arrive in Phase 2"
+          type="submit"
+          className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong"
         >
           Start reconciliation
         </button>
-        <span className="text-sm text-muted">File upload and matching are coming in the next phase.</span>
-      </div>
+        <span className="text-sm text-muted">Upload your files on the next screen. Nothing runs until you say so.</span>
+      </form>
     </div>
   );
 }
