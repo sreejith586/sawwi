@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   title: { absolute: "Sawwi · Reconciliation for GCC e-commerce sellers" },
   description:
     "Match marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices in minutes. Built for sellers in the UAE, Saudi Arabia and the GCC.",
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", siteName: "Sawwi", url: "/" },
 };
 
 // Public intro page. Everything is static except the header's sign-in state and the

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { InlineScript } from "@/components/inline-script";
 import { SIDEBAR_SCRIPT } from "@/lib/sidebar";
+import { appUrl } from "@/lib/site";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -16,6 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl()),
   title: { default: "Sawwi", template: "%s · Sawwi" },
   description: "Reconciliation for e-commerce and marketplace sellers.",
 };
