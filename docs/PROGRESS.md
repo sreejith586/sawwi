@@ -12,21 +12,21 @@ _Updated in every commit. Newest first within each section._
 | — | UI refresh, sidebar, theme switch, accounts, workspaces, paywall, Stripe | Done (965a8b5 → cddff64) |
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
-| 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8); scanned PDFs via local OCR | In progress (PR #4) |
+| 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Not started |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| PDF inputs plan | `docs/plan-pdf-inputs` | #3 | Phase 4 session |
-| Phase 5: PDF inputs | `phase-5-pdf-inputs` | #4 | Phase 5 session |
+| PDF inputs plan (D-20, §8 planned) | `docs/plan-pdf-inputs` | #3 | Phase 4 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Plan: PDF inputs as Phase 5** (D-20, ARCHITECTURE §8). Scanned PDFs use local OCR only (the user's decision). Usage/cost dashboard and connectors move to Phase 6.
-- **Phase 4 (#2, 285587a), merged:**
+- **Phase 5, PDF inputs (#4, bd5c07c), merged** (plan D-20; build D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Password-protected PDFs are refused with a message. 25 new tests with synthetic fixture PDFs (golden tables for text PDFs, key fields for OCR).
+- **Scanned PDFs: local OCR** (D-24, the user's decision on D-20): image-only pages (up to 20) are OCR'd on the server with `tesseract.js` (English + Arabic, bundled language data, nothing sent out). The OCR text goes through the same table reader, layout memory and checks; OCR files are marked (confidence, low-confidence rows) and a scan with nothing to check against holds the run.
+- **Phase 4 (#2, 285587a):** merged.
   - An analysis above each report, written by Sonnet from a digest of totals, per-check counts and the 8 largest exceptions. It is cached per result and falls back to a rule-based summary.
   - A follow-up chat on the run page with chips: fix first, breakdowns by key/month/SKU with Excel, copyable email drafts, and explain an exception. Free text goes to Haiku.
   - A "no template fits" two-file reconciliation, with save-as-template per workspace and "Your templates" in the gallery.
@@ -42,10 +42,12 @@ _Updated in every commit. Newest first within each section._
 ## Next
 
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
-2. Phase 5, PDF inputs (PR #4), including local OCR for scanned PDFs.
+2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
+3. Phase 6 planning: usage/cost dashboard, scheduled runs, connectors.
 
 ## Open questions
 
+- **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
 - **Anthropic API key:** not configured yet, so neither the Haiku mapping path nor the Phase 4 Sonnet/Haiku writing has run live. Rule-based fallbacks cover both meanwhile.
 - **Real sample exports** (Magento 1/2, Odoo, marketplace settlements) to test mappings against.
@@ -53,4 +55,5 @@ _Updated in every commit. Newest first within each section._
 ## Known issues
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
+- Small files of whole numbers (e.g. 5 invoice lines, all with different quantities) profile the quantity column as an ID, so mapping asks one confirm question. This is a general profiling rule, not specific to PDFs.
 - "Value at risk" adds quantity differences into money totals for quantity checks (D-13).

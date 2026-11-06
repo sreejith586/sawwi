@@ -23,8 +23,13 @@ pnpm build
 ## How a run works
 
 1. Onboarding records the seller profile; the gallery shows templates that fit it.
-2. Starting a template creates a run. Each uploaded file (CSV, TSV, XLSX) is parsed, title rows are
-   skipped, and every column is profiled (type, date format, currency).
+2. Starting a template creates a run. Each uploaded file (CSV, TSV, XLSX or PDF, up to 25 MB; several
+   files can go into one slot) is parsed, title rows are skipped, and every column is profiled (type,
+   date format, currency). PDFs (bank statements, invoices, settlement statements) are turned into the
+   same table in code, with no AI: embedded ZATCA e-invoice XML first, then the text layer, with a
+   saved layout per bank, and balance and VAT checks before matching. Scanned (image-only) PDFs,
+   up to 20 pages, are read by local OCR (`tesseract.js`, English and Arabic, on the server; nothing
+   is sent out) and marked for review. Password-protected PDFs are refused. See ARCHITECTURE §8.
 3. Columns are mapped to the template's canonical fields, cheapest first:
    - **Saved mapping** for this file layout (fingerprint of its headers): no AI, no questions.
    - **Known column names** (`src/lib/mapping/aliases.ts`) scored against headers and data types.
