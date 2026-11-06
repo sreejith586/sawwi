@@ -55,3 +55,8 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 
 ### D-14: Pull requests and living docs
 - **Decision:** every change goes through a PR from a descriptively named branch. CI runs tests, typecheck, lint and build. Only the user merges. Every commit updates `docs/PROGRESS.md`, `docs/DECISIONS.md` and, where affected, `docs/ARCHITECTURE.md` and `README.md`. The rules are in `CLAUDE.md` and `docs/PROCESS.md`, so every session picks them up.
+
+### D-20: PDF inputs are Phase 5, cheapest extraction first
+- **Context:** GCC bank statements and invoices often come only as PDF. Uploads accept CSV, TSV and XLSX only.
+- **Decision:** PDF support becomes Phase 5, ahead of the usage dashboard and connectors (now Phase 6). A PDF is converted into the same table `parseUpload` returns, so mapping and matching are unchanged. The order is: embedded ZATCA e-invoice XML, then text-layer extraction in code, then a per-workspace layout memory. Deterministic balance and VAT checks run before matching. Scanned PDFs are refused with a clear message until the user decides between Claude vision (beyond D-2's "aggregates only") and local OCR.
+- **Consequences:** text PDFs cost no tokens, and repeat statements ask nothing. (Numbered D-20 because PR #2 takes D-15 to D-19.)

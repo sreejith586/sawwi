@@ -186,7 +186,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 is in review (PR #2). Next: PDF inputs (§8).
 
 Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 
@@ -196,4 +196,22 @@ Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Up
 3. DuckDB matching engine executing template specs, plus exceptions
 4. Report UI and export; narrative and follow-up chat; email drafts
 5. Generic reco when no template fits, and save-as-template
-6. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
+6. PDF inputs: bank statements, invoices and settlement statements as PDF (plan in §8)
+7. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
+
+## 8. PDF inputs (planned)
+
+GCC bank statements, supplier and marketplace invoices and settlement statements often arrive only as PDF. Uploads today accept CSV, TSV and XLSX only (`src/lib/files/parse.ts`).
+
+**Approach:** PDF support is an extra step in front of the existing pipeline. A PDF becomes the same table that `parseUpload` returns (headers + rows), and from there profiling, the mapping cache, chips and the engine work unchanged. Cheapest first, like column mapping (D-3):
+
+1. **Embedded e-invoice data (no AI).** KSA ZATCA e-invoices are PDF/A-3 with the UBL XML attached; read the XML when it's present (exact values, including VAT and seller TRN). The ZATCA QR (TLV) is a fallback for seller, date, total and VAT.
+2. **Text-layer extraction (no AI).** Most bank and marketplace PDFs have a text layer. Extract text with positions (e.g. `pdfjs-dist`), group into rows by y and into columns by the x positions of a detected header line. Handle multi-page tables, repeated headers, "balance brought/carried forward" and total rows, and wrapped narration lines. Statement metadata (account, period, opening and closing balance) is kept separately.
+3. **Layout memory.** Fingerprint the layout (issuer text, header tokens, column x-bands) and save the extraction recipe per workspace, like the mapping cache, so the next statement from the same bank is pure code and asks nothing.
+4. **Scanned or unreadable PDFs (needs a decision).** Either Claude vision transcribes pages into a structured table (Haiku first, Sonnet when confidence is low; results cached by file hash), or local OCR does it. The Claude option sends page images, which goes beyond D-2's "aggregates only". It needs the user's approval and would be opt-in per workspace, with a cost estimate shown first. Until decided, scanned PDFs get a clear "export as CSV/Excel" message.
+
+**Checks before matching (deterministic):** for statements, opening + credits − debits = closing (per page and overall), and running balances agree. For invoices, lines add up to the subtotal and VAT = rate × net (5% UAE, 15% KSA). A failed check shows the extracted table for review instead of running silently.
+
+**Also in scope:** several PDFs into one slot (e.g. a month of supplier invoices becomes one row per invoice, or per line); Arabic and RTL text with Arabic-Indic digits (٠–٩); a preview of the extracted table with Excel download, like every other table; caps of 25 MB and around 200 pages; password-protected PDFs are refused with a message.
+
+**Tests:** synthetic fixture PDFs (text-layer statement, multi-page statement, single invoice, ZATCA PDF/A-3) with golden tables. Real anonymised samples are wanted (Emirates NBD, ADCB, Al Rajhi and SNB statements; Noon and Amazon invoices).
