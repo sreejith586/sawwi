@@ -71,7 +71,7 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 
 ### D-18: Generic two-file reco confirms every column with chips
 - **Context:** "No template fits" needs to work for any pair of exports, and generic fields like "key" and "amount" match almost any header.
-- **Decision:** the generic template (`src/lib/templates/custom.ts`) has a key, an amount, and an optional date, description and currency. Its checks are: missing on either side, amount mismatch within the user's tolerance, and duplicates on either side. Templates with `confirmColumns` skip the AI and turn every required field into a chip ("Is X the key?" or "Which column holds the key?"). Optional fields map only on a strong name match, or to the file's single date column. The file names and tolerance are set on a chip-first form in the gallery.
+- **Decision:** the generic template (`src/lib/templates/custom.ts`) has a key, an amount, and an optional date, description and currency. Its checks are: missing on either side, amount mismatch within the user's tolerance, and duplicates on either side. Templates with `confirmColumns` skip the AI and turn every required field into a chip ("Is X the key?" or "Which column holds the key?"). For key (id) fields, free-text columns score at half weight and are listed after identifier-like columns, so a bank "Narrative" is never proposed over "Txn Ref". Optional fields map only on a strong name match, or to the file's single date column. The file names and tolerance are set on a chip-first form in the gallery.
 - **Consequences:** a few more clicks the first time; the saved mapping makes repeats free.
 
 ### D-19: Saved templates are per workspace and carry their mappings

@@ -4,7 +4,7 @@ import Papa from "papaparse";
 import { dataDir } from "@/lib/db";
 import { parseUpload } from "@/lib/files/parse";
 import { profileTable, type FileProfile } from "@/lib/files/profile";
-import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates } from "@/lib/mapping/heuristic";
+import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates, type Candidate } from "@/lib/mapping/heuristic";
 import { checkKeyOverlap, containmentOverlap } from "@/lib/mapping/keycheck";
 import { llmAvailable, suggestMappings } from "@/lib/mapping/llm";
 import type { Country } from "@/lib/profile/options";
@@ -51,7 +51,7 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   const candidates = scoreCandidates(slot.fields, profile.columns);
   const best = assign(candidates);
 
-  if (confirmColumns) return confirmEveryColumn(slot, profile, ctx, best);
+  if (confirmColumns) return confirmEveryColumn(slot, profile, ctx, candidates);
 
   for (const field of slot.fields) {
     const c = best.get(field.key);
@@ -105,14 +105,15 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
  * a column stands out, otherwise "Which column holds the key?". Optional fields map only on a
  * strong name match.
  */
-function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, best: ReturnType<typeof assign>): MappingResult {
+function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, candidates: Candidate[]): MappingResult {
+  const best = assign(genericCandidates(slot, profile, candidates));
   const fields: Record<string, FieldMapping> = {};
   const questions: QuestionPayload[] = [];
   for (const field of slot.fields) {
     const c = best.get(field.key);
     if (field.required) {
       if (c && c.score >= CONFIRM_FLOOR) questions.push({ kind: "confirm_column", field: field.key, column: c.column });
-      else questions.push({ kind: "choose_column", field: field.key, options: columnOptions(field, profile, fields) });
+      else questions.push({ kind: "choose_column", field: field.key, options: columnOptions(field, profile, fields, [], true) });
     } else if (c && c.score >= 0.7) {
       fields[field.key] = { column: c.column, source: "auto", confidence: c.score };
     } else {
@@ -126,8 +127,24 @@ function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunCont
   return { mapping, questions, usedAi: false, remembered: false };
 }
 
-/** Up to six columns whose data could hold this field, best name matches first. */
-function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Record<string, FieldMapping>, exclude: string[] = []): string[] {
+/**
+ * Generic keys must look like identifiers. "Reference" aliases include "narration" (catalogue bank
+ * templates find invoice numbers inside it), so a free-text column such as a bank "Narrative"
+ * would otherwise be proposed as the matching key over "Txn Ref". Free-text columns are
+ * down-weighted for id fields, so an identifier-like column wins.
+ */
+const FREE_TEXT_KEY_PENALTY = 0.5;
+
+function genericCandidates(slot: SourceSlot, profile: FileProfile, candidates: Candidate[]): Candidate[] {
+  const kind = new Map(profile.columns.map((c) => [c.name, c.kind]));
+  const type = new Map(slot.fields.map((f) => [f.key, f.type]));
+  return candidates
+    .map((c) => (type.get(c.field) === "id" && kind.get(c.column) === "text" ? { ...c, score: c.score * FREE_TEXT_KEY_PENALTY } : c))
+    .sort((a, b) => b.score - a.score);
+}
+
+/** Up to six columns whose data could hold this field, best name matches first (identifier columns first for generic keys). */
+function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Record<string, FieldMapping>, exclude: string[] = [], preferIds = false): string[] {
   const taken = new Set([...Object.values(mapped).map((m) => m.column), ...exclude]);
   const ranked = scoreCandidates([field], profile.columns).map((c) => c.column);
   const fitting = profile.columns
@@ -137,7 +154,12 @@ function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Reco
       return c.kind !== "empty";
     })
     .map((c) => c.name);
-  return [...new Set([...ranked, ...fitting])].filter((c) => !taken.has(c)).slice(0, 6);
+  let options = [...new Set([...ranked, ...fitting])].filter((c) => !taken.has(c));
+  if (preferIds && field.type === "id") {
+    const kind = new Map(profile.columns.map((c) => [c.name, c.kind]));
+    options = [...options.filter((c) => kind.get(c) !== "text"), ...options.filter((c) => kind.get(c) === "text")];
+  }
+  return options.slice(0, 6);
 }
 
 /** Questions about how to read values: ambiguous dates, and currency when the file doesn't say. */
@@ -234,7 +256,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
         store.addQuestion(run.id, file.slotKey, {
           kind: "choose_column",
           field: p.field,
-          options: columnOptions(field, file.profile, mapping.fields, [p.column]),
+          options: columnOptions(field, file.profile, mapping.fields, [p.column], template.confirmColumns),
         });
       }
     } else if (p.kind === "choose_column") {

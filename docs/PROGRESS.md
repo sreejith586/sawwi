@@ -29,6 +29,7 @@ _Updated in every commit. Newest first within each section._
   - A "no template fits" two-file reconciliation, with save-as-template per workspace and "Your templates" in the gallery.
   - New tables `run_narratives` and `custom_templates`, plus `messages.payload_json`. 75 tests.
   - Decisions D-15 to D-19.
+  - Fix: the custom reco no longer proposes a free-text column (e.g. a bank "Narrative") as the matching key. Identifier-like columns win, and "txn ref" / "transaction ref" are now known reference headers.
 - **PR process (#1, 62052b3):** merged. `main` is branch-protected and CI must pass.
 - **Process:** PR-based workflow, CI, PR template and living docs (`CLAUDE.md`, `docs/PROCESS.md`, `docs/DECISIONS.md`, this file).
 - **Purchasing templates (65d80c0):** "Purchasing & suppliers" group with 3 templates (23 in total). Onboarding now asks "buy from suppliers on POs?" and "import stock?". Engine: `value` expression on row rules, and `by` fields on duplicate checks.
@@ -49,5 +50,4 @@ _Updated in every commit. Newest first within each section._
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
 - "Value at risk" adds quantity differences into money totals for quantity checks (D-13).
-- Custom reco: the key-column guess can propose a text column (e.g. a bank "Narrative", through the `narration` alias). The user corrects it with No.
 - A "which column" chip can list a column that a later answer has already taken. This is long-standing engine behaviour, now more visible because custom recos ask more chips.

@@ -118,6 +118,38 @@ describe("custom reconciliation, chat and save-as-template", () => {
     expect(view2.status).toBe("ready");
   });
 
+  it("proposes an identifier column as the key, not free-text narration", async () => {
+    const run = store.createRun("key-guess-co", GENERIC_TEMPLATE_ID);
+    await ingestFile(run, "left", "bank.csv", bank, ctx);
+    const keyQuestions = store
+      .getQuestions(run.id)
+      .map((q) => q.payload)
+      .filter((p) => (p.kind === "confirm_column" || p.kind === "choose_column") && p.field === "reference");
+    expect(keyQuestions).toHaveLength(1);
+    const q = keyQuestions[0];
+    expect(q.kind).toBe("confirm_column");
+    expect(q.kind === "confirm_column" && q.column).toBe("Txn Ref");
+  });
+
+  it("never proposes a free-text column as the key, even when its header looks like a key alias", async () => {
+    // "Narrative" is close to "narration", a known alias of "reference" (catalogue bank templates read invoice numbers out of it).
+    const statement = csv([
+      ["Narrative", "Bank Ref", "Value Date", "Amount"],
+      ["NOON PAYOUT OCT", "FT26100201", "2026-10-02", "1200.00"],
+      ["AMAZON SETTLEMENT", "FT26100502", "2026-10-05", "845.50"],
+      ["TABBY TRANSFER", "FT26100903", "2026-10-09", "300.00"],
+      ["UNKNOWN CREDIT", "FT26102104", "2026-10-21", "75.00"],
+    ]);
+    const run = store.createRun("key-guess-co", GENERIC_TEMPLATE_ID);
+    await ingestFile(run, "left", "statement.csv", statement, ctx);
+    const q = store
+      .getQuestions(run.id)
+      .map((x) => x.payload)
+      .find((p) => (p.kind === "confirm_column" || p.kind === "choose_column") && p.field === "reference")!;
+    if (q.kind === "confirm_column") expect(q.column).toBe("Bank Ref");
+    else expect(q.kind === "choose_column" && q.options[0]).toBe("Bank Ref");
+  });
+
   it("refuses chat before there is a result", async () => {
     const run = store.createRun("acme", GENERIC_TEMPLATE_ID);
     await expect(chat(run, { kind: "fix_first" }, "Acme")).rejects.toBeInstanceOf(ChatInputError);

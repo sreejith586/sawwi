@@ -57,7 +57,7 @@ export const ALIASES: Record<string, string[]> = {
   // Generic two-file reconciliation (src/lib/templates/custom.ts).
   date: ["date", "posting date", "value date", "transaction date", "txn date", "document date", "invoice date", "payment date", "entry date"],
   description: ["description", "narration", "details", "particulars", "transaction details", "remarks"],
-  reference: ["reference", "ref", "reference no", "cheque no", "transaction reference", "customer reference", "narration"],
+  reference: ["reference", "ref", "reference no", "cheque no", "transaction reference", "txn ref", "transaction ref", "customer reference", "narration"],
   credit: ["credit", "credit amount", "deposit", "deposits", "cr", "money in"],
   debit: ["debit", "debit amount", "withdrawal", "withdrawals", "dr", "money out"],
 
