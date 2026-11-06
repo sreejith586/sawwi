@@ -11,32 +11,40 @@ _Updated in every commit. Newest first within each section._
 | 3 | Deterministic matching engine, report with sort/filter, Excel export | Done (f8431b6, 99e0e5f) |
 | — | UI refresh, sidebar, theme switch, accounts, workspaces, paywall, Stripe | Done (965a8b5 → cddff64) |
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
-| 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | In progress |
+| 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | In review (PR from `phase-4-narrative-chat`) |
 | 5 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Not started |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Phase 4 | `phase-4-narrative-chat` (worktree) | — | Phase 4 session |
-| PR process and living docs | `docs/process-and-tracking` | this PR | main session |
+| Phase 4 | `phase-4-narrative-chat` (worktree) | open (see branch) | Phase 4 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Phase 4 (`phase-4-narrative-chat`):**
+  - An analysis above each report, written by Sonnet from a digest of totals, per-check counts and the 8 largest exceptions. It is cached per result and falls back to a rule-based summary.
+  - A follow-up chat on the run page with chips: fix first, breakdowns by key/month/SKU with Excel, copyable email drafts, and explain an exception. Free text goes to Haiku.
+  - A "no template fits" two-file reconciliation, with save-as-template per workspace and "Your templates" in the gallery.
+  - New tables `run_narratives` and `custom_templates`, plus `messages.payload_json`. 75 tests.
+  - Decisions D-15 to D-19.
+  - Fix: the custom reco no longer proposes a free-text column (e.g. a bank "Narrative") as the matching key. Identifier-like columns win, and "txn ref" / "transaction ref" are now known reference headers.
+  - Fix (all templates): "Which column…?" chips no longer offer a column that a later answer has already taken. An open "Is X the …?" question whose X has since been taken becomes a fresh "Which column…?" question.
+- **PR process (#1, 62052b3):** merged. `main` is branch-protected and CI must pass.
 - **Process:** PR-based workflow, CI, PR template and living docs (`CLAUDE.md`, `docs/PROCESS.md`, `docs/DECISIONS.md`, this file).
 - **Purchasing templates (65d80c0):** "Purchasing & suppliers" group with 3 templates (23 in total). Onboarding now asks "buy from suppliers on POs?" and "import stock?". Engine: `value` expression on row rules, and `by` fields on duplicate checks.
 - **Repo:** `main` pushed to https://github.com/sreejith586/sawwi.git.
 
 ## Next
 
-1. Finish Phase 4 (see the scope above) and open its PR.
+1. Review and merge the Phase 4 PR, then try it with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Phase 5 planning.
 
 ## Open questions
 
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
-- **Anthropic API key:** not configured yet, so the Haiku mapping path has never run live. Heuristics and chips cover it meanwhile.
+- **Anthropic API key:** not configured yet, so neither the Haiku mapping path nor the Phase 4 Sonnet/Haiku writing has run live. Rule-based fallbacks cover both meanwhile.
 - **Real sample exports** (Magento 1/2, Odoo, marketplace settlements) to test mappings against.
 
 ## Known issues

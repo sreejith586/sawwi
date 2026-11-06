@@ -10,14 +10,16 @@ import { createRun } from "@/lib/runs/store";
 import type { Run } from "@/lib/runs/types";
 import type { Country } from "@/lib/profile/options";
 import { buildRunView, type RunView } from "@/lib/runs/view";
-import { getTemplate } from "@/lib/templates/catalog";
+import { templateFor } from "@/lib/runs/templates";
+import { GENERIC_TEMPLATE_ID } from "@/lib/templates/custom";
 
 export type RunActionResult = { view?: RunView; error?: string };
 
 export async function startRun(templateId: string) {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
-  if (!getTemplate(templateId)) throw new Error("Unknown template");
+  // Catalogue templates and the workspace's own saved ones; the generic reco has its own setup form.
+  if (templateId === GENERIC_TEMPLATE_ID || !templateFor(orgKeyFor(profile), templateId)) throw new Error("Unknown template");
   // Plan, trial and role gate (a no-op while the paywall is off, except for viewers).
   const blocked = await runBlocker();
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);

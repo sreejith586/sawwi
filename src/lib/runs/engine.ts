@@ -4,13 +4,13 @@ import Papa from "papaparse";
 import { dataDir } from "@/lib/db";
 import { parseUpload } from "@/lib/files/parse";
 import { profileTable, type FileProfile } from "@/lib/files/profile";
-import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates } from "@/lib/mapping/heuristic";
+import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates, type Candidate } from "@/lib/mapping/heuristic";
 import { checkKeyOverlap, containmentOverlap } from "@/lib/mapping/keycheck";
 import { llmAvailable, suggestMappings } from "@/lib/mapping/llm";
 import type { Country } from "@/lib/profile/options";
-import { getTemplate } from "@/lib/templates/catalog";
 import type { CanonicalField, KeyNormalizer, SourceSlot, Template } from "@/lib/templates/types";
 import * as store from "./store";
+import { templateForRun } from "./templates";
 import { NONE_OPTION, type FieldMapping, type QuestionPayload, type Run, type RunFile, type RunStatus, type SlotMapping } from "./types";
 
 export const COUNTRY_CURRENCY: Record<Country, string> = { AE: "AED", SA: "SAR", KW: "KWD", QA: "QAR", BH: "BHD", OM: "OMR" };
@@ -20,7 +20,7 @@ export type RunContext = { countries: Country[] };
 export class RunInputError extends Error {}
 
 function requireTemplate(run: Run): Template {
-  const t = getTemplate(run.templateId);
+  const t = templateForRun(run);
   if (!t) throw new RunInputError("This run's template no longer exists.");
   return t;
 }
@@ -37,7 +37,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type MappingResult = { mapping: SlotMapping; questions: QuestionPayload[]; usedAi: boolean; remembered: boolean };
 
-async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext): Promise<MappingResult> {
+async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext, confirmColumns = false): Promise<MappingResult> {
   const cached = store.getCachedMapping(run.orgKey, run.templateId, slot.key, profile.fingerprint);
   if (cached) {
     const fields = Object.fromEntries(
@@ -50,6 +50,8 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   const confirm: { field: string; column: string }[] = [];
   const candidates = scoreCandidates(slot.fields, profile.columns);
   const best = assign(candidates);
+
+  if (confirmColumns) return confirmEveryColumn(slot, profile, ctx, candidates);
 
   for (const field of slot.fields) {
     const c = best.get(field.key);
@@ -97,8 +99,52 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   return { mapping, questions, usedAi, remembered: false };
 }
 
-/** Up to six columns whose data could hold this field, best name matches first. */
-function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Record<string, FieldMapping>, exclude: string[] = []): string[] {
+/**
+ * Generic templates: field names like "key" and "amount" fit almost any column, so no guess is
+ * taken on trust and no AI is called. Every required field becomes a chip: "Is X the key?" when
+ * a column stands out, otherwise "Which column holds the key?". Optional fields map only on a
+ * strong name match.
+ */
+function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, candidates: Candidate[]): MappingResult {
+  const best = assign(genericCandidates(slot, profile, candidates));
+  const fields: Record<string, FieldMapping> = {};
+  const questions: QuestionPayload[] = [];
+  for (const field of slot.fields) {
+    const c = best.get(field.key);
+    if (field.required) {
+      if (c && c.score >= CONFIRM_FLOOR) questions.push({ kind: "confirm_column", field: field.key, column: c.column });
+      else questions.push({ kind: "choose_column", field: field.key, options: columnOptions(field, profile, fields, [], true) });
+    } else if (c && c.score >= 0.7) {
+      fields[field.key] = { column: c.column, source: "auto", confidence: c.score };
+    } else {
+      // A file with a single date column: that's the date (breakdowns by month need it).
+      const dates = field.type === "date" ? profile.columns.filter((col) => col.kind === "date") : [];
+      fields[field.key] = dates.length === 1 ? { column: dates[0].name, source: "auto", confidence: 0.7 } : { column: null, source: "auto", confidence: 0 };
+    }
+  }
+  const mapping: SlotMapping = { fields, dateFormats: {} };
+  questions.push(...formatQuestions(slot, profile, mapping, ctx));
+  return { mapping, questions, usedAi: false, remembered: false };
+}
+
+/**
+ * Generic keys must look like identifiers. "Reference" aliases include "narration" (catalogue bank
+ * templates find invoice numbers inside it), so a free-text column such as a bank "Narrative"
+ * would otherwise be proposed as the matching key over "Txn Ref". Free-text columns are
+ * down-weighted for id fields, so an identifier-like column wins.
+ */
+const FREE_TEXT_KEY_PENALTY = 0.5;
+
+function genericCandidates(slot: SourceSlot, profile: FileProfile, candidates: Candidate[]): Candidate[] {
+  const kind = new Map(profile.columns.map((c) => [c.name, c.kind]));
+  const type = new Map(slot.fields.map((f) => [f.key, f.type]));
+  return candidates
+    .map((c) => (type.get(c.field) === "id" && kind.get(c.column) === "text" ? { ...c, score: c.score * FREE_TEXT_KEY_PENALTY } : c))
+    .sort((a, b) => b.score - a.score);
+}
+
+/** Up to six columns whose data could hold this field, best name matches first (identifier columns first for generic keys). */
+function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Record<string, FieldMapping>, exclude: string[] = [], preferIds = false): string[] {
   const taken = new Set([...Object.values(mapped).map((m) => m.column), ...exclude]);
   const ranked = scoreCandidates([field], profile.columns).map((c) => c.column);
   const fitting = profile.columns
@@ -108,7 +154,12 @@ function columnOptions(field: CanonicalField, profile: FileProfile, mapped: Reco
       return c.kind !== "empty";
     })
     .map((c) => c.name);
-  return [...new Set([...ranked, ...fitting])].filter((c) => !taken.has(c)).slice(0, 6);
+  let options = [...new Set([...ranked, ...fitting])].filter((c) => !taken.has(c));
+  if (preferIds && field.type === "id") {
+    const kind = new Map(profile.columns.map((c) => [c.name, c.kind]));
+    options = [...options.filter((c) => kind.get(c) !== "text"), ...options.filter((c) => kind.get(c) === "text")];
+  }
+  return options.slice(0, 6);
 }
 
 /** Questions about how to read values: ambiguous dates, and currency when the file doesn't say. */
@@ -152,7 +203,7 @@ export async function ingestFile(run: Run, slotKey: string, fileName: string, by
   writeFileSync(storedPath, Papa.unparse({ fields: table.headers, data: table.rows }));
 
   const profile = profileTable(table);
-  const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx);
+  const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx, template.confirmColumns);
 
   store.deleteOpenQuestions(run.id, slotKey);
   store.upsertRunFile(run.id, { slotKey, fileName, storedPath, profile, mapping });
@@ -177,7 +228,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
   const question = store.getQuestions(run.id).find((q) => q.id === questionId);
   if (!question || question.answer !== null) throw new RunInputError("That question was already answered.");
 
-  const view = presentQuestion(question.payload, template, question.slotKey);
+  const view = presentQuestion(question.payload, template, question.slotKey, store.getRunFiles(run.id).find((f) => f.slotKey === question.slotKey));
   const option = view.options.find((o) => o.value === answer);
   if (!option) throw new RunInputError("Pick one of the offered answers.");
 
@@ -205,7 +256,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
         store.addQuestion(run.id, file.slotKey, {
           kind: "choose_column",
           field: p.field,
-          options: columnOptions(field, file.profile, mapping.fields, [p.column]),
+          options: columnOptions(field, file.profile, mapping.fields, [p.column], template.confirmColumns),
         });
       }
     } else if (p.kind === "choose_column") {
@@ -228,10 +279,44 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       mapping.currency = answer;
     }
 
+    retargetStaleConfirms(run, template, file);
     store.updateRunFileMapping(run.id, file.slotKey, mapping);
   }
 
   afterChange(run, template);
+}
+
+/** Columns already mapped to other fields of this file: a column holds one field only. */
+export function takenColumns(file: RunFile | undefined, field: string): Set<string> {
+  if (!file) return new Set();
+  return new Set(
+    Object.entries(file.mapping.fields)
+      .filter(([k, m]) => k !== field && m.column)
+      .map(([, m]) => m.column!),
+  );
+}
+
+/**
+ * Questions are created up front, so a later answer can take a column an open question still
+ * proposes ("Is Credit Amt the key?" after Credit Amt became the amount). Those become a fresh
+ * "Which column…?" question instead of offering a column that's no longer free.
+ */
+function retargetStaleConfirms(run: Run, template: Template, file: RunFile) {
+  const slot = requireSlot(template, file.slotKey);
+  for (const q of store.getQuestions(run.id)) {
+    if (q.answer !== null || q.slotKey !== file.slotKey || q.payload.kind !== "confirm_column") continue;
+    const p = q.payload;
+    if (!takenColumns(file, p.field).has(p.column)) continue;
+    const field = slot.fields.find((f) => f.key === p.field);
+    store.deleteQuestion(q.id);
+    if (field) {
+      store.addQuestion(run.id, file.slotKey, {
+        kind: "choose_column",
+        field: p.field,
+        options: columnOptions(field, file.profile, file.mapping.fields, [p.column], template.confirmColumns),
+      });
+    }
+  }
 }
 
 /** Lets the user correct any field from the mapping table. */
@@ -357,9 +442,21 @@ export function computeStatus(template: Template, files: RunFile[], questions: {
 
 // ─── Presentation ─────────────────────────────────────────────────────────
 
+function freeOptions(fieldKey: string, options: string[], slot: SourceSlot | undefined, file: RunFile | undefined, template: Template): string[] {
+  const taken = takenColumns(file, fieldKey);
+  const free = options.filter((c) => !taken.has(c));
+  const field = slot?.fields.find((f) => f.key === fieldKey);
+  if (free.length || !file || !field) return free;
+  return columnOptions(field, file.profile, file.mapping.fields, [], template.confirmColumns);
+}
+
 export type QuestionView = { prompt: string; options: { value: string; label: string }[] };
 
-export function presentQuestion(p: QuestionPayload, template: Template, slotKey: string | null): QuestionView {
+/**
+ * `file` is the slot's current file: "Which column…?" options drop columns that other answers have
+ * taken since the question was asked, and fall back to fresh suggestions if none are left.
+ */
+export function presentQuestion(p: QuestionPayload, template: Template, slotKey: string | null, file?: RunFile): QuestionView {
   const slot = slotKey ? template.sources.find((s) => s.key === slotKey) : undefined;
   const label = (field: string) => slot?.fields.find((f) => f.key === field)?.label ?? field;
   const yesNo = [
@@ -372,7 +469,7 @@ export function presentQuestion(p: QuestionPayload, template: Template, slotKey:
     case "choose_column":
       return {
         prompt: `Which column in your ${slot?.label ?? "file"} holds the ${label(p.field)}?`,
-        options: [...p.options.map((c) => ({ value: c, label: c })), { value: NONE_OPTION, label: "It's not in this file" }],
+        options: [...freeOptions(p.field, p.options, slot, file, template).map((c) => ({ value: c, label: c })), { value: NONE_OPTION, label: "It's not in this file" }],
       };
     case "date_format":
       return {
