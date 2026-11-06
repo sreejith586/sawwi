@@ -32,6 +32,13 @@ export const TemplatesIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const CalendarIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4.5" width="14" height="12.5" rx="1.6" />
+    <path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4" />
+  </Icon>
+);
+
 export const PlusIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 4.5v11M4.5 10h11" />

@@ -3,7 +3,10 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Pill } from "@/components/data-table";
 import { PlusIcon } from "@/components/icons";
+import { DueList } from "@/components/schedules/due-list";
 import { buttonClass } from "@/components/ui";
+import { canRun, getCurrentSession } from "@/lib/saas/session";
+import { dueSchedules } from "@/lib/schedules/view";
 import type { Profile } from "@/lib/profile/profile";
 import { getProfile } from "@/lib/profile/session";
 import { orgKeyFor } from "@/lib/runs/access";
@@ -45,8 +48,30 @@ async function Home() {
         </Link>
       </div>
 
+      <DueNow />
       {runs.length === 0 ? <FirstRun profile={profile} /> : <Overview runs={runs} profile={profile} />}
     </div>
+  );
+}
+
+/** Scheduled reconciliations waiting for this period's files (D-26). Hidden when nothing is due. */
+async function DueNow() {
+  const session = await getCurrentSession();
+  if (!session) return null;
+  const due = dueSchedules(session.org.key);
+  if (due.length === 0) return null;
+  return (
+    <section className="mt-8">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold">Due now · {due.length}</h2>
+        <Link href="/schedules" className="text-sm text-muted hover:text-foreground">
+          All schedules →
+        </Link>
+      </div>
+      <div className="mt-3">
+        <DueList rows={due} canStart={canRun(session.access)} />
+      </div>
+    </section>
   );
 }
 

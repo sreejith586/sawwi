@@ -22,5 +22,5 @@ export function proxy(request: NextRequest) {
 
 // Public: "/" (intro page), /login, /signup. Everything below needs an account.
 export const config = {
-  matcher: ["/home", "/onboarding", "/templates/:path*", "/runs/:path*", "/settings/:path*", "/admin/:path*", "/checkout/:path*"],
+  matcher: ["/home", "/onboarding", "/templates/:path*", "/runs/:path*", "/schedules/:path*", "/settings/:path*", "/admin/:path*", "/checkout/:path*"],
 };
