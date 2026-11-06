@@ -19,6 +19,11 @@ export type Org = {
   status: OrgStatus;
   trialEndsAt: string;
   createdAt: string;
+  /** Stripe billing, when the workspace pays by card. */
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: string;
+  currentPeriodEnd?: string;
 };
 export type MembershipAccess = "owner" | Access;
 export type Membership = { orgId: string; userId: string; access: MembershipAccess };
@@ -76,6 +81,16 @@ function db() {
         created_at TEXT NOT NULL
       );
     `);
+    // Additive migrations for databases created before these columns existed.
+    const cols = new Set((d.prepare("PRAGMA table_info(orgs)").all() as Row[]).map((c) => String(c.name)));
+    for (const [name, type] of [
+      ["stripe_customer_id", "TEXT"],
+      ["stripe_subscription_id", "TEXT"],
+      ["subscription_status", "TEXT"],
+      ["current_period_end", "TEXT"],
+    ] as const) {
+      if (!cols.has(name)) d.exec(`ALTER TABLE orgs ADD COLUMN ${name} ${type}`);
+    }
     ready = true;
   }
   return d;
@@ -125,6 +140,10 @@ const toOrg = (r: Row): Org => ({
   status: r.status as OrgStatus,
   trialEndsAt: String(r.trial_ends_at),
   createdAt: String(r.created_at),
+  stripeCustomerId: r.stripe_customer_id ? String(r.stripe_customer_id) : undefined,
+  stripeSubscriptionId: r.stripe_subscription_id ? String(r.stripe_subscription_id) : undefined,
+  subscriptionStatus: r.subscription_status ? String(r.subscription_status) : undefined,
+  currentPeriodEnd: r.current_period_end ? String(r.current_period_end) : undefined,
 });
 
 function uniqueKey(name: string): string {
@@ -370,4 +389,27 @@ export function listOpenRequests(): OpenRequestView[] {
     )
     .all() as Row[];
   return rows.map((r) => ({ id: String(r.id), orgName: String(r.org_name), requester: String(r.requester ?? ""), plan: r.plan as PlanId, createdAt: String(r.created_at) }));
+}
+
+// ─── Stripe billing ──────────────────────────────────────────────────────
+
+export function setStripeCustomer(orgId: string, customerId: string) {
+  db().prepare("UPDATE orgs SET stripe_customer_id = ? WHERE id = ?").run(customerId, orgId);
+}
+
+export function getOrgByStripeCustomer(customerId: string): Org | undefined {
+  const r = db().prepare("SELECT * FROM orgs WHERE stripe_customer_id = ?").get(customerId) as Row | undefined;
+  return r ? toOrg(r) : undefined;
+}
+
+/** Applies a subscription's state to the workspace (called from checkout return and webhooks). */
+export function applySubscription(
+  orgId: string,
+  sub: { id: string; status: string; plan: PlanId; currentPeriodEnd?: string },
+) {
+  db()
+    .prepare("UPDATE orgs SET stripe_subscription_id = ?, subscription_status = ?, current_period_end = ?, plan = ? WHERE id = ?")
+    .run(sub.id, sub.status, sub.currentPeriodEnd ?? null, sub.plan, orgId);
+  const open = openRequestForOrg(orgId);
+  if (open && open.plan === sub.plan) setRequestStatus(open.id, "done");
 }

@@ -1,11 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { requestPlan } from "@/app/actions/billing";
 import { buttonClass } from "@/components/ui";
 import type { Plan, PlanId } from "@/lib/saas/plans";
 
-export function PlanPicker({ plans, current, requested, canManage }: { plans: Plan[]; current: PlanId; requested?: PlanId; canManage: boolean }) {
+export function PlanPicker({
+  plans,
+  current,
+  requested,
+  canManage,
+  checkoutPlans = [],
+  subscribed = false,
+}: {
+  plans: Plan[];
+  current: PlanId;
+  requested?: PlanId;
+  canManage: boolean;
+  /** Plans that can be bought right now with Stripe checkout; others fall back to a request. */
+  checkoutPlans?: PlanId[];
+  /** With a live subscription, plan changes go through the billing portal instead. */
+  subscribed?: boolean;
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
   return (
@@ -33,7 +50,13 @@ export function PlanPicker({ plans, current, requested, canManage }: { plans: Pl
                   </li>
                 ))}
               </ul>
-              {isRequested ? (
+              {canManage && !isCurrent && checkoutPlans.includes(p.id) ? (
+                <Link href={`/checkout/${p.id}`} className={`${buttonClass("primary")} mt-5`}>
+                  Subscribe to {p.name}
+                </Link>
+              ) : canManage && !isCurrent && subscribed && p.id !== "enterprise" ? (
+                <p className="mt-5 text-center text-sm text-muted">Switch plans with Manage billing above.</p>
+              ) : isRequested ? (
                 <p className="mt-5 rounded-lg bg-info-soft px-3 py-2 text-center text-sm font-medium text-info">Requested · we&apos;ll switch you shortly</p>
               ) : (
                 <button

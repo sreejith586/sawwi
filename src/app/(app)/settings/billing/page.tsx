@@ -3,6 +3,10 @@ import { Suspense } from "react";
 import { entitlement, planById, PLANS } from "@/lib/saas/plans";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 import { billingState, getSettings, openRequestForOrg } from "@/lib/saas/store";
+import { openBillingPortal } from "@/app/actions/checkout";
+import { buttonClass } from "@/components/ui";
+import { PAID_PLANS, SUBSCRIPTION_LABELS } from "@/lib/stripe/plans";
+import { checkoutReady, getStripe } from "@/lib/stripe/server";
 import { PlanPicker } from "./plan-picker";
 
 export const metadata: Metadata = { title: "Plan & billing" };
@@ -27,6 +31,9 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
   const plan = planById(org.plan);
   const ent = entitlement(state, settings.paywallEnabled);
   const request = openRequestForOrg(org.id);
+  const subscribed = Boolean(org.subscriptionStatus && ["active", "trialing", "past_due"].includes(org.subscriptionStatus));
+  const checkoutPlans = settings.paywallEnabled && !subscribed ? PAID_PLANS.filter((p) => checkoutReady(p)) : [];
+  const canManage = canManageTeam(session.access);
 
   const status =
     org.status === "suspended"
@@ -58,8 +65,24 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
                   : plan.price}
             </p>
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.tone}`}>{status.label}</span>
+          <div className="flex flex-col items-end gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.tone}`}>{status.label}</span>
+            {org.stripeCustomerId && getStripe() && canManage && (
+              <form action={openBillingPortal}>
+                <button type="submit" className={buttonClass("secondary")}>
+                  Manage billing
+                </button>
+              </form>
+            )}
+          </div>
         </div>
+        {org.subscriptionStatus && (
+          <p className={`mt-3 text-sm ${org.subscriptionStatus === "past_due" ? "text-warn" : "text-muted"}`}>
+            Card subscription: {SUBSCRIPTION_LABELS[org.subscriptionStatus] ?? org.subscriptionStatus}
+            {org.currentPeriodEnd && subscribed ? ` · renews ${day(org.currentPeriodEnd)}` : ""}
+            {org.subscriptionStatus === "past_due" ? ". Update your card in Manage billing to avoid losing access." : ""}
+          </p>
+        )}
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <Usage label="Reconciliations this month" used={state.runsThisMonth} limit={plan.runsPerMonth} />
           <Usage label="Teammates (incl. pending invites)" used={state.members} limit={plan.members} />
@@ -69,9 +92,20 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
       <section>
         <h2 className="text-sm font-semibold">Plans</h2>
         <p className="mt-0.5 text-sm text-muted">
-          {settings.paywallEnabled ? "Pick a plan and we'll switch your workspace over." : "Paid plans aren't live yet. You can tell us which one you'd want."}
+          {!settings.paywallEnabled
+            ? "Paid plans aren't live yet. You can tell us which one you'd want."
+            : checkoutPlans.length
+              ? "Subscribe by card, Apple Pay, Google Pay or Link. Enterprise is arranged with our team."
+              : "Pick a plan and we'll switch your workspace over."}
         </p>
-        <PlanPicker plans={PLANS.filter((p) => p.public)} current={org.plan} requested={request?.plan} canManage={canManageTeam(session.access)} />
+        <PlanPicker
+          plans={PLANS.filter((p) => p.public)}
+          current={org.plan}
+          requested={request?.plan}
+          canManage={canManage}
+          checkoutPlans={checkoutPlans}
+          subscribed={subscribed}
+        />
       </section>
     </div>
   );

@@ -16,6 +16,7 @@ export async function GET(request: Request) {
       { header: "Plan", key: "plan" },
       { header: "Trial ends", key: "trialEnds", type: "date" },
       { header: "Trial", key: "trialState" },
+      { header: "Billing", key: "billing" },
       { header: "Requested plan", key: "request" },
       { header: "Users", key: "users", type: "number" },
       { header: "Runs this month", key: "runsThisMonth", type: "number" },

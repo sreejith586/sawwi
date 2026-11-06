@@ -1,3 +1,4 @@
+import { SUBSCRIPTION_LABELS } from "@/lib/stripe/plans";
 import { planById } from "./plans";
 import type { OrgOverview, UserOverview } from "./store";
 
@@ -17,6 +18,8 @@ export type OrgRow = {
   runs: number;
   runsThisMonth: number;
   request: string;
+  /** "Stripe · Active", or "Manual" when a superadmin set the plan. */
+  billing: string;
   created: string;
 };
 
@@ -37,12 +40,13 @@ export function orgRows(orgs: OrgOverview[], now = Date.now()): OrgRow[] {
     runs: o.runs,
     runsThisMonth: o.runsThisMonth,
     request: o.openRequest ? planById(o.openRequest).name : "",
+    billing: o.subscriptionStatus ? `Stripe · ${SUBSCRIPTION_LABELS[o.subscriptionStatus] ?? o.subscriptionStatus}` : o.plan === "trial" ? "" : "Manual",
     created: o.createdAt,
   }));
 }
 
 export const ORG_SEARCH = ["name", "owner"] as const;
-export const ORG_FILTERS = ["plan", "status", "trialState"];
+export const ORG_FILTERS = ["plan", "status", "trialState", "billing"];
 
 export type UserRow = { id: string; name: string; email: string; workspaces: string; access: string; created: string; lastLogin: string };
 

@@ -52,6 +52,7 @@ export function WorkspacesTable({ rows }: { rows: OrgRow[] }) {
           <span className={`whitespace-nowrap ${r.trialState === "Ended" ? "text-danger" : ""}`}>{r.trialEndsLabel}</span>
         ),
     },
+    { key: "billing", header: "Billing", render: (r) => (r.billing ? <span className="whitespace-nowrap">{r.billing}</span> : <span className="text-muted">–</span>) },
     { key: "request", header: "Requested", render: (r) => (r.request ? <Pill tone="info">{r.request}</Pill> : <span className="text-muted">–</span>) },
     { key: "users", header: "Users", align: "right" },
     { key: "runsThisMonth", header: "Runs (month)", align: "right" },
@@ -96,6 +97,7 @@ export function WorkspacesTable({ rows }: { rows: OrgRow[] }) {
       filters={[
         { key: "plan", label: "Plan", allLabel: "All plans" },
         { key: "trialState", label: "Trial", allLabel: "Any trial state" },
+        { key: "billing", label: "Billing", allLabel: "Any billing" },
         { key: "status", label: "Status", allLabel: "All statuses" },
       ]}
       initialSort={{ sort: "created", dir: "desc" }}
