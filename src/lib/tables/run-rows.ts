@@ -1,6 +1,6 @@
 import { RUN_STATUS } from "@/lib/runs/status";
 import type { RunSummary } from "@/lib/runs/store";
-import { getTemplate } from "@/lib/templates/catalog";
+import { templateFor } from "@/lib/runs/templates";
 import { GROUP_LABELS } from "@/lib/templates/types";
 
 // Server-side: shared by the Reconciliations page and its Excel export (same rows, same filters).
@@ -24,7 +24,7 @@ const dateLabel = (iso: string) =>
 
 export function runRows(runs: RunSummary[]): RunRow[] {
   return runs.map((r) => {
-    const t = getTemplate(r.templateId);
+    const t = templateFor(r.orgKey, r.templateId, r.id);
     return {
       id: r.id,
       template: t?.title ?? r.templateId,

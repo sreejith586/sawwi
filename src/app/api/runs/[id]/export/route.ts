@@ -4,7 +4,7 @@ import { getOwnedRun } from "@/lib/runs/access";
 import { loadRunDatasets } from "@/lib/runs/reconcile";
 import { getResult } from "@/lib/runs/store";
 import { buildReport } from "@/lib/runs/view";
-import { getTemplate } from "@/lib/templates/catalog";
+import { templateForRun } from "@/lib/runs/templates";
 
 const TABLES: ExportTable[] = ["checks", "exceptions", "links", "all"];
 
@@ -13,7 +13,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/ex
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
   const result = owned && getResult(id);
-  const template = owned && getTemplate(owned.run.templateId);
+  const template = owned && templateForRun(owned.run);
   if (!owned || !result || !template) return Response.json({ error: "Report not found." }, { status: 404 });
 
   const params = new URL(request.url).searchParams;

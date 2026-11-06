@@ -40,4 +40,13 @@ pnpm build
 7. The report has KPI tiles, a matching summary, and sortable, filterable check and exception tables.
    Every table downloads as Excel (`/api/runs/[id]/export`), filtered and sorted like the screen.
 
+8. Above the report, an **analysis** (Claude Sonnet, written once per result from totals and the
+   largest exceptions, then cached) says what's wrong and what to fix first. Without an API key, Sawwi
+   writes it from rules.
+9. The **chat** offers one-click follow-ups: what to fix first, breakdowns by key/month/SKU (with
+   Excel), copyable email drafts to the marketplace/customer/supplier, and "explain this exception".
+   Free-text questions use Claude Haiku. The AI only sees aggregates and a few exceptions, never files.
+10. **No template fits?** Start a custom reconciliation from the gallery: name two files, confirm the
+    key and amount columns with chips, and save it as your own template.
+
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.
