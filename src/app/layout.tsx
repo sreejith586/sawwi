@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
+import { InlineScript } from "@/components/inline-script";
 import { NavLink } from "@/components/nav-link";
 import { ProfileBadge } from "@/components/profile-badge";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,7 +26,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // The inline script sets data-theme before React hydrates, hence suppressHydrationWarning.
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <InlineScript html={THEME_SCRIPT} />
+      </head>
       <body className="flex min-h-full flex-col font-sans">
         <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
@@ -44,7 +51,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <NavLink href="/templates">Templates</NavLink>
               </Suspense>
             </nav>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-1">
+              <ThemeToggle />
               <Suspense fallback={null}>
                 <ProfileBadge />
               </Suspense>

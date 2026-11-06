@@ -6,6 +6,7 @@
  * or lower than expected, danger = money at risk or error, info = planning/neutral facts.
  */
 :root {
+  color-scheme: light;
   --background: #fafafa;
   --surface: #ffffff;
   --surface-muted: #f4f4f5;
@@ -26,27 +27,32 @@
   --info-soft: #eff8ff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --surface: #111113;
-    --surface-muted: #1c1c1f;
-    --foreground: #fafafa;
-    --muted: #a1a1aa;
-    --border: #27272a;
-    --accent: #fafafa;
-    --accent-strong: #ffffff;
-    --accent-soft: #27272a;
-    --accent-foreground: #09090b;
-    --success: #47cd89;
-    --success-soft: #0a2e1d;
-    --warn: #fdb022;
-    --warn-soft: #3a240b;
-    --danger: #f97066;
-    --danger-soft: #3d1410;
-    --info: #53b1fd;
-    --info-soft: #0f2547;
-  }
+/*
+ * Dark theme. The inline script in layout.tsx sets data-theme on <html> before first
+ * paint: the user's saved choice, otherwise the system setting.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #09090b;
+  --surface: #111113;
+  --surface-muted: #1c1c1f;
+  --foreground: #fafafa;
+  --muted: #a1a1aa;
+  --border: #27272a;
+  --accent: #fafafa;
+  --accent-strong: #ffffff;
+  --accent-soft: #27272a;
+  --accent-foreground: #09090b;
+  --success: #47cd89;
+  --success-soft: #0a2e1d;
+  --warn: #fdb022;
+  --warn-soft: #3a240b;
+  --danger: #f97066;
+  --danger-soft: #3d1410;
+  --info: #53b1fd;
+  --info-soft: #0f2547;
 }
 
 @theme inline {
