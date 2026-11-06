@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveProfile, type SaveProfileState } from "@/app/actions/profile";
 import { MultiChips, SingleChips, YesNo } from "@/components/chips";
+import { buttonClass } from "@/components/ui";
 import {
   ACCOUNTING_SYSTEMS,
   B2B_PAYMENT_METHODS,
@@ -102,16 +103,16 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
 
   return (
     <form action={formAction} onSubmit={onSubmit} className="space-y-8">
-      <ol className="flex flex-wrap gap-2 text-xs font-medium">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-xs font-medium">
         {steps.map((s, i) => (
-          <li
-            key={s}
-            className={
-              "rounded-full px-3 py-1 " +
-              (i === index ? "bg-accent text-accent-foreground" : i < index ? "bg-accent-soft text-accent-strong" : "bg-surface-muted text-muted")
-            }
-          >
-            {i + 1}. {STEP_TITLES[s]}
+          <li key={s} className="flex items-center gap-1">
+            {i > 0 && <span className="mx-1 h-px w-5 bg-border" aria-hidden />}
+            <span className={`flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 ${i === index ? "bg-surface-muted text-foreground" : i < index ? "text-foreground" : "text-muted"}`}>
+              <span className={`tabular grid size-5 place-items-center rounded-full text-[11px] ${i <= index ? "bg-accent text-accent-foreground" : "border border-border"}`}>
+                {i < index ? "✓" : i + 1}
+              </span>
+              {STEP_TITLES[s]}
+            </span>
           </li>
         ))}
       </ol>
@@ -124,7 +125,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
             value={draft.company}
             onChange={(e) => set("company", e.target.value)}
             placeholder="e.g. Desert Rose Trading LLC"
-            className="w-full max-w-md rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+            className="h-10 w-full max-w-md rounded-lg border border-border bg-surface px-3.5 text-sm shadow-sm outline-none placeholder:text-muted focus:border-foreground/40 focus:ring-2 focus:ring-foreground/10"
           />
           {errors.company && <p className="mt-2 text-sm text-danger">{errors.company}</p>}
         </Question>
@@ -184,7 +185,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
           <button
             type="button"
             onClick={() => setStepIndex(index - 1)}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-surface-muted"
+            className={buttonClass("secondary")}
           >
             Back
           </button>
@@ -193,7 +194,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
+            className={buttonClass("primary")}
           >
             {pending ? "Saving…" : "Show my reconciliations"}
           </button>
@@ -201,7 +202,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
           <button
             type="button"
             onClick={next}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong"
+            className={buttonClass("primary")}
           >
             Continue
           </button>
@@ -226,7 +227,7 @@ function Step({ active, children }: { active: boolean; children: React.ReactNode
 function Question({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-3 text-base font-semibold">
+      <legend className="mb-3 text-sm font-semibold">
         {title}
         {hint && <span className="mt-0.5 block text-sm font-normal text-muted">{hint}</span>}
       </legend>

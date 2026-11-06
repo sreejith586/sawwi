@@ -8,11 +8,25 @@ type BaseProps<T extends string> = {
   error?: string;
 };
 
+// Neutral chips: selection shows as a dark outline and a check mark, not color.
 const chipClass =
-  "flex cursor-pointer flex-col rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm transition " +
-  "hover:border-accent/60 has-[:checked]:border-accent has-[:checked]:bg-accent-soft " +
-  "has-[:checked]:text-accent-strong has-[:checked]:ring-1 has-[:checked]:ring-accent " +
-  "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40";
+  "group relative flex cursor-pointer flex-col rounded-lg border border-border bg-surface py-2.5 pl-3.5 pr-8 text-sm shadow-sm transition " +
+  "hover:border-foreground/30 hover:bg-surface-muted/60 " +
+  "has-[:checked]:border-foreground has-[:checked]:bg-surface has-[:checked]:ring-1 has-[:checked]:ring-foreground " +
+  "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-foreground/30";
+
+function Check() {
+  return (
+    <span
+      aria-hidden
+      className="absolute right-2.5 top-3 grid size-4 place-items-center rounded-full border border-border text-accent-foreground transition group-has-[:checked]:border-foreground group-has-[:checked]:bg-foreground"
+    >
+      <svg viewBox="0 0 12 12" className="size-2.5 opacity-0 group-has-[:checked]:opacity-100">
+        <path d="M2.5 6.2 5 8.5 9.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
 
 export function MultiChips<T extends string>({
   name,
@@ -33,6 +47,7 @@ export function MultiChips<T extends string>({
             onChange={(e) => onChange(e.target.checked ? [...value, o.value] : value.filter((v) => v !== o.value))}
             className="sr-only"
           />
+          <Check />
           <span className="font-medium">{o.label}</span>
           {o.hint && <span className="text-xs text-muted">{o.hint}</span>}
         </label>
@@ -60,6 +75,7 @@ export function SingleChips<T extends string>({
             onChange={() => onChange(o.value)}
             className="sr-only"
           />
+          <Check />
           <span className="font-medium">{o.label}</span>
           {o.hint && <span className="text-xs text-muted">{o.hint}</span>}
         </label>
