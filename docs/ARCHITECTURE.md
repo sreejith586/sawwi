@@ -242,7 +242,16 @@ Results show under the file (✓/✕ with figures). A failed check is posted in 
 
 ## 9. Connectors (planned, Phase 6 part 3, D-27)
 
-Status: **plan only, no code.** Each connector needs real accounts and credentials, so the user picks the first one and connects it themselves. An agent never enters real credentials.
+Status: **framework and the Shopify orders connector are built (D-28)**; the rest of this section is the plan. Each connector needs real accounts and credentials, so live checks wait for the user, who connects with their own account. An agent never enters real credentials, and tests never call a provider.
+
+**What's built (D-28, `src/lib/connectors/`).**
+- `types.ts`: a `Connector` has credential fields, reports, `parseCredentials`, `test` (one cheap read-only call) and `pull(report, window)`, which returns a `ParsedTable`. `fetch` and `sleep` are injected, so tests replay synthetic responses (`fixtures/shopify.json`).
+- `shopify.ts`: Admin GraphQL `2026-10`, `orders` query paged by cursor (250 a page), backoff on HTTP 429/5xx and `THROTTLED`, readable errors for 401/403/`ACCESS_DENIED`. The store must be `*.myshopify.com`, so a connection can't point the server at another host. Auth is an Admin API token from a custom app with `read_orders` (`read_all_orders` for orders older than 60 days). It returns 15 fixed columns ("Order", "Created at", "Financial status", "Payment gateway", "Total", "Total refunded", …), which the known-header heuristics map onto the webstore orders slot with no AI.
+- `crypto.ts`: AES-256-GCM, with the key in `SAWWI_CONNECTOR_KEY` (32 bytes). The workspace and provider are bound in as associated data, so a secret copied to another workspace won't decrypt. Without a key, connections can't be added.
+- `store.ts`: `connections` (encrypted secret, status, last error, last import) and `connection_syncs` (every import, with its window, run, slot, rows and status).
+- `service.ts`: `addConnection` (validate, test, encrypt) and `pullIntoRun`. `pullIntoRun` pulls, writes CSV and calls `ingestFiles` on the slot, so it's the same path as an upload: the mapping cache, chips and checks all apply. Auth or scope failures mark the connection "Needs attention"; an empty period doesn't.
+- UI: Settings → Connections lets owners and admins add or remove a connection; everyone sees the list and the import history (sort, filter, Excel at `/api/connections/syncs`). On a run, each file slot has "Import from a connection" with a period (default: last month, UTC), offered to editors and up. It posts to `/api/runs/[id]/pull` behind `runBlocker()`.
+- Not built yet: scheduled pulls (needs a job runner), OAuth apps (Shopify public app, Amazon LWA), KMS key management, and the other sources below.
 
 **Principle: a connector is just another way a file arrives.** A connector pulls a report from a source's API and turns it into the same `{ headers, rows }` table that `parseUpload` returns. From there the path is unchanged: `ingestFiles` → profile → fingerprint → mapping cache → chips → engine (D-3, D-5). No connector code touches matching, and nothing new goes to the LLM (D-2). Each connector and report type emits a fixed set of column names, so its fingerprint is stable. After the first run's mapping is confirmed, every later pull maps from the cache and asks nothing.
 

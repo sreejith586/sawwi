@@ -99,6 +99,34 @@ CREATE TABLE IF NOT EXISTS run_narratives (
   body_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS connections (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  account_label TEXT NOT NULL,
+  secret_enc TEXT NOT NULL,
+  status TEXT NOT NULL,
+  last_error TEXT,
+  last_sync_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS connections_org ON connections (org_key);
+CREATE TABLE IF NOT EXISTS connection_syncs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  connection_id TEXT NOT NULL,
+  org_key TEXT NOT NULL,
+  report TEXT NOT NULL,
+  window_from TEXT NOT NULL,
+  window_to TEXT NOT NULL,
+  run_id TEXT,
+  slot_key TEXT,
+  rows INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS connection_syncs_org ON connection_syncs (org_key, created_at);
 CREATE TABLE IF NOT EXISTS custom_templates (
   id TEXT PRIMARY KEY,
   org_key TEXT NOT NULL,

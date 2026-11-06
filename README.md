@@ -53,5 +53,9 @@ pnpm build
    Free-text questions use Claude Haiku. The AI only sees aggregates and a few exceptions, never files.
 10. **No template fits?** Start a custom reconciliation from the gallery: name two files, confirm the
     key and amount columns with chips, and save it as your own template.
+11. **Connections** (Settings → Connections, owners and admins): connect a Shopify store with a
+    read-only Admin API token, then use "Import from a connection" on a run's file slot to pull that
+    period's orders instead of uploading a file. Tokens are encrypted at rest with `SAWWI_CONNECTOR_KEY`
+    (set it in `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

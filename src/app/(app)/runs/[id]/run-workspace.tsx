@@ -6,9 +6,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { saveAsTemplate, sendChat } from "@/app/actions/insights";
 import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
 import type { ChatIntent } from "@/lib/insights/chat";
+import { ImportFromConnection } from "@/components/connectors/import-from-connection";
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
+import type { ImportSource } from "@/lib/connectors/sources";
 import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
 import type { RunView, SlotView } from "@/lib/runs/view";
@@ -16,7 +18,7 @@ import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type P
 import { Chat } from "./chat";
 import { Report } from "./report";
 
-export function RunWorkspace({ initial }: { initial: RunView }) {
+export function RunWorkspace({ initial, sources = [] }: { initial: RunView; sources?: ImportSource[] }) {
   const [view, setView] = useState(initial);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -70,6 +72,7 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
               index={i + 1}
               slot={slot}
               runId={view.id}
+              sources={sources}
               onView={update}
               onError={setError}
               onRemap={(field, column) => startTransition(async () => apply(await setFieldColumn(view.id, slot.key, field, column)))}
@@ -133,6 +136,7 @@ function SlotCard(props: {
   index: number;
   slot: SlotView;
   runId: string;
+  sources: ImportSource[];
   onView: (v: RunView) => void;
   onError: (e?: string) => void;
   onRemap: (field: string, column: string | null) => void;
@@ -259,6 +263,7 @@ function SlotCard(props: {
               )}
             </label>
           )}
+          <ImportFromConnection runId={props.runId} slotKey={slot.key} sources={props.sources} onView={props.onView} onError={props.onError} />
         </div>
       </div>
 

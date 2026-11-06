@@ -1,0 +1,217 @@
+{
+  "shop": {
+    "data": {
+      "shop": {
+        "name": "Desert Bloom Trading",
+        "currencyCode": "AED"
+      }
+    }
+  },
+  "ordersPage1": {
+    "data": {
+      "orders": {
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "eyJsYXN0X2lkIjoxMDAzfQ=="
+        },
+        "nodes": [
+          {
+            "name": "#1001",
+            "createdAt": "2026-10-01T08:15:00Z",
+            "processedAt": "2026-10-01T08:15:02Z",
+            "cancelledAt": null,
+            "test": false,
+            "displayFinancialStatus": "PAID",
+            "displayFulfillmentStatus": "FULFILLED",
+            "paymentGatewayNames": [
+              "shopify_payments"
+            ],
+            "currencyCode": "AED",
+            "subtotalPriceSet": {
+              "shopMoney": {
+                "amount": "300.00"
+              }
+            },
+            "totalDiscountsSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            },
+            "totalShippingPriceSet": {
+              "shopMoney": {
+                "amount": "15.0"
+              }
+            },
+            "totalTaxSet": {
+              "shopMoney": {
+                "amount": "15.00"
+              }
+            },
+            "totalPriceSet": {
+              "shopMoney": {
+                "amount": "315.0"
+              }
+            },
+            "totalRefundedSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            }
+          },
+          {
+            "name": "#1002",
+            "createdAt": "2026-10-02T08:15:00Z",
+            "processedAt": "2026-10-02T08:15:02Z",
+            "cancelledAt": null,
+            "test": false,
+            "displayFinancialStatus": "PAID",
+            "displayFulfillmentStatus": "FULFILLED",
+            "paymentGatewayNames": [
+              "tabby"
+            ],
+            "currencyCode": "AED",
+            "subtotalPriceSet": {
+              "shopMoney": {
+                "amount": "115.00"
+              }
+            },
+            "totalDiscountsSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            },
+            "totalShippingPriceSet": {
+              "shopMoney": {
+                "amount": "15.0"
+              }
+            },
+            "totalTaxSet": {
+              "shopMoney": {
+                "amount": "5.75"
+              }
+            },
+            "totalPriceSet": {
+              "shopMoney": {
+                "amount": "120.75"
+              }
+            },
+            "totalRefundedSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            }
+          },
+          {
+            "name": "#1003",
+            "createdAt": "2026-10-03T08:15:00Z",
+            "processedAt": "2026-10-03T08:15:02Z",
+            "cancelledAt": null,
+            "test": false,
+            "displayFinancialStatus": "PARTIALLY_REFUNDED",
+            "displayFulfillmentStatus": "FULFILLED",
+            "paymentGatewayNames": [
+              "shopify_payments"
+            ],
+            "currencyCode": "AED",
+            "subtotalPriceSet": {
+              "shopMoney": {
+                "amount": "84.76"
+              }
+            },
+            "totalDiscountsSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            },
+            "totalShippingPriceSet": {
+              "shopMoney": {
+                "amount": "15.0"
+              }
+            },
+            "totalTaxSet": {
+              "shopMoney": {
+                "amount": "4.24"
+              }
+            },
+            "totalPriceSet": {
+              "shopMoney": {
+                "amount": "89.0"
+              }
+            },
+            "totalRefundedSet": {
+              "shopMoney": {
+                "amount": "20.0"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "extensions": {
+      "cost": {
+        "requestedQueryCost": 252,
+        "actualQueryCost": 8,
+        "throttleStatus": {
+          "maximumAvailable": 2000.0,
+          "currentlyAvailable": 1992,
+          "restoreRate": 100.0
+        }
+      }
+    }
+  },
+  "ordersPage2": {
+    "data": {
+      "orders": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "eyJsYXN0X2lkIjoxMDA0fQ=="
+        },
+        "nodes": [
+          {
+            "name": "#1004",
+            "createdAt": "2026-10-30T08:15:00Z",
+            "processedAt": "2026-10-30T08:15:02Z",
+            "cancelledAt": null,
+            "test": false,
+            "displayFinancialStatus": "PENDING",
+            "displayFulfillmentStatus": "FULFILLED",
+            "paymentGatewayNames": [
+              "cash_on_delivery"
+            ],
+            "currencyCode": "AED",
+            "subtotalPriceSet": {
+              "shopMoney": {
+                "amount": "1000.00"
+              }
+            },
+            "totalDiscountsSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            },
+            "totalShippingPriceSet": {
+              "shopMoney": {
+                "amount": "15.0"
+              }
+            },
+            "totalTaxSet": {
+              "shopMoney": {
+                "amount": "50.00"
+              }
+            },
+            "totalPriceSet": {
+              "shopMoney": {
+                "amount": "1050.0"
+              }
+            },
+            "totalRefundedSet": {
+              "shopMoney": {
+                "amount": "0.0"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

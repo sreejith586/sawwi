@@ -112,3 +112,18 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Credentials: OAuth, or provider-issued read-only keys, entered by an owner or admin on the provider's page or a key form. Secrets are encrypted at rest (AES-256-GCM; KMS in production) in their own table, never shown, logged or sent to the browser. Disconnecting revokes them.
   - Sync: pull per schedule period (D-26) through slot bindings, idempotent per window. The run is created behind `runBlocker()` and reconciled automatically when nothing needs an answer.
 - **Consequences:** connectors depend on a job runner, which needs the user's approval (D-26). The user picks the first connector and connects it with their own account; agents never enter real credentials.
+
+### D-28: First connector is Shopify orders, behind a small connector framework
+- **Context:** the user asked for as much as possible without them. Connectors need real accounts, so this has to be built against the providers' documented APIs and tested with synthetic fixtures, then verified live by the user later.
+- **Decision:**
+  - A small framework (`src/lib/connectors/`): source interface, encrypted credentials per workspace, import history, and pulls fed into `ingestFiles` as a CSV, so mapping and matching are unchanged (D-27).
+  - The first connector is **Shopify orders** (Admin GraphQL `2026-10`, read-only `read_orders`). Its token comes from a custom app the merchant creates in their own admin, so Sawwi needs no public-app listing or OAuth review to start. Its fixed columns map onto the webstore orders slot by name.
+  - Secrets use AES-256-GCM with `SAWWI_CONNECTOR_KEY` from the environment, and the workspace is bound as associated data. Secrets are never returned to the browser.
+  - Pulls are manual: "Import from a connection" on a run slot, behind `runBlocker()`. Owners and admins add or remove connections.
+  - Rejected alternatives:
+    - A **watched folder or SFTP drop**: it needs a server filesystem or an SFTP service per tenant, and a poller.
+    - An **upload-by-email inbox**: it needs an inbound mail provider and a domain.
+    - **Amazon SP-API first**: more valuable, but it can't be built or verified without a registered developer app.
+    - **Shopify OAuth (public app)** instead of a custom-app token: it needs an app listing and callback hosting; it can come later for one-click installs.
+    - **Scheduled automatic pulls**: they need a job runner (D-26), which the brief rules out for now.
+- **Consequences:** the whole flow is tested with replayed responses, but not yet against a live store. The user needs to create a custom app in a Shopify store and paste its token once. Changing `SAWWI_CONNECTOR_KEY` makes stored tokens unreadable (reconnect needed). The `read_orders` scope only reaches back 60 days unless the merchant grants `read_all_orders`.

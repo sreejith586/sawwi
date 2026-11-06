@@ -7,6 +7,7 @@ const TABS = [
   { href: "/settings", label: "General" },
   { href: "/settings/accounts", label: "Accounts" },
   { href: "/settings/billing", label: "Plan & billing" },
+  { href: "/settings/connections", label: "Connections" },
 ] as const;
 
 export function SettingsTabs({ static: isStatic = false }: { static?: boolean }) {
