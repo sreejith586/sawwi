@@ -418,11 +418,13 @@ function FilePreview({ runId, slotKey, fileName }: { runId: string; slotKey: str
 // ─── Chat ─────────────────────────────────────────────────────────────────
 
 function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer: (questionId: string, value: string) => void }) {
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const current = view.openQuestions[0];
 
+  // Scroll only the chat panel, never the page: the report above should stay in view.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "nearest" });
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [view.messages.length, current?.id]);
 
   return (
@@ -434,7 +436,7 @@ function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer
           <p className="text-xs text-muted">{busy ? "Working…" : current ? "Waiting for your answer" : "Here to help"}</p>
         </div>
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
+      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
         <Bubble role="sawwi">Upload each file on the left. I&apos;ll read them, match the columns, and only ask when something is unclear.</Bubble>
         {view.messages.map((m) => (
           <Bubble key={m.id} role={m.role}>
@@ -462,7 +464,6 @@ function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer
             {view.openQuestions.length > 1 && <p className="text-xs text-muted">{view.openQuestions.length - 1} more after this</p>}
           </div>
         )}
-        <div ref={endRef} />
       </div>
       {view.usage.calls > 0 && (
         <div className="tabular border-t border-border px-4 py-2 text-[11px] text-muted">
