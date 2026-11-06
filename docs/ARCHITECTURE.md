@@ -163,11 +163,13 @@ in layers. The cheapest one comes first:
 
 Track per-run tokens (input, cache read, cache write, output) from day one so cache hit rate is visible.
 
-## 6. Proposed stack
+## 6. Stack
+
+_Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memory TS matching engine (D-5, D-6), exceljs and the Anthropic SDK. The original plan is below, kept for reference.
 
 - **Next.js 16 (this repo):** UI, auth, API routes / server actions
-- **Postgres** (via Drizzle): orgs, users, templates, mappings, answers, runs, exceptions
-- **DuckDB** (Node bindings, server-side): the matching engine over uploaded CSV/XLSX/Parquet
+- **Postgres** (via Drizzle): orgs, users, templates, mappings, answers, runs, exceptions (later; SQLite now)
+- **DuckDB** (Node bindings, server-side): the matching engine over uploaded CSV/XLSX/Parquet (replaced by the TS engine, D-5)
 - **Object storage** (S3/R2): uploaded files and generated reports (XLSX/PDF)
 - **Anthropic SDK:** Haiku 5.5 / Sonnet 5.5, prompt caching, Batch API
 - **Job queue** (e.g. Inngest/BullMQ): long-running recos and scheduled repeat runs
@@ -184,7 +186,7 @@ Track per-run tokens (input, cache read, cache write, output) from day one so ca
 
 ## 7. Build phases
 
-Status: Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.
 
 Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 
