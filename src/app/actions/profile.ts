@@ -29,7 +29,7 @@ export async function saveProfile(_prev: SaveProfileState, formData: FormData): 
     secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 365,
   });
-  redirect("/templates");
+  redirect("/home");
 }
 
 export async function resetProfile() {

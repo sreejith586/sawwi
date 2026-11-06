@@ -9,7 +9,7 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/") {
-    return NextResponse.redirect(new URL(hasProfile ? "/templates" : "/onboarding", request.url));
+    return NextResponse.redirect(new URL(hasProfile ? "/home" : "/onboarding", request.url));
   }
   if (!hasProfile) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
@@ -18,5 +18,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/templates", "/runs/:path*"],
+  matcher: ["/", "/home", "/templates", "/runs/:path*", "/settings/:path*"],
 };

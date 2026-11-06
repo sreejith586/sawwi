@@ -61,7 +61,7 @@ function validateStep(step: StepId, d: Draft): ProfileErrors {
   return e;
 }
 
-export function OnboardingWizard({ initial }: { initial?: Profile }) {
+export function OnboardingWizard({ initial, submitLabel = "Show my reconciliations" }: { initial?: Profile; submitLabel?: string }) {
   const [draft, setDraft] = useState<Draft>(initial ?? EMPTY);
   const [stepIndex, setStepIndex] = useState(0);
   const [localErrors, setLocalErrors] = useState<ProfileErrors>({});
@@ -196,7 +196,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
             disabled={pending}
             className={buttonClass("primary")}
           >
-            {pending ? "Saving…" : "Show my reconciliations"}
+            {pending ? "Saving…" : submitLabel}
           </button>
         ) : (
           <button

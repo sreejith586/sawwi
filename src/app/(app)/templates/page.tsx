@@ -7,7 +7,7 @@ import { TEMPLATES } from "@/lib/templates/catalog";
 import { recommendTemplates } from "@/lib/templates/recommend";
 import { TemplateGallery } from "./template-gallery";
 
-export const metadata: Metadata = { title: "Reconciliation templates" };
+export const metadata: Metadata = { title: "Templates" };
 
 async function Gallery() {
   const profile = await getProfile();
@@ -33,7 +33,7 @@ async function Gallery() {
   return (
     <>
       <p className="mt-1 text-muted">
-        {recommended.length} reconciliations for {profile.company}: selling via {sellsOn.join(", ")} in{" "}
+        Pick a reconciliation to start. {recommended.length} fit {profile.company}: selling via {sellsOn.join(", ")} in{" "}
         {profile.countries.map((c) => labelOf(COUNTRIES, c)).join(", ")}.{" "}
         <Link href="/onboarding" className="font-medium underline decoration-border underline-offset-4 hover:decoration-foreground">
           Edit profile
@@ -55,7 +55,7 @@ async function Gallery() {
 export default function TemplatesPage() {
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Your reconciliations</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Templates</h1>
       <Suspense fallback={<p className="mt-4 text-muted">Loading your templates…</p>}>
         <Gallery />
       </Suspense>

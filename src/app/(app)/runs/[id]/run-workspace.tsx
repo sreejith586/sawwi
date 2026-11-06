@@ -6,18 +6,10 @@ import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/ap
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
+import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
 import type { RunView, SlotView } from "@/lib/runs/view";
 import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type PreviewRow } from "@/lib/tables/rows";
 import { Report } from "./report";
-
-type Tone = "neutral" | "medium" | "info" | "ok";
-
-const STATUS: Record<RunView["status"], { label: string; tone: Tone }> = {
-  collecting: { label: "Waiting for files", tone: "neutral" },
-  clarifying: { label: "Needs your answers", tone: "medium" },
-  ready: { label: "Ready to reconcile", tone: "info" },
-  done: { label: "Reconciled", tone: "ok" },
-};
 
 export function RunWorkspace({ initial }: { initial: RunView }) {
   const [view, setView] = useState(initial);
@@ -36,7 +28,7 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
     setError(result.error);
   };
 
-  const status = STATUS[view.status];
+  const status = RUN_STATUS[view.status];
   const uploaded = view.slots.filter((s) => s.file).length;
   const needed = view.slots.filter((s) => !s.optional && !s.file).length;
   const open = view.openQuestions.length;
@@ -285,7 +277,7 @@ function FileIcon() {
   );
 }
 
-const STATUS_TONE: Record<MappingRow["status"], Tone | "high"> = { Mapped: "ok", Missing: "high", "Not in file": "neutral" };
+const STATUS_TONE: Record<MappingRow["status"], StatusTone | "high"> = { Mapped: "ok", Missing: "high", "Not in file": "neutral" };
 
 function MappingTable({ runId, slot, busy, onRemap }: { runId: string; slot: SlotView; busy: boolean; onRemap: (field: string, column: string | null) => void }) {
   const file = slot.file!;

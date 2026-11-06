@@ -213,3 +213,39 @@ export function getUsage(runId: string): UsageSummary {
     outputTokens: Number(r.o),
   };
 }
+
+export type RunSummary = Run & {
+  files: number;
+  ranAt?: string;
+  exceptions?: number;
+  value?: number;
+  currency?: string;
+};
+
+/** Every run for an org, newest first, with headline result numbers (read straight from JSON, no full parse). */
+export function listRuns(orgKey: string): RunSummary[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT r.id, r.org_key, r.template_id, r.status, r.created_at,
+              (SELECT COUNT(*) FROM run_files f WHERE f.run_id = r.id) AS files,
+              rr.created_at AS ran_at,
+              json_extract(rr.result_json, '$.totals.exceptions') AS exceptions,
+              json_extract(rr.result_json, '$.totals.value') AS value,
+              json_extract(rr.result_json, '$.currency') AS currency
+       FROM runs r LEFT JOIN run_results rr ON rr.run_id = r.id
+       WHERE r.org_key = ? ORDER BY r.created_at DESC`,
+    )
+    .all(orgKey) as Row[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    orgKey: String(r.org_key),
+    templateId: String(r.template_id),
+    status: r.status as RunStatus,
+    createdAt: String(r.created_at),
+    files: Number(r.files),
+    ranAt: r.ran_at === null ? undefined : String(r.ran_at),
+    exceptions: r.exceptions === null ? undefined : Number(r.exceptions),
+    value: r.value === null ? undefined : Number(r.value),
+    currency: r.currency === null ? undefined : String(r.currency),
+  }));
+}

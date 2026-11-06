@@ -21,8 +21,8 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
 export default function RunPage(props: PageProps<"/runs/[id]">) {
   return (
     <div>
-      <Link href="/templates" className="text-sm text-muted hover:text-foreground">
-        ← All templates
+      <Link href="/runs" className="text-sm text-muted hover:text-foreground">
+        ← Reconciliations
       </Link>
       <Suspense fallback={<p className="mt-6 text-muted">Loading your reconciliation…</p>}>
         <Workspace params={props.params} />

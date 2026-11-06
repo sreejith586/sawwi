@@ -55,6 +55,18 @@
   --info-soft: #0f2547;
 }
 
+/*
+ * Collapsed sidebar (desktop only). <html data-sidebar="collapsed"> is set before paint by
+ * the inline script in layout.tsx; on phones the sidebar is a drawer and never collapses.
+ */
+@custom-variant collapsed {
+  @media (width >= 48rem) {
+    &:where([data-sidebar="collapsed"], [data-sidebar="collapsed"] *) {
+      @slot;
+    }
+  }
+}
+
 /* Theme switch: the picked segment follows data-theme-pref, so it's right before hydration. */
 :root[data-theme-pref="light"] .theme-option[data-theme-option="light"],
 :root[data-theme-pref="system"] .theme-option[data-theme-option="system"],
@@ -95,4 +107,40 @@ body {
 /* Tabular figures keep amounts aligned in tables and tiles. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * App sidebar geometry. Phone: off-canvas drawer, opened with <html data-nav-open>.
+ * Desktop: 15rem panel, or a 3.5rem icon rail with <html data-sidebar="collapsed">.
+ */
+.app-sidebar {
+  width: 16rem;
+  translate: -100% 0;
+  transition: translate 200ms ease, width 200ms ease;
+}
+.app-sidebar-backdrop {
+  display: none;
+}
+[data-nav-open] .app-sidebar {
+  translate: 0 0;
+}
+[data-nav-open] .app-sidebar-backdrop {
+  display: block;
+}
+@media (width >= 48rem) {
+  .app-sidebar {
+    width: 15rem;
+    translate: 0 0;
+  }
+  [data-sidebar="collapsed"] .app-sidebar {
+    width: 3.5rem;
+  }
+  [data-nav-open] .app-sidebar-backdrop {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
+  }
 }
