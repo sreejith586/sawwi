@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import { saveProfile, type SaveProfileState } from "@/app/actions/profile";
 import { MultiChips, SingleChips, YesNo } from "@/components/chips";
 import {
+  ACCOUNTING_SYSTEMS,
+  B2B_PAYMENT_METHODS,
   CHANNELS,
   COUNTRIES,
   MARKETPLACES,
@@ -15,25 +17,29 @@ import type { Profile, ProfileErrors } from "@/lib/profile/profile";
 
 type Draft = Omit<Profile, "role"> & { role: Profile["role"] | undefined };
 
-type StepId = "about" | "channels" | "marketplace" | "webstore";
+type StepId = "about" | "channels" | "marketplace" | "webstore" | "b2b";
 
 const STEP_FIELDS: Record<StepId, (keyof Profile)[]> = {
-  about: ["company", "role", "countries"],
+  about: ["company", "role", "countries", "accountingSystems"],
   channels: ["channels"],
   marketplace: ["marketplaces"],
   webstore: ["platforms", "payments"],
+  b2b: ["b2bPayments"],
 };
 
 const EMPTY: Draft = {
   company: "",
   role: undefined,
   countries: [],
+  accountingSystems: [],
   channels: [],
   marketplaces: [],
   sellsB2B: false,
   usesMarketplaceFulfilment: false,
   platforms: [],
   payments: [],
+  b2bPayments: [],
+  givesCreditTerms: false,
 };
 
 function validateStep(step: StepId, d: Draft): ProfileErrors {
@@ -42,6 +48,7 @@ function validateStep(step: StepId, d: Draft): ProfileErrors {
     if (!d.company.trim()) e.company = "Enter your company name.";
     if (!d.role) e.role = "Pick your role.";
     if (d.countries.length === 0) e.countries = "Pick at least one country.";
+    if (d.accountingSystems.length === 0) e.accountingSystems = "Pick where you keep your books.";
   }
   if (step === "channels" && d.channels.length === 0) e.channels = "Pick where you sell.";
   if (step === "marketplace" && d.marketplaces.length === 0) e.marketplaces = "Pick at least one marketplace.";
@@ -49,6 +56,7 @@ function validateStep(step: StepId, d: Draft): ProfileErrors {
     if (d.platforms.length === 0) e.platforms = "Pick your webstore platform.";
     if (d.payments.length === 0) e.payments = "Pick how customers pay.";
   }
+  if (step === "b2b" && d.b2bPayments.length === 0) e.b2bPayments = "Pick how business customers pay.";
   return e;
 }
 
@@ -63,6 +71,7 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
     "channels",
     ...(draft.channels.includes("marketplace") ? (["marketplace"] as const) : []),
     ...(draft.channels.includes("webstore") ? (["webstore"] as const) : []),
+    ...(draft.channels.includes("b2b") ? (["b2b"] as const) : []),
   ];
   const index = Math.min(stepIndex, steps.length - 1);
   const current = steps[index];
@@ -125,10 +134,13 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
         <Question title="Which countries do you sell in?" hint="Sets currencies and VAT rates.">
           <MultiChips name="countries" options={COUNTRIES} value={draft.countries} onChange={(v) => set("countries", v)} error={errors.countries} />
         </Question>
+        <Question title="Where do you keep your books?" hint="Helps Sawwi read your ERP exports without asking.">
+          <MultiChips name="accountingSystems" options={ACCOUNTING_SYSTEMS} value={draft.accountingSystems} onChange={(v) => set("accountingSystems", v)} error={errors.accountingSystems} />
+        </Question>
       </Step>
 
       <Step active={current === "channels"}>
-        <Question title="Where do you sell?" hint="Pick both if you sell on marketplaces and your own store.">
+        <Question title="Where do you sell?" hint="Pick all that apply.">
           <MultiChips name="channels" options={CHANNELS} value={draft.channels} onChange={(v) => set("channels", v)} error={errors.channels} />
         </Question>
       </Step>
@@ -151,6 +163,15 @@ export function OnboardingWizard({ initial }: { initial?: Profile }) {
         </Question>
         <Question title="How do customers pay?">
           <MultiChips name="payments" options={PAYMENT_METHODS} value={draft.payments} onChange={(v) => set("payments", v)} error={errors.payments} />
+        </Question>
+      </Step>
+
+      <Step active={current === "b2b"}>
+        <Question title="How do business customers pay you?">
+          <MultiChips name="b2bPayments" options={B2B_PAYMENT_METHODS} value={draft.b2bPayments} onChange={(v) => set("b2bPayments", v)} error={errors.b2bPayments} />
+        </Question>
+        <Question title="Do you give customers credit terms (e.g. 30 or 60 days)?">
+          <YesNo name="givesCreditTerms" value={draft.givesCreditTerms} onChange={(v) => set("givesCreditTerms", v)} />
         </Question>
       </Step>
 
@@ -195,6 +216,7 @@ const STEP_TITLES: Record<StepId, string> = {
   channels: "Where you sell",
   marketplace: "Marketplaces",
   webstore: "Webstore",
+  b2b: "B2B sales",
 };
 
 function Step({ active, children }: { active: boolean; children: React.ReactNode }) {

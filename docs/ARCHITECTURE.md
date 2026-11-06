@@ -4,7 +4,8 @@ Sawwi is a reconciliation platform for finance, operations and logistics teams a
 (E-commerce, Trading, Manufacturing, FMCG, Logistics). You upload files, answer a few one-click
 questions, and get back a reconciliation report, an analysis of it, and suggested follow-up actions.
 
-> **Current scope (v1): E-commerce (D2C / own webstore) and E-commerce Marketplace only.**
+> **Current scope (v1): E-commerce sellers: marketplace, own webstore (D2C), and direct B2B (selling to
+> other businesses via a B2B portal, wholesale or a sales team).**
 > Other industries (Trading, Manufacturing, FMCG, Logistics) are deferred until these two are
 > handled end to end. The rest of this document keeps them for reference only.
 
@@ -61,7 +62,7 @@ Templates, saved mappings and answers are stored per org. A user-created templat
 
 ## 4. Starter template catalogue (seeded)
 
-### v1 catalogue: GCC sellers/brands (E-commerce + Marketplace)
+### v1 catalogue: GCC sellers/brands (Marketplace + Webstore + Direct B2B), 20 templates
 
 Perspective: a **seller/brand** selling on marketplaces and/or its own webstore in the GCC.
 Currencies: AED, SAR, KWD, QAR, BHD, OMR (multi-currency and FX are handled throughout).
@@ -85,7 +86,15 @@ Marketplace and provider names are examples; every template works from uploaded 
 12. Courier freight invoice vs. shipments and contracted rates (weight and zone disputes)
 13. Refunds issued vs. returns physically received
 
-**Common to both**
+**Direct B2B (own B2B portal, wholesale, sales team)**
+15. Customer payments vs. open invoices (cash application: short pays, overpayments, unapplied cash)
+16. Customer ledger vs. customer statement / balance confirmation (shown when credit terms are given)
+17. Sales orders vs. deliveries (POD) vs. invoices (unbilled deliveries, invoiced-not-delivered)
+18. Invoiced prices vs. customer price list / contract
+19. Customer returns (GRN/RMA) vs. credit notes
+20. Post-dated cheques (PDC) register vs. bank clearing (shown when customers pay by cheque)
+
+**Common to marketplace and webstore**
 14. Bank statement vs. expected payouts (marketplace, gateway, BNPL, courier COD), including FX differences
 
 ### Deferred industries (reference only)

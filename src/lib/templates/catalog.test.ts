@@ -7,20 +7,23 @@ const base: Profile = {
   company: "Acme Trading LLC",
   role: "finance",
   countries: ["AE"],
+  accountingSystems: ["zoho"],
   channels: ["marketplace"],
   marketplaces: ["amazon_ae", "noon"],
   sellsB2B: false,
   usesMarketplaceFulfilment: false,
   platforms: [],
   payments: [],
+  b2bPayments: [],
+  givesCreditTerms: false,
 };
 
 const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
 
 describe("template catalogue", () => {
-  it("has 14 templates with unique ids", () => {
-    expect(TEMPLATES).toHaveLength(14);
-    expect(new Set(ids(TEMPLATES)).size).toBe(14);
+  it("has 20 templates with unique ids", () => {
+    expect(TEMPLATES).toHaveLength(20);
+    expect(new Set(ids(TEMPLATES)).size).toBe(20);
   });
 
   it("only references sources that the template declares", () => {
@@ -73,6 +76,22 @@ describe("recommendTemplates", () => {
     expect(rec).toContain("web-cod-remittance");
     expect(rec).not.toContain("web-orders-vs-gateway");
     expect(rec).not.toContain("web-bnpl");
+  });
+
+  it("shows direct B2B templates, gated on credit terms and cheque payments", () => {
+    const b2b: Profile = { ...base, channels: ["b2b"], marketplaces: [], b2bPayments: ["bank_transfer"] };
+    const plain = ids(recommendTemplates(TEMPLATES, b2b).recommended);
+    expect(plain).toContain("b2b-cash-application");
+    expect(plain).toContain("b2b-order-delivery-invoice");
+    expect(plain).not.toContain("b2b-customer-statement");
+    expect(plain).not.toContain("b2b-pdc-clearing");
+    expect(plain).not.toContain("mkt-settlement-vs-sales");
+
+    const withCredit = ids(
+      recommendTemplates(TEMPLATES, { ...b2b, givesCreditTerms: true, b2bPayments: ["cheque"] }).recommended,
+    );
+    expect(withCredit).toContain("b2b-customer-statement");
+    expect(withCredit).toContain("b2b-pdc-clearing");
   });
 
   it("ranks templates owned by the user's role first", () => {

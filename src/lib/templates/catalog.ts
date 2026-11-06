@@ -84,6 +84,22 @@ const bankStatement: SourceSlot = {
   ],
 };
 
+const b2bInvoices: SourceSlot = {
+  key: "invoices",
+  label: "Open invoices / AR register",
+  description: "Invoices raised to business customers, from your ERP or accounting system.",
+  examples: ["Odoo / Zoho / SAP B1 / Tally AR ageing", "Customer invoice register"],
+  fields: [
+    f("invoice_no", "Invoice number", "id", true),
+    f("customer", "Customer", "text", true),
+    f("invoice_date", "Invoice date", "date", true),
+    f("due_date", "Due date", "date"),
+    f("invoice_amount", "Invoice amount (incl. VAT)", "money", true),
+    f("open_amount", "Open amount", "money"),
+    CURRENCY,
+  ],
+};
+
 export const TEMPLATES: Template[] = [
   // ─── Marketplace seller ───────────────────────────────────────────────
   {
@@ -647,6 +663,243 @@ export const TEMPLATES: Template[] = [
       { id: "qty_mismatch", label: "Quantity mismatch", description: "Refunded quantity differs from the quantity received." },
     ],
     outputs: ["Refund leakage value", "Pending refunds", "Returns by reason"],
+  },
+
+  // ─── Direct B2B sales ─────────────────────────────────────────────────
+  {
+    id: "b2b-cash-application",
+    title: "Customer payments vs. open invoices",
+    summary: "Apply each business customer's payment to the invoices it settles. Flag short payments, overpayments and receipts nobody has applied.",
+    group: "b2b",
+    frequency: "daily",
+    appliesTo: { channels: ["b2b"] },
+    roles: ["receivables", "finance"],
+    featured: true,
+    sources: [
+      b2bInvoices,
+      {
+        key: "receipts",
+        label: "Customer receipts",
+        description: "Payments received from customers. A bank statement or a receipts register from your ERP both work.",
+        examples: ["Bank statement (credits)", "ERP customer receipts register", "Remittance advices"],
+        fields: [
+          f("receipt_date", "Receipt date", "date", true),
+          f("customer", "Customer / payer", "text"),
+          f("reference", "Reference / narration", "text", true),
+          f("amount", "Amount received", "money", true),
+          CURRENCY,
+        ],
+      },
+    ],
+    match: {
+      keys: [{ left: "invoices.invoice_no", right: "receipts.reference", normalize: ["trim", "upper", "strip_non_alnum"] }],
+      cardinality: "many_to_many",
+      amount: { left: "invoice_amount", right: "amount", tolerance: 1 },
+    },
+    checks: [
+      { id: "unapplied_receipt", label: "Unapplied receipt", description: "Money received that can't be tied to any invoice." },
+      { id: "short_paid", label: "Short paid", description: "Customer paid less than the invoice. Often a deduction, discount taken or bank charge." },
+      { id: "overpaid", label: "Overpaid / duplicate payment", description: "Paid more than invoiced, or paid the same invoice twice." },
+      { id: "overdue", label: "Overdue invoices", description: "Open beyond credit terms, with ageing buckets." },
+    ],
+    outputs: ["Cash applied per invoice", "Unapplied cash list", "AR ageing"],
+  },
+  {
+    id: "b2b-customer-statement",
+    title: "Customer ledger vs. customer statement",
+    summary: "Compare your ledger for a customer with their statement or balance confirmation, and explain every difference in the closing balance.",
+    group: "b2b",
+    frequency: "monthly",
+    appliesTo: { channels: ["b2b"], requiresCreditTerms: true },
+    roles: ["receivables", "finance"],
+    sources: [
+      {
+        key: "our_ledger",
+        label: "Your customer ledger",
+        description: "The customer's account in your books for the period.",
+        examples: ["ERP customer ledger / statement of account", "AR sub-ledger export"],
+        fields: [f("doc_no", "Document number", "id", true), f("doc_date", "Date", "date", true), f("doc_type", "Type (invoice / credit / receipt)", "text"), f("debit", "Debit", "money"), f("credit", "Credit", "money")],
+      },
+      {
+        key: "their_statement",
+        label: "Customer's statement / confirmation",
+        description: "The supplier ledger or balance confirmation your customer sent you.",
+        examples: ["Customer's supplier ledger (Excel/PDF to Excel)", "Balance confirmation"],
+        fields: [f("doc_no", "Your document number", "id", true), f("doc_date", "Date", "date"), f("debit", "Debit", "money"), f("credit", "Credit", "money")],
+      },
+    ],
+    match: {
+      keys: [{ left: "our_ledger.doc_no", right: "their_statement.doc_no", normalize: ["trim", "upper", "strip_non_alnum", "strip_leading_zeros"] }],
+      cardinality: "one_to_one",
+      amount: { left: "debit - credit", right: "credit - debit", tolerance: 0.5 },
+    },
+    checks: [
+      { id: "missing_in_theirs", label: "Not booked by customer", description: "Invoice or credit note in your books that's missing from theirs." },
+      { id: "missing_in_ours", label: "Not booked by you", description: "Payment or debit note in their books that's missing from yours." },
+      { id: "amount_diff", label: "Amount differs", description: "Same document, different amount." },
+      { id: "timing", label: "Timing difference", description: "Booked in different periods. Clears next month." },
+    ],
+    outputs: ["Balance reconciliation statement", "Items to chase with the customer"],
+  },
+  {
+    id: "b2b-order-delivery-invoice",
+    title: "Sales orders vs. deliveries vs. invoices",
+    summary: "Three-way order-to-cash check: everything delivered was invoiced, and nothing was invoiced that wasn't delivered.",
+    group: "b2b",
+    frequency: "weekly",
+    appliesTo: { channels: ["b2b"] },
+    roles: ["finance", "fulfilment", "owner"],
+    featured: true,
+    sources: [
+      {
+        key: "orders",
+        label: "Sales orders",
+        description: "Confirmed customer orders (POs received).",
+        examples: ["ERP sales order lines", "B2B portal orders"],
+        fields: [f("so_no", "Sales order no.", "id", true), f("customer_po", "Customer PO no.", "id"), f("customer", "Customer", "text"), SKU, f("qty_ordered", "Qty ordered", "number", true), f("unit_price", "Unit price", "money")],
+      },
+      {
+        key: "deliveries",
+        label: "Delivery notes / POD",
+        description: "What was actually delivered and signed for.",
+        examples: ["Delivery notes", "Proof-of-delivery report", "Courier/fleet delivery log"],
+        fields: [f("dn_no", "Delivery note no.", "id", true), f("so_no", "Sales order no.", "id", true), SKU, f("qty_delivered", "Qty delivered", "number", true), f("delivery_date", "Delivery date", "date")],
+      },
+      {
+        key: "invoices",
+        label: "Invoice lines",
+        description: "Invoice lines raised against the orders.",
+        examples: ["ERP invoice lines", "Sales register (line level)"],
+        fields: [f("invoice_no", "Invoice number", "id", true), f("so_no", "Sales order no.", "id"), f("dn_no", "Delivery note no.", "id"), SKU, f("qty_invoiced", "Qty invoiced", "number", true), f("line_amount", "Line amount", "money")],
+      },
+    ],
+    match: {
+      keys: [
+        { left: "orders.so_no", right: "deliveries.so_no", normalize: ["trim", "upper"] },
+        { left: "deliveries.dn_no", right: "invoices.dn_no", normalize: ["trim", "upper"] },
+      ],
+      cardinality: "one_to_many",
+    },
+    checks: [
+      { id: "delivered_not_invoiced", label: "Delivered, not invoiced", description: "Unbilled revenue: goods left the warehouse but no invoice." },
+      { id: "invoiced_not_delivered", label: "Invoiced, not delivered", description: "Customer billed for goods without a delivery record, which leads to disputes." },
+      { id: "qty_mismatch", label: "Quantity mismatch", description: "Invoiced quantity differs from delivered quantity." },
+      { id: "open_orders", label: "Open order backlog", description: "Ordered but not yet delivered, past the promised date." },
+    ],
+    outputs: ["Unbilled deliveries value", "Disputed invoice risk list", "Open order backlog"],
+  },
+  {
+    id: "b2b-price-compliance",
+    title: "Invoiced prices vs. customer price list",
+    summary: "Check every invoice line against the customer's agreed price, discount and validity dates.",
+    group: "b2b",
+    frequency: "monthly",
+    appliesTo: { channels: ["b2b"] },
+    roles: ["finance", "owner", "receivables"],
+    sources: [
+      {
+        key: "invoice_lines",
+        label: "Invoice lines",
+        description: "Line-level sales invoices for the period.",
+        examples: ["ERP invoice lines", "Sales register (line level)"],
+        fields: [f("invoice_no", "Invoice number", "id", true), f("invoice_date", "Invoice date", "date", true), f("customer", "Customer", "id", true), SKU, QTY, f("unit_price", "Unit price charged", "money", true), f("discount_pct", "Discount %", "percent")],
+      },
+      {
+        key: "price_list",
+        label: "Customer price list / contract",
+        description: "Agreed prices or discounts per customer and SKU.",
+        examples: ["Customer price lists", "Contract pricing sheet"],
+        fields: [f("customer", "Customer", "id", true), SKU, f("agreed_price", "Agreed price", "money", true), f("discount_pct", "Agreed discount %", "percent"), f("valid_from", "Valid from", "date"), f("valid_to", "Valid to", "date")],
+      },
+    ],
+    match: {
+      keys: [
+        { left: "invoice_lines.customer", right: "price_list.customer", normalize: ["trim", "upper"] },
+        { left: "invoice_lines.sku", right: "price_list.sku", normalize: ["trim", "upper"] },
+      ],
+      cardinality: "many_to_one",
+      amount: { left: "unit_price", right: "agreed_price", tolerance: 0.01 },
+    },
+    checks: [
+      { id: "overcharged", label: "Billed above agreed price", description: "Risk of customer dispute or short payment." },
+      { id: "undercharged", label: "Billed below agreed price", description: "Revenue leakage." },
+      { id: "expired_price", label: "Expired or future price used", description: "The invoice date is outside the price's validity window." },
+      { id: "no_price", label: "No agreed price", description: "SKU sold to a customer with no contract price on file." },
+    ],
+    outputs: ["Revenue leakage value", "Overcharge list", "Price list gaps"],
+  },
+  {
+    id: "b2b-returns-vs-credit-notes",
+    title: "Customer returns vs. credit notes",
+    summary: "Make sure every goods return from a business customer has the right credit note, and every credit note has a return or an approved reason.",
+    group: "b2b",
+    frequency: "monthly",
+    appliesTo: { channels: ["b2b"] },
+    roles: ["finance", "fulfilment"],
+    sources: [
+      {
+        key: "returns",
+        label: "Goods returns (GRN / RMA)",
+        description: "Returns received from business customers.",
+        examples: ["Goods return notes", "RMA register", "WMS returns inward"],
+        fields: [f("return_no", "Return / RMA no.", "id", true), f("invoice_no", "Original invoice no.", "id"), f("customer", "Customer", "text"), SKU, QTY, f("return_date", "Return date", "date", true), f("return_value", "Return value", "money")],
+      },
+      {
+        key: "credit_notes",
+        label: "Credit notes",
+        description: "Credit notes issued to business customers.",
+        examples: ["ERP credit note register"],
+        fields: [f("credit_note_no", "Credit note no.", "id", true), f("return_no", "Return / RMA no.", "id"), f("invoice_no", "Original invoice no.", "id"), f("cn_date", "Credit note date", "date", true), f("amount", "Credit amount", "money", true), f("reason", "Reason", "text")],
+      },
+    ],
+    match: {
+      keys: [
+        { left: "returns.return_no", right: "credit_notes.return_no", normalize: ["trim", "upper"] },
+        { left: "returns.invoice_no", right: "credit_notes.invoice_no", normalize: ["trim", "upper"] },
+      ],
+      cardinality: "one_to_one",
+      amount: { left: "return_value", right: "amount", tolerance: 1 },
+      dateWindowDays: 30,
+    },
+    checks: [
+      { id: "return_no_cn", label: "Return without credit note", description: "Goods came back but the customer hasn't been credited, so expect a short payment." },
+      { id: "cn_no_return", label: "Credit note without return", description: "Credit issued with no goods received or approval reason." },
+      { id: "value_mismatch", label: "Value mismatch", description: "Credit amount differs from the value of the returned goods." },
+    ],
+    outputs: ["Credits pending", "Unsupported credit notes", "Returns by customer and reason"],
+  },
+  {
+    id: "b2b-pdc-clearing",
+    title: "Post-dated cheques vs. bank clearing",
+    summary: "Track every PDC from receipt to clearing: due but not deposited, bounced, or cleared for a different amount.",
+    group: "b2b",
+    frequency: "weekly",
+    appliesTo: { channels: ["b2b"], b2bPayments: ["cheque"] },
+    roles: ["receivables", "finance"],
+    featured: true,
+    sources: [
+      {
+        key: "pdc_register",
+        label: "PDC / cheque register",
+        description: "Cheques received from customers, including post-dated ones.",
+        examples: ["ERP PDC register", "Cheque log (Excel)"],
+        fields: [f("cheque_no", "Cheque number", "id", true), f("customer", "Customer", "text", true), f("bank", "Drawee bank", "text"), f("cheque_date", "Cheque (due) date", "date", true), f("amount", "Amount", "money", true), f("status", "Status", "text")],
+      },
+      bankStatement,
+    ],
+    match: {
+      keys: [{ left: "pdc_register.cheque_no", right: "bank.reference", normalize: ["trim", "strip_non_alnum", "strip_leading_zeros"] }],
+      cardinality: "one_to_many",
+      amount: { left: "amount", right: "credit", tolerance: 0.5 },
+      dateWindowDays: 7,
+    },
+    checks: [
+      { id: "due_not_deposited", label: "Due, not deposited", description: "The cheque date has passed but no bank credit was found." },
+      { id: "bounced", label: "Returned / bounced", description: "Credit followed by a reversal, or a return entry with charges." },
+      { id: "amount_diff", label: "Cleared for a different amount", description: "The bank credit differs from the cheque amount." },
+      { id: "upcoming", label: "Upcoming maturities", description: "PDCs due in the next 7 and 30 days, for cash planning." },
+    ],
+    outputs: ["PDC status summary", "Bounced cheques to follow up", "PDC maturity calendar"],
   },
 
   // ─── Payouts & bank ───────────────────────────────────────────────────

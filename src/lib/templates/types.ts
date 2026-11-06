@@ -1,4 +1,4 @@
-import type { Channel, PaymentMethod, Role } from "@/lib/profile/options";
+import type { B2BPaymentMethod, Channel, PaymentMethod, Role } from "@/lib/profile/options";
 
 // A template is a declarative spec. The UI renders it, and the matching engine
 // (Phase 3) executes it. The LLM only maps uploaded columns onto `fields`.
@@ -40,7 +40,7 @@ export type MatchSpec = {
 
 export type Check = { id: string; label: string; description: string };
 
-export type TemplateGroup = "marketplace" | "webstore" | "payouts";
+export type TemplateGroup = "marketplace" | "webstore" | "b2b" | "payouts";
 
 export type Template = {
   id: string;
@@ -52,6 +52,9 @@ export type Template = {
     channels: Channel[];
     /** Shown only if the seller uses at least one of these payment methods. */
     payments?: PaymentMethod[];
+    /** Shown only if the seller's business customers pay with one of these. */
+    b2bPayments?: B2BPaymentMethod[];
+    requiresCreditTerms?: boolean;
     requiresB2B?: boolean;
     requiresMarketplaceFulfilment?: boolean;
   };
@@ -68,6 +71,7 @@ export type Template = {
 export const GROUP_LABELS: Record<TemplateGroup, string> = {
   marketplace: "Marketplace seller",
   webstore: "Own webstore",
+  b2b: "Direct B2B sales",
   payouts: "Payouts & bank",
 };
 

@@ -18,12 +18,13 @@ async function Gallery() {
   const sellsOn = [
     ...profile.marketplaces.map((m) => labelOf(MARKETPLACES, m)),
     ...profile.platforms.map((p) => labelOf(WEBSTORE_PLATFORMS, p)),
+    ...(profile.channels.includes("b2b") ? ["direct B2B"] : []),
   ];
 
   return (
     <>
       <p className="mt-1 text-muted">
-        {recommended.length} reconciliations for {profile.company}: selling on {sellsOn.join(", ")} in{" "}
+        {recommended.length} reconciliations for {profile.company}: selling via {sellsOn.join(", ")} in{" "}
         {profile.countries.map((c) => labelOf(COUNTRIES, c)).join(", ")}.{" "}
         <Link href="/onboarding" className="font-medium text-accent hover:text-accent-strong">
           Edit profile

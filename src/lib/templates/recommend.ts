@@ -2,10 +2,13 @@ import type { Profile } from "@/lib/profile/profile";
 import type { Template } from "./types";
 
 export function isApplicable(template: Template, profile: Profile): boolean {
-  const { channels, payments, requiresB2B, requiresMarketplaceFulfilment } = template.appliesTo;
+  const { channels, payments, b2bPayments, requiresB2B, requiresMarketplaceFulfilment, requiresCreditTerms } =
+    template.appliesTo;
   if (!channels.some((c) => profile.channels.includes(c))) return false;
   if (payments && !payments.some((p) => profile.payments.includes(p))) return false;
+  if (b2bPayments && !b2bPayments.some((p) => profile.b2bPayments.includes(p))) return false;
   if (requiresB2B && !profile.sellsB2B) return false;
+  if (requiresCreditTerms && !profile.givesCreditTerms) return false;
   if (requiresMarketplaceFulfilment && !profile.usesMarketplaceFulfilment) return false;
   return true;
 }
