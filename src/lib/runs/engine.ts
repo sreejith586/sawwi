@@ -8,9 +8,9 @@ import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates } from "@/lib/mappi
 import { checkKeyOverlap, containmentOverlap } from "@/lib/mapping/keycheck";
 import { llmAvailable, suggestMappings } from "@/lib/mapping/llm";
 import type { Country } from "@/lib/profile/options";
-import { getTemplate } from "@/lib/templates/catalog";
 import type { CanonicalField, KeyNormalizer, SourceSlot, Template } from "@/lib/templates/types";
 import * as store from "./store";
+import { templateForRun } from "./templates";
 import { NONE_OPTION, type FieldMapping, type QuestionPayload, type Run, type RunFile, type RunStatus, type SlotMapping } from "./types";
 
 export const COUNTRY_CURRENCY: Record<Country, string> = { AE: "AED", SA: "SAR", KW: "KWD", QA: "QAR", BH: "BHD", OM: "OMR" };
@@ -20,7 +20,7 @@ export type RunContext = { countries: Country[] };
 export class RunInputError extends Error {}
 
 function requireTemplate(run: Run): Template {
-  const t = getTemplate(run.templateId);
+  const t = templateForRun(run);
   if (!t) throw new RunInputError("This run's template no longer exists.");
   return t;
 }
@@ -37,7 +37,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type MappingResult = { mapping: SlotMapping; questions: QuestionPayload[]; usedAi: boolean; remembered: boolean };
 
-async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext): Promise<MappingResult> {
+async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext, confirmColumns = false): Promise<MappingResult> {
   const cached = store.getCachedMapping(run.orgKey, run.templateId, slot.key, profile.fingerprint);
   if (cached) {
     const fields = Object.fromEntries(
@@ -50,6 +50,8 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   const confirm: { field: string; column: string }[] = [];
   const candidates = scoreCandidates(slot.fields, profile.columns);
   const best = assign(candidates);
+
+  if (confirmColumns) return confirmEveryColumn(slot, profile, ctx, best);
 
   for (const field of slot.fields) {
     const c = best.get(field.key);
@@ -95,6 +97,33 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   const mapping: SlotMapping = { fields, dateFormats: {} };
   questions.push(...formatQuestions(slot, profile, mapping, ctx));
   return { mapping, questions, usedAi, remembered: false };
+}
+
+/**
+ * Generic templates: field names like "key" and "amount" fit almost any column, so no guess is
+ * taken on trust and no AI is called. Every required field becomes a chip: "Is X the key?" when
+ * a column stands out, otherwise "Which column holds the key?". Optional fields map only on a
+ * strong name match.
+ */
+function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, best: ReturnType<typeof assign>): MappingResult {
+  const fields: Record<string, FieldMapping> = {};
+  const questions: QuestionPayload[] = [];
+  for (const field of slot.fields) {
+    const c = best.get(field.key);
+    if (field.required) {
+      if (c && c.score >= CONFIRM_FLOOR) questions.push({ kind: "confirm_column", field: field.key, column: c.column });
+      else questions.push({ kind: "choose_column", field: field.key, options: columnOptions(field, profile, fields) });
+    } else if (c && c.score >= 0.7) {
+      fields[field.key] = { column: c.column, source: "auto", confidence: c.score };
+    } else {
+      // A file with a single date column: that's the date (breakdowns by month need it).
+      const dates = field.type === "date" ? profile.columns.filter((col) => col.kind === "date") : [];
+      fields[field.key] = dates.length === 1 ? { column: dates[0].name, source: "auto", confidence: 0.7 } : { column: null, source: "auto", confidence: 0 };
+    }
+  }
+  const mapping: SlotMapping = { fields, dateFormats: {} };
+  questions.push(...formatQuestions(slot, profile, mapping, ctx));
+  return { mapping, questions, usedAi: false, remembered: false };
 }
 
 /** Up to six columns whose data could hold this field, best name matches first. */
@@ -152,7 +181,7 @@ export async function ingestFile(run: Run, slotKey: string, fileName: string, by
   writeFileSync(storedPath, Papa.unparse({ fields: table.headers, data: table.rows }));
 
   const profile = profileTable(table);
-  const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx);
+  const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx, template.confirmColumns);
 
   store.deleteOpenQuestions(run.id, slotKey);
   store.upsertRunFile(run.id, { slotKey, fileName, storedPath, profile, mapping });

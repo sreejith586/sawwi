@@ -97,7 +97,7 @@ export type CheckRule =
 
 export type Check = { id: string; label: string; description: string; rule?: CheckRule };
 
-export type TemplateGroup = "marketplace" | "webstore" | "b2b" | "purchasing" | "payouts";
+export type TemplateGroup = "marketplace" | "webstore" | "b2b" | "purchasing" | "payouts" | "custom";
 
 export type Template = {
   id: string;
@@ -127,6 +127,11 @@ export type Template = {
   links: Link[];
   checks: Check[];
   outputs: string[];
+  /**
+   * Generic and workspace-saved templates: the user confirms every required column with a
+   * chip (no AI guess), because field names like "key" and "amount" mean anything.
+   */
+  confirmColumns?: boolean;
 };
 
 export const GROUP_LABELS: Record<TemplateGroup, string> = {
@@ -135,6 +140,7 @@ export const GROUP_LABELS: Record<TemplateGroup, string> = {
   b2b: "Direct B2B sales",
   purchasing: "Purchasing & suppliers",
   payouts: "Payouts & bank",
+  custom: "Your templates",
 };
 
 export const FREQUENCY_LABELS: Record<Template["frequency"], string> = {

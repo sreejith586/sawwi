@@ -5,6 +5,9 @@ import { COUNTRIES, labelOf, MARKETPLACES, WEBSTORE_PLATFORMS } from "@/lib/prof
 import { getProfile } from "@/lib/profile/session";
 import { TEMPLATES } from "@/lib/templates/catalog";
 import { recommendTemplates } from "@/lib/templates/recommend";
+import { listCustomTemplates } from "@/lib/runs/store";
+import { CustomTemplates } from "./custom-templates";
+import { GenericSetup } from "./generic-setup";
 import { TemplateGallery } from "./template-gallery";
 
 export const metadata: Metadata = { title: "Templates" };
@@ -40,13 +43,12 @@ async function Gallery() {
         </Link>
       </p>
 
+      <CustomTemplates templates={listCustomTemplates(profile.orgKey)} />
+
       <TemplateGallery recommended={recommended} others={others} />
 
-      <div className="mt-10 rounded-xl border border-dashed border-border p-5 text-sm">
-        <p className="font-medium">Don&apos;t see your reconciliation?</p>
-        <p className="mt-1 text-muted">
-          Coming soon: answer a few questions, upload any two files, and save the setup as your own template.
-        </p>
+      <div className="mt-10">
+        <GenericSetup />
       </div>
     </>
   );

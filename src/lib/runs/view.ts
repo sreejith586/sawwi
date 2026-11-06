@@ -1,10 +1,13 @@
 import { severityOf, type Severity } from "@/lib/recon/severity";
 import type { ReconResult } from "@/lib/recon/match";
-import { getTemplate } from "@/lib/templates/catalog";
 import type { Template } from "@/lib/templates/types";
 import { presentQuestion, type QuestionView } from "./engine";
+import { AUDIENCE_LABELS, AUDIENCES, breakdownOptions, mappedFields, type Dimension } from "@/lib/insights/facts";
+import { llmAvailable } from "@/lib/mapping/llm";
+import { GENERIC_TEMPLATE_ID, isCustomId, type GenericSetup } from "@/lib/templates/custom";
 import * as store from "./store";
-import type { MappingSource, Message, RunStatus } from "./types";
+import { genericSetupFor, templateForRun } from "./templates";
+import type { MappingSource, Message, RunFile, RunStatus } from "./types";
 
 // Serializable snapshot of a run for the client workspace.
 
@@ -106,15 +109,30 @@ export type RunView = {
   openQuestions: ({ id: string } & QuestionView)[];
   usage: store.UsageSummary;
   report?: ReportView;
+  /** What the follow-up chat can offer for this result. */
+  insights?: InsightsView;
+  /** Set for the generic two-file reconciliation, which can be saved as a template. */
+  generic?: GenericSetup;
+  /** True when the run uses a template the workspace saved. */
+  custom: boolean;
+};
+
+export type InsightsView = {
+  /** Whether Claude writes prose; without it Sawwi's own wording is used. */
+  ai: boolean;
+  audience: string;
+  audiences: { key: string; label: string }[];
+  checks: { id: string; label: string; count: number; value: number; severity: Severity; dims: Dimension[] }[];
 };
 
 export function buildRunView(runId: string): RunView | undefined {
   const run = store.getRun(runId);
-  const template = run && getTemplate(run.templateId);
+  const template = run && templateForRun(run);
   if (!run || !template) return undefined;
 
   const files = store.getRunFiles(run.id);
   const questions = store.getQuestions(run.id);
+  const result = store.getResult(run.id);
 
   return {
     id: run.id,
@@ -151,9 +169,24 @@ export function buildRunView(runId: string): RunView | undefined {
       .filter((q) => q.answer === null)
       .map((q) => ({ id: q.id, ...presentQuestion(q.payload, template, q.slotKey) })),
     usage: store.getUsage(run.id),
-    report: (() => {
-      const result = store.getResult(run.id);
-      return result ? buildReport(template, result) : undefined;
-    })(),
+    report: result ? buildReport(template, result) : undefined,
+    insights: result ? buildInsights(template, result, files) : undefined,
+    generic: run.templateId === GENERIC_TEMPLATE_ID ? genericSetupFor(run.id) : undefined,
+    custom: isCustomId(run.templateId),
+  };
+}
+
+function buildInsights(template: Template, result: ReconResult, files: RunFile[]): InsightsView {
+  const mapped = mappedFields(files);
+  const severity = new Map(template.checks.map((c) => [c.id, severityOf(c.rule)]));
+  const own = AUDIENCES[template.group];
+  return {
+    ai: llmAvailable(),
+    audience: own.key,
+    audiences: [own, ...Object.entries(AUDIENCE_LABELS).filter(([k]) => k !== own.key).map(([key, label]) => ({ key, label }))],
+    checks: result.checks
+      .filter((c) => c.status === "done" && c.count > 0)
+      .sort((a, b) => b.value - a.value || b.count - a.count)
+      .map((c) => ({ id: c.id, label: c.label, count: c.count, value: c.value, severity: severity.get(c.id) ?? "high", dims: breakdownOptions(template, c.id, mapped) })),
   };
 }

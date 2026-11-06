@@ -9,6 +9,7 @@ import { getProfile } from "@/lib/profile/session";
 import { orgKeyFor } from "@/lib/runs/access";
 import { RUN_STATUS } from "@/lib/runs/status";
 import { listRuns, type RunSummary } from "@/lib/runs/store";
+import { templateFor } from "@/lib/runs/templates";
 import { getTemplate, TEMPLATES } from "@/lib/templates/catalog";
 import { recommendTemplates } from "@/lib/templates/recommend";
 import { FREQUENCY_LABELS, GROUP_LABELS } from "@/lib/templates/types";
@@ -130,7 +131,7 @@ function Overview({ runs, profile }: { runs: RunSummary[]; profile: Profile }) {
                 <li key={r.id}>
                   <Link href={`/runs/${r.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-muted/50">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{getTemplate(r.templateId)?.title ?? r.templateId}</p>
+                      <p className="truncate text-sm font-medium">{templateFor(r.orgKey, r.templateId, r.id)?.title ?? r.templateId}</p>
                       <p className="text-xs text-muted">
                         Started {day(r.createdAt)} · {r.files} file{r.files === 1 ? "" : "s"}
                       </p>

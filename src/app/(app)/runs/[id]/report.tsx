@@ -14,6 +14,7 @@ import {
 } from "@/components/data-table";
 import { applyQuery, queryToParams, type SortDir, type TableQuery } from "@/lib/recon/table";
 import type { ReportCheck, ReportView } from "@/lib/runs/view";
+import { Analysis } from "./analysis";
 
 const PAGE_SIZE = 50;
 
@@ -29,7 +30,7 @@ function rateBar(rate: number) {
   return rate >= 0.95 ? "bg-success" : rate >= 0.8 ? "bg-warn" : "bg-danger";
 }
 
-export function Report({ runId, report }: { runId: string; report: ReportView }) {
+export function Report({ runId, report, onExplain }: { runId: string; report: ReportView; onExplain?: (exceptionId: number) => void }) {
   const [exceptionCheck, setExceptionCheck] = useState("all");
   const main = report.links[0];
   const rate = main && main.leftRows ? main.matchedLeft / main.leftRows : 0;
@@ -47,6 +48,8 @@ export function Report({ runId, report }: { runId: string; report: ReportView })
         </div>
         <ExcelButton href={`${exportBase}?table=all`} label="Download full report" />
       </div>
+
+      <Analysis runId={runId} ranAt={report.ranAt} clean={report.totals.exceptions === 0} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Match rate" value={pct(rate)} tone={rateTone(rate)}>
@@ -77,7 +80,7 @@ export function Report({ runId, report }: { runId: string; report: ReportView })
           document.getElementById("exceptions")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />
-      <ExceptionsTable report={report} exportBase={exportBase} check={exceptionCheck} onCheck={setExceptionCheck} />
+      <ExceptionsTable report={report} exportBase={exportBase} check={exceptionCheck} onCheck={setExceptionCheck} onExplain={onExplain} />
     </section>
   );
 }
@@ -280,11 +283,13 @@ function ExceptionsTable({
   exportBase,
   check,
   onCheck,
+  onExplain,
 }: {
   report: ReportView;
   exportBase: string;
   check: string;
   onCheck: (id: string) => void;
+  onExplain?: (exceptionId: number) => void;
 }) {
   const [q, setQ] = useState("");
   const [severity, setSeverity] = useState("all");
@@ -349,6 +354,7 @@ function ExceptionsTable({
                   <SortHeader label="Difference" field="diff" align="right" {...sort} onSort={(f) => setSort(nextSort(sort, f))} />
                   <SortHeader label="At risk" field="value" align="right" {...sort} onSort={(f) => setSort(nextSort(sort, f))} />
                   <th className="px-3 py-2.5 text-left font-medium text-muted">Where</th>
+                  {onExplain && <th className="w-16 px-3 py-2.5" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -376,11 +382,23 @@ function ExceptionsTable({
                       {e.leftRows && <div className="whitespace-nowrap">{e.leftFile}: row {e.leftRows}</div>}
                       {e.rightRows && <div className="whitespace-nowrap">{e.rightFile}: row {e.rightRows}</div>}
                     </td>
+                    {onExplain && (
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onExplain(e.id)}
+                          className="text-xs font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
+                          title="Ask Sawwi why this was flagged"
+                        >
+                          Explain
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">
+                    <td colSpan={onExplain ? 8 : 7} className="px-4 py-8 text-center text-sm text-muted">
                       No exceptions match these filters.
                     </td>
                   </tr>
