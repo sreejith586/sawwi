@@ -1,0 +1,173 @@
+# Sawwi — Product & Architecture Plan
+
+Sawwi is a reconciliation platform for finance, operations and logistics teams across verticals
+(E-commerce, Trading, Manufacturing, FMCG, Logistics). You upload files, answer a few one-click
+questions, and get back a reconciliation report, an analysis of it, and suggested follow-up actions.
+
+> **Current scope (v1): E-commerce (D2C / own webstore) and E-commerce Marketplace only.**
+> Other industries (Trading, Manufacturing, FMCG, Logistics) are deferred until these two are
+> handled end to end. The rest of this document keeps them for reference only.
+
+## 1. User journey
+
+1. **Onboarding**: the user picks their industry, organisation type, department and role (chips,
+   no free text). This profile filters the template catalogue.
+2. **Template gallery**: shows the recos that apply to that profile, ranked by industry and role.
+3. **Run a template**: the template lists the source slots it needs (e.g. "Marketplace settlement
+   report", "Sales invoice register"). The user drops files into those slots.
+4. **Clarify**: Sawwi profiles the files and asks only what it could not work out, using yes/no
+   and single-select chips (e.g. "Is `Ord_Ref` the same as `Order ID`?  [Yes] [No]").
+5. **Run**: the deterministic engine does the matching, and the LLM writes the narrative.
+6. **Report and chat**: you get matched, unmatched and partial results, the variances and the root
+   causes. Follow-up chips include "Draft email to marketplace", "Raise debit note list",
+   "Export exceptions" and "Re-run with tolerance ±₹1".
+7. **No template fits**: Sawwi asks 3–5 chip questions (what is being compared, the key and amount
+   fields, the tolerance), shows a generic two-source form, and offers to **save it as a template**.
+
+## 2. Core principle: the LLM never matches rows
+
+Matching is done by code (DuckDB/Polars): joins, fuzzy keys, tolerances, many-to-one, and date windows.
+The LLM only sees **schemas, samples and aggregates**, never whole files. This keeps cost flat no matter
+how big the files get, and the results stay auditable and reproducible.
+
+| Step | Done by | Model |
+|---|---|---|
+| File profiling (headers, types, formats, sample rows) | Code | — |
+| Column → canonical field mapping | Cache first, then LLM | Haiku 5.5 |
+| Clarifying questions (structured JSON chips) | LLM | Haiku 5.5 |
+| Matching and rules | Code (DuckDB) | — |
+| Exception reason classification | Cache first, then rules, then LLM in batch | Haiku 5.5 |
+| Report narrative, chat and email drafts | LLM | Sonnet 5.5 (Haiku for simple chat) |
+| New-template design (no template found) | LLM | Sonnet 5.5 |
+
+## 3. Template = declarative spec (JSON/YAML)
+
+```yaml
+id: ecom.marketplace.settlement_vs_orders
+industries: [ecommerce]
+roles: [finance, accounts_receivable]
+sources:
+  orders:     { canonical: [order_id, sku, qty, invoice_amount, order_date] }
+  settlement: { canonical: [order_id, settled_amount, commission, fees, tcs, tds, settlement_date] }
+match:
+  keys: [{ left: orders.order_id, right: settlement.order_id, normalize: [trim, upper] }]
+  cardinality: one_to_many
+  amount: { left: invoice_amount, right: "settled_amount + commission + fees + tcs + tds", tolerance: 1.0 }
+exceptions: [missing_in_settlement, short_paid, excess_commission, returned_not_credited]
+outputs: [summary, exceptions_by_reason, ageing]
+```
+
+Templates, saved mappings and answers are stored per org. A user-created template uses the same spec.
+
+## 4. Starter template catalogue (seeded)
+
+### v1 catalogue: GCC sellers/brands (E-commerce + Marketplace)
+
+Perspective: a **seller/brand** selling on marketplaces and/or its own webstore in the GCC.
+Currencies: AED, SAR, KWD, QAR, BHD, OMR (multi-currency and FX are handled throughout).
+Tax: VAT (UAE 5%, KSA 15%, etc.), plus KSA ZATCA e-invoice fields where relevant.
+Marketplace and provider names are examples; every template works from uploaded files, whatever the source.
+
+**Marketplace seller (e.g. Amazon.ae/.sa, Noon, Namshi)**
+1. Marketplace settlement/payout statement vs. order and sales invoice register
+2. B2B marketplace invoices vs. payment released (short-pay, held and reserve amounts)
+3. Returns vs. invoiced items: customer returns, failed delivery/RTO, refund deductions, missing restock
+4. Commission and fee validation vs. rate card (referral %, fulfilment fees, closing fees, shipping)
+5. Marketplace-fulfilled inventory (FBA/FBN-style): sent vs. received vs. sold vs. returned vs. lost, with reimbursement claims
+6. Damage/lost claims raised vs. reimbursements received
+7. Advertising/promotion deductions vs. campaign invoices
+8. VAT reco: output VAT on sales vs. marketplace invoices; input VAT on marketplace fee invoices
+
+**Own webstore / D2C (e.g. Shopify, Magento 1 & Magento 2 / Adobe Commerce, WooCommerce, Salla, Zid)**
+9. Orders vs. payment gateway settlements (e.g. Checkout.com, Tap, PayTabs, Telr, Stripe): fees, refunds, chargebacks
+10. COD: delivered orders vs. courier COD remittance (e.g. Aramex, SMSA, iMile)
+11. BNPL settlements (e.g. Tabby, Tamara) vs. orders
+12. Courier freight invoice vs. shipments and contracted rates (weight and zone disputes)
+13. Refunds issued vs. returns physically received
+
+**Common to both**
+14. Bank statement vs. expected payouts (marketplace, gateway, BNPL, courier COD), including FX differences
+
+### Deferred industries (reference only)
+
+**E-commerce / marketplace (original, region-neutral list)**
+- Marketplace settlement vs. order/invoice register (payment release)
+- B2B marketplace invoices vs. payment received (short-pay, held, reserve release)
+- Returns (customer return and RTO) vs. invoiced items, and credit/refund received
+- Commission and fee validation against the rate card (category %, fixed fee, shipping slabs)
+- Payment gateway / COD remittance vs. orders delivered
+- Tax collected at source by marketplace (e.g. TCS/TDS) vs. tax-portal statements
+- Ads/promotion deductions vs. campaign invoices
+
+**Finance (all industries)**
+- Bank statement vs. ledger (BRS)
+- AR cash application: receipts vs. open invoices
+- AP 3-way match: PO vs. GRN vs. vendor invoice
+- Vendor statement vs. vendor ledger
+- Intercompany balance reconciliation
+- GST/VAT: purchase register vs. supplier filings (e.g. GSTR-2B)
+- Credit card / expense statements vs. claims
+
+**Trading / Manufacturing**
+- Stock: physical/WMS vs. book inventory
+- Production consumption vs. BOM standard
+- Customer/distributor ledger confirmation
+
+**FMCG**
+- Distributor scheme/claim reconciliation (trade promotions)
+- Primary vs. secondary sales
+- Damages/expiry claims vs. returns received
+
+**Logistics**
+- Freight/carrier invoice vs. shipment manifest and contracted rates
+- COD collected vs. remitted by courier
+- Weight discrepancy (declared vs. charged)
+
+## 5. Token-cost and caching strategy
+
+Most runs repeat the same template every week or month with new files, so we cache aggressively,
+in layers. The cheapest one comes first:
+
+1. **Schema-fingerprint mapping cache (no LLM call).** Fingerprint each uploaded file as
+   `hash(sorted headers + inferred types + date/number formats)`. If we have seen that fingerprint
+   for this org and template, we reuse the saved mapping and skip both the mapping and questions steps.
+   Repeat runs should usually make **zero** LLM calls before the report.
+2. **Answer memory.** Every clarification answer is saved against (org, template, fingerprint), so
+   Sawwi never asks the same question twice. Answers act as rules the next time.
+3. **Exception-reason cache.** We normalise exception patterns (e.g. "settlement short by exactly
+   commission delta on category X") and cache the reason classification. Only new patterns go to the LLM.
+4. **Anthropic prompt caching** for the calls that remain. Prompts are ordered *most static → most dynamic*:
+   `tools` → system prompt (Sawwi persona + reco rules) → template spec + glossary → org profile and
+   saved mappings → **cache breakpoint** → this run's summary stats → user turn.
+   Use the 1-hour cache TTL for chat sessions and bursty month-end runs. Chat history grows by
+   appending only, so each turn reads the earlier turns from cache.
+   Never put timestamps, run IDs or reordered JSON before the breakpoint, because any change there
+   makes the cache miss.
+5. **Compact payloads.** Send the LLM aggregates (counts, sums, top-N exceptions, ≤20 sample rows)
+   as compact CSV or TSV, not JSON, and never the raw files.
+6. **Batch API** for work that doesn't need an instant answer (bulk exception classification,
+   scheduled recurring recos). This trades latency for a large discount.
+7. **Model routing.** Haiku by default. Escalate to Sonnet only for narrative reports, ambiguous
+   mappings Haiku flags as low-confidence, and new-template design.
+8. **Structured outputs** (JSON schema / tool use) for mappings and questions, so we don't pay for
+   retries or parsing failures.
+
+Track per-run tokens (input, cache read, cache write, output) from day one so cache hit rate is visible.
+
+## 6. Proposed stack
+
+- **Next.js 16 (this repo):** UI, auth, API routes / server actions
+- **Postgres** (via Drizzle): orgs, users, templates, mappings, answers, runs, exceptions
+- **DuckDB** (Node bindings, server-side): the matching engine over uploaded CSV/XLSX/Parquet
+- **Object storage** (S3/R2): uploaded files and generated reports (XLSX/PDF)
+- **Anthropic SDK:** Haiku 5.5 / Sonnet 5.5, prompt caching, Batch API
+- **Job queue** (e.g. Inngest/BullMQ): long-running recos and scheduled repeat runs
+
+## 7. Build phases
+
+1. Onboarding, template catalogue (seeded specs) and gallery UI
+2. Upload, file profiling, mapping (cache + Haiku), chip-question chat
+3. DuckDB matching engine executing template specs, plus exceptions
+4. Report UI and export; narrative and follow-up chat; email drafts
+5. Generic reco when no template fits, and save-as-template
+6. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)

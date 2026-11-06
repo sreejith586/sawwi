@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import { parseProfile, type Profile } from "@/lib/profile/profile";
+import { TEMPLATES } from "./catalog";
+import { recommendTemplates } from "./recommend";
+
+const base: Profile = {
+  company: "Acme Trading LLC",
+  role: "finance",
+  countries: ["AE"],
+  channels: ["marketplace"],
+  marketplaces: ["amazon_ae", "noon"],
+  sellsB2B: false,
+  usesMarketplaceFulfilment: false,
+  platforms: [],
+  payments: [],
+};
+
+const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
+
+describe("template catalogue", () => {
+  it("has 14 templates with unique ids", () => {
+    expect(TEMPLATES).toHaveLength(14);
+    expect(new Set(ids(TEMPLATES)).size).toBe(14);
+  });
+
+  it("only references sources that the template declares", () => {
+    for (const t of TEMPLATES) {
+      const sources = new Set(t.sources.map((s) => s.key));
+      for (const k of t.match.keys) {
+        expect(sources, `${t.id}: ${k.left}`).toContain(k.left.split(".")[0]);
+        expect(sources, `${t.id}: ${k.right}`).toContain(k.right.split(".")[0]);
+      }
+    }
+  });
+
+  it("only matches on fields that exist in the referenced source", () => {
+    for (const t of TEMPLATES) {
+      const fieldsBySource = new Map(t.sources.map((s) => [s.key, new Set(s.fields.map((f) => f.key))]));
+      for (const k of t.match.keys) {
+        for (const ref of [k.left, k.right]) {
+          const [source, field] = ref.split(".");
+          expect(fieldsBySource.get(source), `${t.id}: ${ref}`).toContain(field);
+        }
+      }
+    }
+  });
+});
+
+describe("recommendTemplates", () => {
+  it("shows only marketplace templates to a marketplace-only seller", () => {
+    const { recommended, others } = recommendTemplates(TEMPLATES, base);
+    expect(ids(recommended)).toContain("mkt-settlement-vs-sales");
+    expect(ids(recommended)).toContain("bank-payouts");
+    expect(ids(recommended)).not.toContain("web-orders-vs-gateway");
+    expect(recommended.length + others.length).toBe(TEMPLATES.length);
+  });
+
+  it("gates B2B and fulfilment templates on the yes/no answers", () => {
+    const off = ids(recommendTemplates(TEMPLATES, base).recommended);
+    expect(off).not.toContain("mkt-b2b-payment-release");
+    expect(off).not.toContain("mkt-fulfilment-inventory");
+
+    const on = ids(
+      recommendTemplates(TEMPLATES, { ...base, sellsB2B: true, usesMarketplaceFulfilment: true }).recommended,
+    );
+    expect(on).toContain("mkt-b2b-payment-release");
+    expect(on).toContain("mkt-fulfilment-inventory");
+  });
+
+  it("gates webstore payment templates on payment methods", () => {
+    const webstore: Profile = { ...base, channels: ["webstore"], marketplaces: [], platforms: ["magento2"], payments: ["cod"] };
+    const rec = ids(recommendTemplates(TEMPLATES, webstore).recommended);
+    expect(rec).toContain("web-cod-remittance");
+    expect(rec).not.toContain("web-orders-vs-gateway");
+    expect(rec).not.toContain("web-bnpl");
+  });
+
+  it("ranks templates owned by the user's role first", () => {
+    const ops = recommendTemplates(TEMPLATES, { ...base, role: "marketplace_ops" }).recommended;
+    expect(ops[0].roles[0]).toBe("marketplace_ops");
+  });
+});
+
+describe("parseProfile", () => {
+  it("drops webstore answers when the webstore channel is not selected", () => {
+    const { profile } = parseProfile({ ...base, platforms: ["magento1"], payments: ["cod"] });
+    expect(profile?.platforms).toEqual([]);
+    expect(profile?.payments).toEqual([]);
+  });
+
+  it("rejects unknown option values and reports missing answers", () => {
+    const { profile, errors } = parseProfile({ ...base, role: "ceo", channels: ["webstore"], platforms: ["bogus"] });
+    expect(profile).toBeUndefined();
+    expect(errors.role).toBeDefined();
+    expect(errors.platforms).toBeDefined();
+    expect(errors.payments).toBeDefined();
+  });
+});
