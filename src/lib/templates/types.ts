@@ -114,7 +114,7 @@ export type Template = {
   };
   /** Roles that usually own this reco; used for ranking. */
   roles: Role[];
-  /** Marks the hard marketplace edge cases that set Sawwi apart. */
+  /** Marks the hard marketplace edge cases that set Sawwina apart. */
   featured?: boolean;
   sources: SourceSlot[];
   links: Link[];

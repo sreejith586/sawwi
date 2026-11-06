@@ -19,7 +19,7 @@ async function History() {
     return (
       <div className="mt-8 rounded-xl border border-dashed border-border p-10 text-center">
         <p className="font-medium">No reconciliations yet</p>
-        <p className="mt-1 text-sm text-muted">Pick a template, upload two files and Sawwi does the matching.</p>
+        <p className="mt-1 text-sm text-muted">Pick a template, upload two files and Sawwina does the matching.</p>
         <Link href="/templates" className={`${buttonClass("primary")} mt-5`}>
           Browse templates
         </Link>

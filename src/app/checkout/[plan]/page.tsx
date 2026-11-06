@@ -8,7 +8,7 @@ import { getCurrentSession } from "@/lib/saas/session";
 import { checkoutBlocker } from "@/lib/stripe/checkout";
 import { priceIdFor, type PaidPlan } from "@/lib/stripe/plans";
 import { getStripe } from "@/lib/stripe/server";
-import { SawwiCheckout } from "./embedded-checkout";
+import { SawwinaCheckout } from "./embedded-checkout";
 
 export const metadata: Metadata = { title: "Checkout" };
 
@@ -41,7 +41,7 @@ async function Checkout({ params }: { params: Promise<{ plan: string }> }) {
     <div className="grid gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
       <section>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subscribe</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Sawwi {plan.name}</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Sawwina {plan.name}</h1>
         <p className="mt-1.5 text-muted">{plan.blurb}</p>
 
         <div className="mt-8 rounded-2xl border border-border bg-surface p-5">
@@ -86,7 +86,7 @@ async function Checkout({ params }: { params: Promise<{ plan: string }> }) {
             </Link>
           </div>
         ) : (
-          <SawwiCheckout plan={planId} publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!} />
+          <SawwinaCheckout plan={planId} publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!} />
         )}
       </section>
     </div>

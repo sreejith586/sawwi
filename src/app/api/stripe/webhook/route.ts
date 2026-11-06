@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { getStripe, syncSubscription } from "@/lib/stripe/server";
 
-// Stripe → Sawwi. The source of truth for plan changes made outside the checkout page
+// Stripe → Sawwina. The source of truth for plan changes made outside the checkout page
 // (renewals, failed payments, cancellations, plan switches in the billing portal).
 // Trust comes only from the signature; this route has no session.
 export async function POST(request: Request) {

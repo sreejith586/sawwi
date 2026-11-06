@@ -8,7 +8,7 @@ import { buildRunView } from "./view";
 
 let dir: string;
 beforeAll(() => {
-  dir = mkdtempSync(path.join(tmpdir(), "sawwi-test-"));
+  dir = mkdtempSync(path.join(tmpdir(), "sawwina-test-"));
   process.env.SAWWI_DATA_DIR = dir;
   // Heuristics only: these tests must never call the API.
   delete process.env.ANTHROPIC_API_KEY;

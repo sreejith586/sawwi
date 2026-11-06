@@ -22,7 +22,7 @@ export default function CheckoutLayout({ children }: { children: React.ReactNode
             <rect x="4" y="9" width="12" height="8" rx="1.5" />
             <path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
           </svg>
-          Payments are processed securely by Stripe. Sawwi never sees or stores your card details.
+          Payments are processed securely by Stripe. Sawwina never sees or stores your card details.
         </div>
       </footer>
     </div>

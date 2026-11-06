@@ -1,6 +1,6 @@
 import type { PlanId } from "@/lib/saas/plans";
 
-// Which Stripe Price sells which Sawwi plan. Price IDs come from env so test and live
+// Which Stripe Price sells which Sawwina plan. Price IDs come from env so test and live
 // mode use different prices without code changes. Enterprise stays "talk to us".
 
 export type PaidPlan = Extract<PlanId, "starter" | "growth">;

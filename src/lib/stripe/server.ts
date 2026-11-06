@@ -10,7 +10,7 @@ let client: Stripe | undefined;
 export function getStripe(): Stripe | undefined {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return undefined;
-  client ??= new Stripe(key, { appInfo: { name: "Sawwi" } });
+  client ??= new Stripe(key, { appInfo: { name: "Sawwina" } });
   return client;
 }
 

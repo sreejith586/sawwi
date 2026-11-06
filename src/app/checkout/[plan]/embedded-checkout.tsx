@@ -11,7 +11,7 @@ import { createCheckoutSession } from "@/app/actions/checkout";
 let stripePromise: Promise<Stripe | null> | undefined;
 const getStripe = (key: string) => (stripePromise ??= loadStripe(key));
 
-export function SawwiCheckout({ plan, publishableKey }: { plan: string; publishableKey: string }) {
+export function SawwinaCheckout({ plan, publishableKey }: { plan: string; publishableKey: string }) {
   const [error, setError] = useState<string>();
   const fetchClientSecret = useCallback(async () => {
     const result = await createCheckoutSession(plan);

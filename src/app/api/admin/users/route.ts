@@ -20,5 +20,5 @@ export async function GET(request: Request) {
     ],
     rows,
   });
-  return xlsxResponse(bytes, "sawwi-users");
+  return xlsxResponse(bytes, "sawwina-users");
 }

@@ -144,7 +144,7 @@ export function OnboardingWizard({
         <Question title="Which countries do you sell in?" hint="Sets currencies and VAT rates.">
           <MultiChips name="countries" options={COUNTRIES} value={draft.countries} onChange={(v) => set("countries", v)} error={errors.countries} />
         </Question>
-        <Question title="Where do you keep your books?" hint="Helps Sawwi read your ERP exports without asking.">
+        <Question title="Where do you keep your books?" hint="Helps Sawwina read your ERP exports without asking.">
           <MultiChips name="accountingSystems" options={ACCOUNTING_SYSTEMS} value={draft.accountingSystems} onChange={(v) => set("accountingSystems", v)} error={errors.accountingSystems} />
         </Question>
       </Step>

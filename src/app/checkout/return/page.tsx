@@ -50,7 +50,7 @@ async function Result({ searchParams }: { searchParams: Promise<{ session_id?: s
       body={`Thanks! ${session.org.name} is subscribed${org?.currentPeriodEnd ? ` and renews on ${day(org.currentPeriodEnd)}` : ""}. A receipt is on its way to ${checkout.customer_details?.email ?? session.user.email}.`}
     >
       <Link href="/home" className={buttonClass("primary")}>
-        Go to Sawwi
+        Go to Sawwina
       </Link>
       <Link href="/settings/billing" className={buttonClass("secondary")}>
         View billing

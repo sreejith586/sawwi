@@ -7,7 +7,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       <header className="flex h-14 items-center gap-2 border-b border-border px-4 sm:px-6">
         <span className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <span className="grid size-7 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-          Sawwi
+          Sawwina
         </span>
         <div className="ml-auto">
           <ThemeToggle />

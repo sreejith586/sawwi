@@ -15,7 +15,7 @@ export default function OnboardingPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight">Tell us how you sell</h1>
       <p className="mt-1 text-muted">
-        A few one-click questions so Sawwi only shows the reconciliations that apply to you.
+        A few one-click questions so Sawwina only shows the reconciliations that apply to you.
       </p>
       <div className="mt-8 rounded-xl border border-border bg-surface p-5 sm:p-8">
         <Suspense fallback={<p className="text-muted">Loading…</p>}>

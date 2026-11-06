@@ -15,7 +15,7 @@ export function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
       <span className="grid size-7 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-      Sawwi
+      Sawwina
     </Link>
   );
 }
@@ -36,7 +36,7 @@ async function AuthActions() {
   if (!session) return <SignedOut />;
   return (
     <Link href="/home" className={buttonClass("primary")}>
-      Open Sawwi
+      Open Sawwina
     </Link>
   );
 }

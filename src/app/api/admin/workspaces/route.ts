@@ -26,5 +26,5 @@ export async function GET(request: Request) {
     ],
     rows,
   });
-  return xlsxResponse(bytes, "sawwi-workspaces");
+  return xlsxResponse(bytes, "sawwina-workspaces");
 }
