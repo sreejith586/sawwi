@@ -186,7 +186,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 is in review (PR #2). PDF inputs (§8) are built and in review.
 
 Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 
@@ -196,4 +196,38 @@ Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Up
 3. DuckDB matching engine executing template specs, plus exceptions
 4. Report UI and export; narrative and follow-up chat; email drafts
 5. Generic reco when no template fits, and save-as-template
-6. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
+6. PDF inputs: bank statements, invoices and settlement statements as PDF (§8)
+7. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
+
+## 8. PDF inputs
+
+GCC bank statements, supplier and marketplace invoices and settlement statements often arrive only as PDF. Any slot accepts `.pdf` next to CSV, TSV and XLSX. A PDF becomes the same `{ headers, rows }` table that `parseUpload` (`src/lib/files/parse.ts`) returns for a CSV, so profiling, the mapping cache, chips and the engine are unchanged. Everything here is code; this step makes no LLM calls (D-2, D-21).
+
+**Order, cheapest and most exact first** (`src/lib/pdf/index.ts`):
+
+1. **Embedded ZATCA e-invoice XML.** KSA invoices are PDF/A-3 with the UBL 2.1 XML attached. When an attachment is UBL (`Invoice` / `CreditNote`), Sawwi reads number, date, seller and buyer with VAT numbers, PO reference, currency, net, VAT, total and every line (`src/lib/pdf/zatca.ts`, with a small XML reader in `xml.ts`). Credit notes come out negative.
+2. **Text layer** (`pdfjs-dist`, legacy build, in Node; no native binary, pages are never rendered). Text items keep their positions (`read.ts`) and become words, then lines grouped by y (`layout.ts`). The header line is the one whose cells best match a vocabulary of English and Arabic column names (date, value date, narration, reference, debit, credit, amount, balance, qty, unit price, SKU, net, VAT, total…), with tightly set labels split apart. Column x-bands come from the header cells widened by the data under them (whitespace channels across the rows), so right-aligned amounts and long narrations land in the right column. Then, per page:
+   - rows start at a date (or an amount, for tables without dates); lines in between are wrapped narration and fold into the row above;
+   - repeated headers on later pages, page footers ("Page 2 of 3"), "balance brought/carried forward", opening/closing balance and total rows are set aside, not returned as rows;
+   - statement metadata (issuer, account, IBAN, period, currency, opening and closing balance, printed totals) is kept apart from the rows and shown next to the file;
+   - Arabic-Indic digits (٠–٩, ۰–۹) and Arabic separators (٫ ٬) are normalised, bidi marks are dropped, and Arabic text is put in reading order (RTL runs inside LTR lines and vice versa). Arabic headers list columns right to left;
+   - amounts are normalised: `1,234.50 DR` and `(1,234.50)` are negative; a single signed Amount column (or Amount + Dr/Cr) also gets Debit and Credit columns.
+   The PDF is then classified: **statement** (balance + debit/credit/amount columns), **invoice** (invoice wording + an invoice number; header fields by label, the line table, and the subtotal/VAT/total block), or any other **table** (settlement and payout statements).
+3. **ZATCA QR (TLV) fallback.** When an invoice's text lacks the total, VAT or seller VAT number, or the PDF has no text at all, QR images on the first and last page are decoded in pure JS (`jsqr`) and the base64 TLV (seller, VAT number, timestamp, total, VAT) fills the gaps.
+
+**Table shape.** Statements and other tables keep their own column names, so the header fingerprint (and with it the saved mapping) is stable from one month to the next. Invoices get fixed column names that the known-header heuristics map (`Invoice number`, `Supplier`, `PO number`, `Amount excl. VAT`, `VAT`, `Total incl. VAT`…). The slot decides the grain: slots with SKU, quantity, unit price or line amount fields get one row per invoice line, others one row per invoice (D-22).
+
+**Layout memory** (`pdf_layouts`, per workspace). After a text-layer read, the recipe (issuer key from the top lines of page 1 without digits, header tokens, column names, roles and x-bands) is saved. The next PDF from the same issuer finds its header by the saved tokens and reuses the column roles, even if its header words aren't in the vocabulary. The file card shows "PDF layout remembered". With the mapping cache, a repeat statement from the same bank asks nothing.
+
+**Checks before matching** (`statement.ts`, `invoice.ts`):
+- statements: opening + credits − debits = closing; rows add up to printed totals; every printed running balance follows from the one before, including carried/brought-forward lines between pages. A one-off misprint is reported once, and after a missing row the walk re-syncs on the printed figures;
+- invoices: lines add up to the subtotal; qty × unit price = line amount; VAT = rate × net, at the printed rate or the GCC standard rate it matches (5% UAE and Oman, 15% KSA, 10% Bahrain), and flagged if it isn't the workspace's country rate; net + VAT = total.
+Results show under the file (✓/✕ with figures). A failed check is posted in the run chat as a question ("Use these rows anyway?" / "I'll upload a corrected file") that holds the run until the user continues or replaces the file, and the Preview data tab shows a red banner above the extracted rows (D-23).
+
+**Several files into one slot.** The drop zone takes several files at once (up to 50, 25 MB in total). Each is read on its own and the tables are stacked with a `Source file` column first and the union of the columns (`parseUploads`). A month of supplier invoices becomes one row per invoice, or per line.
+
+**Refused, with a message:** password-protected PDFs; PDFs over 200 pages; files that aren't readable PDFs; and scanned or image-only PDFs ("This PDF is a scanned image. Export it as CSV/Excel, or upload a text PDF."). OCR or Claude vision for scanned PDFs is on hold until the user decides (D-20, PROGRESS → Open questions).
+
+**Storage.** How each PDF was read (kind, method, pages, metadata, checks, rows set aside) is stored with the run's other checks (`run_checks`, key `pdf_<slot>`, via `store.setPdfInfo`) and served in the run view. The extracted table is stored as CSV like any upload, so preview and Excel export work unchanged.
+
+**Tests:** `src/lib/pdf/pdf.test.ts` and `src/lib/runs/pdf-ingest.test.ts` generate synthetic PDFs (`src/lib/pdf/fixtures/make.ts`, with `pdf-lib` and `qrcode` as dev dependencies): a one-page statement, a three-page statement with carried-forward lines and repeated headers, a misprinted statement, a text invoice, a ZATCA PDF/A-3 with UBL XML and QR, a QR-only invoice, a scanned page and a password-protected file, with golden tables. Arabic and RTL reading is tested on positioned text items, because the standard PDF fonts can't draw Arabic. Real anonymised samples are still wanted (Emirates NBD, ADCB, Al Rajhi and SNB statements; Noon and Amazon invoices).

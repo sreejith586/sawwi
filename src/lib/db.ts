@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS run_results (
   result_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pdf_layouts (
+  org_key TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  issuer_key TEXT NOT NULL,
+  recipe_json TEXT NOT NULL,
+  uses INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_key, fingerprint)
+);
+CREATE INDEX IF NOT EXISTS pdf_layouts_issuer ON pdf_layouts (org_key, issuer_key);
 CREATE TABLE IF NOT EXISTS llm_usage (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT,

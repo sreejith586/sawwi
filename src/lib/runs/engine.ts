@@ -2,11 +2,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import Papa from "papaparse";
 import { dataDir } from "@/lib/db";
-import { parseUpload } from "@/lib/files/parse";
+import { parseUploads } from "@/lib/files/parse";
 import { profileTable, type FileProfile } from "@/lib/files/profile";
 import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates } from "@/lib/mapping/heuristic";
 import { checkKeyOverlap, containmentOverlap } from "@/lib/mapping/keycheck";
 import { llmAvailable, suggestMappings } from "@/lib/mapping/llm";
+import type { PdfFileInfo } from "@/lib/pdf/types";
 import type { Country } from "@/lib/profile/options";
 import { getTemplate } from "@/lib/templates/catalog";
 import type { CanonicalField, KeyNormalizer, SourceSlot, Template } from "@/lib/templates/types";
@@ -138,13 +139,33 @@ function formatQuestions(slot: SourceSlot, profile: FileProfile, mapping: SlotMa
 // ─── Ingest ───────────────────────────────────────────────────────────────
 
 export async function ingestFile(run: Run, slotKey: string, fileName: string, bytes: Uint8Array, ctx: RunContext) {
+  return ingestFiles(run, slotKey, [{ name: fileName, data: bytes }], ctx);
+}
+
+/** Slots that hold line-level data (SKU, quantities) read invoice PDFs one row per line, others one row per invoice. */
+const LINE_FIELDS = new Set(["sku", "qty", "qty_invoiced", "unit_price", "line_amount"]);
+
+/** One or more files into a slot. Several files (e.g. a month of supplier invoice PDFs) become one table. */
+export async function ingestFiles(run: Run, slotKey: string, files: { name: string; data: Uint8Array }[], ctx: RunContext) {
   const template = requireTemplate(run);
   const slot = requireSlot(template, slotKey);
+  if (files.length === 0) throw new RunInputError("Choose a file to upload.");
 
-  const table = await parseUpload(fileName, bytes);
+  const table = await parseUploads(files, {
+    pdf: {
+      grain: slot.fields.some((f) => LINE_FIELDS.has(f.key)) ? "line" : "invoice",
+      countries: ctx.countries,
+      layouts: { find: (issuer) => store.getPdfLayouts(run.orgKey, issuer), save: (recipe) => store.savePdfLayout(run.orgKey, recipe) },
+    },
+  });
   if (table.headers.length === 0 || table.rows.length === 0) {
-    throw new RunInputError("That file looks empty. Check it has a header row and at least one data row.");
+    throw new RunInputError(
+      table.pdf
+        ? "Sawwi read that PDF but found no rows in it. Check it's the statement or invoice itself, or export the data as CSV/Excel."
+        : "That file looks empty. Check it has a header row and at least one data row.",
+    );
   }
+  const fileName = files.length === 1 ? files[0].name : `${files[0].name} + ${files.length - 1} more`;
 
   const dir = path.join(dataDir(), "uploads", run.id);
   mkdirSync(dir, { recursive: true });
@@ -156,6 +177,7 @@ export async function ingestFile(run: Run, slotKey: string, fileName: string, by
 
   store.deleteOpenQuestions(run.id, slotKey);
   store.upsertRunFile(run.id, { slotKey, fileName, storedPath, profile, mapping });
+  store.setPdfInfo(run.id, slotKey, table.pdf ?? null);
 
   const mappedCount = Object.values(mapping.fields).filter((f) => f.column).length;
   let summary = `I read ${fileName}: ${plural(profile.rowCount, "row")} and ${plural(profile.columns.length, "column")}. `;
@@ -164,10 +186,42 @@ export async function ingestFile(run: Run, slotKey: string, fileName: string, by
     summary += `I matched ${mappedCount} of ${slot.fields.length} fields${usedAi ? " (with a quick AI assist for the unusual ones)" : ""}`;
     summary += questions.length ? ` and have ${plural(questions.length, "quick question")}.` : ".";
   }
+  if (table.pdf) summary = `${pdfSummary(table.pdf)} ${summary}`;
   store.addMessage(run.id, "sawwi", summary);
+  // Failed balance or VAT checks come first: the rows may be wrong, so nothing runs silently.
+  for (const pdf of table.pdf ?? []) {
+    const failed = pdf.checks.filter((c) => !c.ok);
+    if (failed.length) store.addQuestion(run.id, slotKey, { kind: "pdf_check", fileName: pdf.fileName, detail: failed.map((c) => c.detail).join(" ") });
+  }
   for (const q of questions) store.addQuestion(run.id, slotKey, q);
 
   afterChange(run, template);
+}
+
+const KIND_LABEL: Record<PdfFileInfo["kind"], string> = { statement: "statement", invoice: "invoice", table: "table" };
+const METHOD_LABEL: Record<PdfFileInfo["method"], string> = {
+  zatca_xml: "from its embedded ZATCA e-invoice XML",
+  zatca_qr: "from its ZATCA QR code",
+  text: "from its text layer",
+};
+
+/** One or two sentences on how the PDF(s) were read and whether their checks passed. */
+function pdfSummary(infos: PdfFileInfo[]): string {
+  if (infos.length === 1) {
+    const p = infos[0];
+    const meta = Object.fromEntries(p.meta.map((m) => [m.label, m.value]));
+    let s = `That's a ${p.pages}-page PDF ${KIND_LABEL[p.kind]}; I read it ${METHOD_LABEL[p.method]}, no AI needed`;
+    if (p.layout === "remembered") s += ", using the layout I saved last time";
+    s += ".";
+    if (meta.Account || meta.IBAN) s += ` Account ${meta.Account ?? meta.IBAN}${meta.Period ? `, ${meta.Period}` : ""}.`;
+    if (p.skipped) s += ` I set aside ${plural(p.skipped, "line")} that aren't transactions (opening/closing, carried forward, totals, repeated headers).`;
+    const passed = p.checks.filter((c) => c.ok);
+    if (p.checks.length && passed.length === p.checks.length) s += ` Checks pass: ${passed.map((c) => c.label.toLowerCase()).join("; ")}.`;
+    return s;
+  }
+  const byMethod = Object.entries(Object.groupBy(infos, (i) => i.method)).map(([m, list]) => `${list!.length} ${METHOD_LABEL[m as PdfFileInfo["method"]]}`);
+  const bad = infos.filter((i) => i.checks.some((c) => !c.ok)).length;
+  return `I read ${plural(infos.length, "PDF")} (${byMethod.join(", ")}), no AI needed.${bad ? ` ${bad} of them failed a check.` : infos.some((i) => i.checks.length) ? " All their checks pass." : ""}`;
 }
 
 // ─── Answers ──────────────────────────────────────────────────────────────
@@ -181,11 +235,20 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
   const option = view.options.find((o) => o.value === answer);
   if (!option) throw new RunInputError("Pick one of the offered answers.");
 
+  const p = question.payload;
+  if (p.kind === "pdf_check" && answer === "replace") {
+    // Stays open: the slot only clears when the user continues or uploads a new file.
+    store.addMessage(run.id, "user", option.label, questionId);
+    store.addMessage(run.id, "sawwi", `OK. Drop a corrected ${p.fileName}, or a CSV/Excel export of it, on the same slot to replace it. Until then I'll hold the run.`);
+    return;
+  }
+
   store.setAnswer(questionId, answer);
   store.addMessage(run.id, "user", option.label, questionId);
 
-  const p = question.payload;
-  if (p.kind === "key_format") {
+  if (p.kind === "pdf_check") {
+    store.addMessage(run.id, "sawwi", "OK, I'll use the rows as read. You can still check them under Preview data.");
+  } else if (p.kind === "key_format") {
     store.setRule(run.orgKey, run.templateId, keyRuleName(Math.floor(p.keyIndex / 100), p.keyIndex % 100), answer === "yes" ? p.normalizers : []);
     store.addMessage(
       run.id,
@@ -386,6 +449,14 @@ export function presentQuestion(p: QuestionPayload, template: Template, slotKey:
       return {
         prompt: `Your ${slot?.label ?? "file"} has no currency column. What currency are its amounts in?`,
         options: p.options.map((c) => ({ value: c, label: c })),
+      };
+    case "pdf_check":
+      return {
+        prompt: `${p.fileName} didn't pass a check: ${p.detail} Look at the rows under Preview data. Use them anyway?`,
+        options: [
+          { value: "continue", label: "Yes, the rows look right" },
+          { value: "replace", label: "No, I'll upload a corrected file" },
+        ],
       };
     case "key_format":
       return {

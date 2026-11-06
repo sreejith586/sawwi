@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import type { LlmUsage } from "@/lib/mapping/llm";
+import type { LayoutRecipe, PdfFileInfo } from "@/lib/pdf/types";
 import type { ReconResult } from "@/lib/recon/match";
 import type { Message, Question, QuestionPayload, Run, RunFile, RunStatus, SlotMapping } from "./types";
 
@@ -135,6 +136,32 @@ export function saveCachedMapping(orgKey: string, templateId: string, slotKey: s
        ON CONFLICT (org_key, template_id, slot_key, fingerprint) DO UPDATE SET mapping_json = excluded.mapping_json, updated_at = excluded.updated_at`,
     )
     .run(orgKey, templateId, slotKey, fingerprint, JSON.stringify(mapping), now());
+}
+
+/** PDF layout recipes per workspace, newest first: a repeat statement from the same issuer reuses its recipe. */
+export function getPdfLayouts(orgKey: string, issuerKey: string): LayoutRecipe[] {
+  const rows = getDb()
+    .prepare("SELECT recipe_json FROM pdf_layouts WHERE org_key = ? AND issuer_key = ? ORDER BY updated_at DESC LIMIT 5")
+    .all(orgKey, issuerKey) as Row[];
+  return rows.map((r) => JSON.parse(String(r.recipe_json)));
+}
+
+export function savePdfLayout(orgKey: string, recipe: LayoutRecipe) {
+  getDb()
+    .prepare(
+      `INSERT INTO pdf_layouts (org_key, fingerprint, issuer_key, recipe_json, uses, updated_at) VALUES (?, ?, ?, ?, 1, ?)
+       ON CONFLICT (org_key, fingerprint) DO UPDATE SET recipe_json = excluded.recipe_json, uses = uses + 1, updated_at = excluded.updated_at`,
+    )
+    .run(orgKey, recipe.fingerprint, recipe.issuerKey, JSON.stringify(recipe), now());
+}
+
+/** How a slot's PDF(s) were read: metadata and pre-match checks. Kept with the run's other checks. */
+export function setPdfInfo(runId: string, slotKey: string, info: PdfFileInfo[] | null) {
+  setRunCheck(runId, `pdf_${slotKey}`, info);
+}
+
+export function getPdfInfo(runId: string, slotKey: string): PdfFileInfo[] | undefined {
+  return getRunCheck<PdfFileInfo[] | null>(runId, `pdf_${slotKey}`) ?? undefined;
 }
 
 export function getRule<T>(orgKey: string, templateId: string, ruleKey: string): T | undefined {

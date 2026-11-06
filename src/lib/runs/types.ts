@@ -30,6 +30,8 @@ export type QuestionPayload =
   | { kind: "choose_column"; field: string; options: string[] }
   | { kind: "date_format"; column: string; samples: string[] }
   | { kind: "currency"; options: string[] }
+  /** A PDF failed a balance or VAT check: the user confirms the rows or replaces the file. */
+  | { kind: "pdf_check"; fileName: string; detail: string }
   | {
       kind: "key_format";
       keyIndex: number;

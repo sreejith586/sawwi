@@ -1,3 +1,6 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+# pdfjs-dist only needs @napi-rs/canvas to render pages; text extraction is pure JS.
+ignoredOptionalDependencies:
+  - "@napi-rs/canvas"

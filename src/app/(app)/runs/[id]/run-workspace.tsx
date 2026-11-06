@@ -6,6 +6,7 @@ import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/ap
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
+import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
 import type { RunView, SlotView } from "@/lib/runs/view";
 import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type PreviewRow } from "@/lib/tables/rows";
@@ -127,13 +128,15 @@ function SlotCard(props: {
   const [tab, setTab] = useState<"mapping" | "preview">("mapping");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const upload = async (file: File) => {
+  // Several files at once go into the slot together, e.g. a month of supplier invoice PDFs.
+  const upload = async (files: File[]) => {
+    if (files.length === 0) return;
     setUploading(true);
     props.onError(undefined);
     try {
       const body = new FormData();
       body.set("slot", slot.key);
-      body.set("file", file);
+      for (const file of files) body.append("file", file);
       const res = await fetch(`/api/runs/${props.runId}/files`, { method: "POST", body });
       const json = (await res.json()) as { view?: RunView; error?: string };
       if (json.view) props.onView(json.view);
@@ -154,13 +157,11 @@ function SlotCard(props: {
     <input
       ref={inputRef}
       type="file"
-      accept=".csv,.tsv,.txt,.xlsx"
+      accept=".csv,.tsv,.txt,.xlsx,.pdf"
+      multiple
       className="sr-only"
       disabled={uploading}
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) void upload(file);
-      }}
+      onChange={(e) => void upload([...(e.target.files ?? [])])}
     />
   );
 
@@ -175,8 +176,7 @@ function SlotCard(props: {
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        const file = e.dataTransfer.files[0];
-        if (file) void upload(file);
+        void upload([...e.dataTransfer.files]);
       }}
     >
       <div className="flex items-start gap-3 p-5">
@@ -195,21 +195,24 @@ function SlotCard(props: {
           <p className="mt-0.5 text-sm text-muted">{slot.description}</p>
 
           {slot.file ? (
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-muted/50 px-3 py-2.5">
-              <FileIcon />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{slot.file.name}</p>
-                <p className="tabular text-xs text-muted">
-                  {slot.file.rowCount.toLocaleString()} rows · {slot.file.columns.length} columns
-                </p>
+            <>
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-muted/50 px-3 py-2.5">
+                <FileIcon />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{slot.file.name}</p>
+                  <p className="tabular text-xs text-muted">
+                    {slot.file.rowCount.toLocaleString()} rows · {slot.file.columns.length} columns
+                  </p>
+                </div>
+                {slot.file.remembered && <Pill tone="ok">Mapping remembered</Pill>}
+                {missingRequired > 0 && <Pill tone="high">{missingRequired} required missing</Pill>}
+                <label className="inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground">
+                  {input}
+                  {uploading ? "Reading…" : "Replace"}
+                </label>
               </div>
-              {slot.file.remembered && <Pill tone="ok">Layout remembered</Pill>}
-              {missingRequired > 0 && <Pill tone="high">{missingRequired} required missing</Pill>}
-              <label className="inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground">
-                {input}
-                {uploading ? "Reading…" : "Replace"}
-              </label>
-            </div>
+              {slot.file.pdf && <PdfDetails infos={slot.file.pdf} />}
+            </>
           ) : (
             <label
               className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-7 text-center transition ${
@@ -226,8 +229,8 @@ function SlotCard(props: {
                       <path d="M8 11V3m0 0L5 6m3-3 3 3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </span>
-                  <span className="mt-2.5 text-sm font-medium">Drop a file or click to browse</span>
-                  <span className="mt-0.5 text-xs text-muted">CSV or Excel · e.g. {slot.examples.slice(0, 2).join(", ")}</span>
+                  <span className="mt-2.5 text-sm font-medium">Drop files or click to browse</span>
+                  <span className="mt-0.5 text-xs text-muted">CSV, Excel or PDF · e.g. {slot.examples.slice(0, 2).join(", ")}</span>
                 </>
               )}
             </label>
@@ -261,11 +264,87 @@ function SlotCard(props: {
           {tab === "mapping" ? (
             <MappingTable runId={props.runId} slot={slot} busy={props.busy} onRemap={props.onRemap} />
           ) : (
-            <FilePreview runId={props.runId} slotKey={slot.key} fileName={slot.file.name} />
+            <FilePreview runId={props.runId} slotKey={slot.key} fileName={slot.file.name} pdf={slot.file.pdf} />
           )}
         </div>
       )}
     </section>
+  );
+}
+
+const PDF_KIND: Record<PdfFileInfo["kind"], string> = { statement: "Bank statement", invoice: "Invoice", table: "Table" };
+const PDF_METHOD: Record<PdfFileInfo["method"], string> = {
+  zatca_xml: "ZATCA e-invoice XML",
+  zatca_qr: "ZATCA QR code",
+  text: "text layer",
+};
+
+/** How a PDF was read: what it is, its header facts (kept out of the rows) and the checks run before matching. */
+function PdfDetails({ infos }: { infos: PdfFileInfo[] }) {
+  if (infos.length > 1) {
+    const failed = infos.filter((i) => i.checks.some((c) => !c.ok));
+    const kinds = [...new Set(infos.map((i) => PDF_KIND[i.kind].toLowerCase()))].join(", ");
+    return (
+      <div className="mt-3 rounded-lg border border-border px-3 py-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone="info">{infos.length} PDFs</Pill>
+          <span className="text-muted">
+            {kinds} · read from {[...new Set(infos.map((i) => PDF_METHOD[i.method]))].join(" / ")}
+          </span>
+          {failed.length === 0 ? <Pill tone="ok">All checks pass</Pill> : <Pill tone="high">{failed.length} need a look</Pill>}
+        </div>
+        {failed.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {failed.map((f) => (
+              <li key={f.fileName}>
+                <span className="font-medium">{f.fileName}</span>
+                <span className="text-muted"> · {f.checks.filter((c) => !c.ok).map((c) => c.detail).join(" ")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+  const info = infos[0];
+  return (
+    <div className="mt-3 rounded-lg border border-border px-3 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone="info">PDF · {PDF_KIND[info.kind]}</Pill>
+        <span className="tabular text-muted">
+          {info.pages} page{info.pages === 1 ? "" : "s"} · read from its {PDF_METHOD[info.method]}
+          {info.skipped > 0 && ` · ${info.skipped} non-transaction line${info.skipped === 1 ? "" : "s"} set aside`}
+        </span>
+        {info.layout === "remembered" && <Pill tone="ok">PDF layout remembered</Pill>}
+      </div>
+      {info.meta.length > 0 && (
+        <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+          {info.meta.map((m) => (
+            <div key={m.label} className="min-w-0">
+              <dt className="text-muted">{m.label}</dt>
+              <dd className="tabular truncate font-medium" title={m.value}>
+                {m.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {info.checks.length > 0 && (
+        <ul className="mt-2.5 space-y-1 border-t border-border pt-2">
+          {info.checks.map((c) => (
+            <li key={c.id} className="flex gap-2">
+              <span aria-hidden className={c.ok ? "text-success" : "text-danger"}>
+                {c.ok ? "✓" : "✕"}
+              </span>
+              <span>
+                <span className={c.ok ? "font-medium" : "font-medium text-danger"}>{c.label}</span>
+                <span className="text-muted"> · {c.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -340,7 +419,7 @@ type Preview = { headers: string[]; kinds: string[]; rows: PreviewRow[]; total: 
 const fmt = (v: unknown, decimals: boolean) =>
   typeof v === "number" ? v.toLocaleString("en-US", { minimumFractionDigits: decimals ? 2 : 0, maximumFractionDigits: 2 }) : String(v ?? "");
 
-function FilePreview({ runId, slotKey, fileName }: { runId: string; slotKey: string; fileName: string }) {
+function FilePreview({ runId, slotKey, fileName, pdf }: { runId: string; slotKey: string; fileName: string; pdf?: PdfFileInfo[] }) {
   const [data, setData] = useState<Preview>();
   const [error, setError] = useState<string>();
 
@@ -387,8 +466,23 @@ function FilePreview({ runId, slotKey, fileName }: { runId: string; slotKey: str
     };
   });
 
+  const failed = (pdf ?? []).flatMap((p) => p.checks.filter((c) => !c.ok).map((c) => ({ ...c, file: p.fileName })));
+
   return (
     <>
+      {failed.length > 0 && (
+        <div role="alert" className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+          <p className="font-medium">Check these rows before running: the PDF didn&apos;t pass {failed.length === 1 ? "a check" : `${failed.length} checks`}.</p>
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {failed.map((c) => (
+              <li key={`${c.file}-${c.id}`}>
+                {(pdf?.length ?? 0) > 1 && `${c.file}: `}
+                {c.label}. {c.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <QueryTable
         rows={data.rows}
         columns={columns}
