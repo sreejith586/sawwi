@@ -4,6 +4,7 @@
     { "name": "sawwi-dev", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev"], "port": 3000 },
     { "name": "sawwi-dev-3001", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev", "-p", "3001"], "port": 3001 },
     { "name": "sawwi-dev-3004", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev", "-p", "3004"], "port": 3004 },
-    { "name": "sawwi-pdf-3012", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev", "-p", "3012"], "port": 3012 }
+    { "name": "sawwi-pdf-3012", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev", "-p", "3012"], "port": 3012 },
+    { "name": "sawwi-usage-3016", "runtimeExecutable": "pnpm", "runtimeArgs": ["dev", "-p", "3016"], "port": 3016, "env": { "SAWWI_SUPERADMIN_EMAILS": "usage-test@sawwi.test" } }
   ]
 }
