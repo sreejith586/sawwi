@@ -3,7 +3,8 @@ import { getDb } from "@/lib/db";
 import type { LlmUsage } from "@/lib/mapping/llm";
 import type { LayoutRecipe, PdfFileInfo } from "@/lib/pdf/types";
 import type { ReconResult } from "@/lib/recon/match";
-import type { Message, Question, QuestionPayload, Run, RunFile, RunStatus, SlotMapping } from "./types";
+import type { Template } from "@/lib/templates/types";
+import type { ChatPayload, Message, Question, QuestionPayload, Run, RunFile, RunStatus, SlotMapping } from "./types";
 
 // All SQL lives here, so moving from SQLite to Postgres touches one file.
 
@@ -86,6 +87,10 @@ export function addQuestion(runId: string, slotKey: string | null, payload: Ques
   return q;
 }
 
+export function deleteQuestion(id: string) {
+  getDb().prepare("DELETE FROM questions WHERE id = ? AND answer_json IS NULL").run(id);
+}
+
 /** Drops unanswered questions for a slot, e.g. when the user replaces its file. */
 export function deleteOpenQuestions(runId: string, slotKey: string) {
   getDb().prepare("DELETE FROM questions WHERE run_id = ? AND slot_key = ? AND answer_json IS NULL").run(runId, slotKey);
@@ -106,10 +111,10 @@ export function setAnswer(questionId: string, answer: string) {
   getDb().prepare("UPDATE questions SET answer_json = ? WHERE id = ?").run(JSON.stringify(answer), questionId);
 }
 
-export function addMessage(runId: string, role: Message["role"], body: string, questionId: string | null = null) {
+export function addMessage(runId: string, role: Message["role"], body: string, questionId: string | null = null, payload?: ChatPayload) {
   getDb()
-    .prepare("INSERT INTO messages (run_id, role, body, question_id, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(runId, role, body, questionId, now());
+    .prepare("INSERT INTO messages (run_id, role, body, question_id, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(runId, role, body, questionId, now(), payload ? JSON.stringify(payload) : null);
 }
 
 export function getMessages(runId: string): Message[] {
@@ -119,6 +124,7 @@ export function getMessages(runId: string): Message[] {
     role: r.role as Message["role"],
     body: String(r.body),
     questionId: r.question_id === null ? null : String(r.question_id),
+    ...(r.payload_json ? { payload: JSON.parse(String(r.payload_json)) as ChatPayload } : {}),
   }));
 }
 
@@ -197,6 +203,45 @@ export function getResult(runId: string): (ReconResult & { createdAt: string }) 
 /** Results go stale the moment a file, mapping or answer changes. */
 export function clearResult(runId: string) {
   getDb().prepare("DELETE FROM run_results WHERE run_id = ?").run(runId);
+  getDb().prepare("DELETE FROM run_narratives WHERE run_id = ?").run(runId);
+}
+
+// ─── Narrative cache: one per result, so re-opening a run never spends tokens ─────
+
+export function getNarrative<T>(runId: string, resultAt: string): { source: string; body: T } | undefined {
+  const r = getDb().prepare("SELECT source, body_json FROM run_narratives WHERE run_id = ? AND result_at = ?").get(runId, resultAt) as Row | undefined;
+  return r ? { source: String(r.source), body: JSON.parse(String(r.body_json)) as T } : undefined;
+}
+
+export function saveNarrative(runId: string, resultAt: string, source: string, body: unknown) {
+  getDb()
+    .prepare(
+      `INSERT INTO run_narratives (run_id, result_at, source, body_json, created_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (run_id) DO UPDATE SET result_at = excluded.result_at, source = excluded.source, body_json = excluded.body_json, created_at = excluded.created_at`,
+    )
+    .run(runId, resultAt, source, JSON.stringify(body), now());
+}
+
+// ─── Workspace templates (saved from a generic two-file reconciliation) ───────────
+
+export function saveCustomTemplate(orgKey: string, template: Template) {
+  getDb()
+    .prepare("INSERT INTO custom_templates (id, org_key, template_json, created_at) VALUES (?, ?, ?, ?)")
+    .run(template.id, orgKey, JSON.stringify(template), now());
+}
+
+export function getCustomTemplate(orgKey: string, id: string): Template | undefined {
+  const r = getDb().prepare("SELECT template_json FROM custom_templates WHERE id = ? AND org_key = ?").get(id, orgKey) as Row | undefined;
+  return r ? (JSON.parse(String(r.template_json)) as Template) : undefined;
+}
+
+export function listCustomTemplates(orgKey: string): Template[] {
+  const rows = getDb().prepare("SELECT template_json FROM custom_templates WHERE org_key = ? ORDER BY created_at DESC").all(orgKey) as Row[];
+  return rows.map((r) => JSON.parse(String(r.template_json)) as Template);
+}
+
+export function deleteCustomTemplate(orgKey: string, id: string) {
+  getDb().prepare("DELETE FROM custom_templates WHERE id = ? AND org_key = ?").run(id, orgKey);
 }
 
 export function getRunCheck<T>(runId: string, checkKey: string): T | undefined {

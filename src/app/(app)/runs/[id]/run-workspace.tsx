@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { saveAsTemplate, sendChat } from "@/app/actions/insights";
 import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
+import type { ChatIntent } from "@/lib/insights/chat";
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
@@ -10,12 +13,14 @@ import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
 import type { RunView, SlotView } from "@/lib/runs/view";
 import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type PreviewRow } from "@/lib/tables/rows";
+import { Chat } from "./chat";
 import { Report } from "./report";
 
 export function RunWorkspace({ initial }: { initial: RunView }) {
   const [view, setView] = useState(initial);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+  const [thinking, startChat] = useTransition();
   const router = useRouter();
 
   // Keep the router cache fresh so Back/Forward never shows an older snapshot of the run.
@@ -28,6 +33,8 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
     if (result.view) update(result.view);
     setError(result.error);
   };
+
+  const ask = (intent: ChatIntent) => startChat(async () => apply(await sendChat(view.id, intent)));
 
   const status = RUN_STATUS[view.status];
   const uploaded = view.slots.filter((s) => s.file).length;
@@ -50,7 +57,7 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
 
       {view.report && (
         <div className="mt-8">
-          <Report runId={view.id} report={view.report} />
+          <Report runId={view.id} report={view.report} onExplain={(exception) => ask({ kind: "explain", exception })} />
         </div>
       )}
 
@@ -86,9 +93,18 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
                   : "Upload the files and answer the questions first."}
             </span>
           </div>
+          {view.generic && (view.status === "ready" || view.status === "done") && (
+            <SaveTemplate key={view.templateTitle} defaultTitle={view.templateTitle} onSave={(title) => startTransition(async () => apply(await saveAsTemplate(view.id, title)))} busy={pending} saved={view.messages.some((m) => m.body.startsWith("Saved as \""))} />
+          )}
         </div>
 
-        <Chat view={view} busy={pending} onAnswer={(qid, value) => startTransition(async () => apply(await answer(view.id, qid, value)))} />
+        <Chat
+          view={view}
+          busy={pending}
+          thinking={thinking}
+          onIntent={ask}
+          onAnswer={(qid, value) => startTransition(async () => apply(await answer(view.id, qid, value)))}
+        />
       </div>
     </div>
   );
@@ -532,76 +548,39 @@ function FilePreview({ runId, slotKey, fileName, pdf }: { runId: string; slotKey
   );
 }
 
-// ─── Chat ─────────────────────────────────────────────────────────────────
+// ─── Save as template (generic reco only) ───────────────────────────────────
 
-function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer: (questionId: string, value: string) => void }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const current = view.openQuestions[0];
-
-  // Scroll only the chat panel, never the page: the report above should stay in view.
-  useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [view.messages.length, current?.id]);
-
+function SaveTemplate({ defaultTitle, onSave, busy, saved }: { defaultTitle: string; onSave: (title: string) => void; busy: boolean; saved: boolean }) {
+  const [title, setTitle] = useState(defaultTitle);
   return (
-    <aside className="flex max-h-[calc(100vh-8rem)] min-h-80 flex-col overflow-hidden rounded-xl border border-border bg-surface lg:sticky lg:top-6">
-      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
-        <span className="grid size-7 place-items-center rounded-full bg-accent text-xs font-bold text-accent-foreground">S</span>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold">Sawwi</p>
-          <p className="text-xs text-muted">{busy ? "Working…" : current ? "Waiting for your answer" : "Here to help"}</p>
-        </div>
-      </div>
-      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
-        <Bubble role="sawwi">Upload each file on the left. I&apos;ll read them, match the columns, and only ask when something is unclear.</Bubble>
-        {view.messages.map((m) => (
-          <Bubble key={m.id} role={m.role}>
-            {m.body}
-          </Bubble>
-        ))}
-        {current && (
-          <div className="space-y-2.5">
-            <Bubble role="sawwi" highlight>
-              {current.prompt}
-            </Bubble>
-            <div className="flex flex-wrap gap-2">
-              {current.options.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onAnswer(current.id, o.value)}
-                  className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-medium shadow-sm transition hover:border-foreground/50 hover:bg-surface-muted disabled:opacity-50"
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-            {view.openQuestions.length > 1 && <p className="text-xs text-muted">{view.openQuestions.length - 1} more after this</p>}
-          </div>
+    <form
+      className="rounded-xl border border-dashed border-border bg-surface p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(title);
+      }}
+    >
+      <p className="text-sm font-semibold">Save as a reusable template</p>
+      <p className="mt-0.5 text-sm text-muted">
+        Keeps the two file names, the tolerance and the columns you confirmed. It appears under Your templates, for everyone in this workspace.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={60}
+          aria-label="Template name"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-foreground/40 sm:max-w-80"
+        />
+        <button type="submit" disabled={busy || saved || !title.trim()} className={buttonClass("secondary")}>
+          Save template
+        </button>
+        {saved && (
+          <Link href="/templates" className="text-sm font-medium text-success underline decoration-success/30 underline-offset-4">
+            Saved ✓ View templates
+          </Link>
         )}
       </div>
-      {view.usage.calls > 0 && (
-        <div className="tabular border-t border-border px-4 py-2 text-[11px] text-muted">
-          AI calls {view.usage.calls} · in {view.usage.inputTokens.toLocaleString()} · cached {view.usage.cacheReadTokens.toLocaleString()} · out{" "}
-          {view.usage.outputTokens.toLocaleString()}
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function Bubble({ role, children, highlight = false }: { role: "sawwi" | "user"; children: React.ReactNode; highlight?: boolean }) {
-  return (
-    <div className={role === "user" ? "flex justify-end" : "flex"}>
-      <p
-        className={`max-w-[88%] rounded-2xl px-3.5 py-2 leading-relaxed ${
-          role === "user" ? "rounded-br-md bg-accent text-accent-foreground" : "rounded-bl-md bg-surface-muted"
-        } ${highlight ? "ring-1 ring-foreground/20" : ""}`}
-      >
-        {children}
-      </p>
-    </div>
+    </form>
   );
 }

@@ -92,7 +92,30 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   output_tokens INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_narratives (
+  run_id TEXT PRIMARY KEY,
+  result_at TEXT NOT NULL,
+  source TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS custom_templates (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  template_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `;
+
+/** Columns added after a table first shipped: CREATE TABLE IF NOT EXISTS won't add them to old databases. */
+const COLUMNS: [table: string, column: string, type: string][] = [["messages", "payload_json", "TEXT"]];
+
+function migrate(d: DatabaseSync) {
+  for (const [table, column, type] of COLUMNS) {
+    const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
 
 let db: DatabaseSync | undefined;
 
@@ -102,6 +125,7 @@ export function getDb(): DatabaseSync {
     db = new DatabaseSync(path.join(dataDir(), "sawwi.db"));
     db.exec("PRAGMA journal_mode = WAL;");
     db.exec(SCHEMA);
+    migrate(db);
   }
   return db;
 }

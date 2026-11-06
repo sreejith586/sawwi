@@ -49,6 +49,30 @@ export type Question = {
   answer: string | null;
 };
 
-export type Message = { id: number; role: "sawwi" | "user"; body: string; questionId: string | null };
+/** Who wrote a chat answer: Claude, or Sawwi's own code (no API key, or a deterministic answer). */
+export type AnswerSource = "ai" | "rules";
+
+export type BreakdownRow = { group: string; count: number; value: number };
+
+/** Structured chat content rendered as a card under the message text. */
+export type ChatPayload =
+  | { type: "email"; source: AnswerSource; audience: string; subject: string; body: string }
+  | {
+      type: "breakdown";
+      source: AnswerSource;
+      check: string;
+      checkLabel: string;
+      by: string;
+      byLabel: string;
+      currency?: string;
+      rows: BreakdownRow[];
+      totalGroups: number;
+    }
+  | { type: "fix_first"; source: AnswerSource; items: { checkLabel: string; severity: "high" | "medium" | "info"; count: number; value: number; action: string }[] }
+  | { type: "answer"; source: AnswerSource }
+  /** A follow-up question or one-click action from the user. */
+  | { type: "question" };
+
+export type Message = { id: number; role: "sawwi" | "user"; body: string; questionId: string | null; payload?: ChatPayload };
 
 export const NONE_OPTION = "__none__";
