@@ -33,5 +33,11 @@ pnpm build
 4. Anything uncertain becomes a one-click question in the chat: confirm a column, pick a column,
    day-first vs month-first dates, currency, or a cross-file key format difference (`#1001` vs `1001`).
 5. Answers are saved per company and file layout, so the next run with the same exports asks nothing.
+6. **Run reconciliation** joins the files per the template's `links` (`src/lib/templates/catalog.ts`) and
+   evaluates every check's declarative `rule` (`src/lib/recon/match.ts`): unmatched rows, amount
+   differences with tolerance, duplicates, ageing, row patterns, VAT rates. No AI tokens are used.
+   Checks without a rule show as "Not run", never as passed.
+7. The report has KPI tiles, a matching summary, and sortable, filterable check and exception tables.
+   Every table downloads as Excel (`/api/runs/[id]/export`), filtered and sorted like the screen.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

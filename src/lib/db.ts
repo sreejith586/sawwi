@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS run_checks (
   value_json TEXT NOT NULL,
   PRIMARY KEY (run_id, check_key)
 );
+CREATE TABLE IF NOT EXISTS run_results (
+  run_id TEXT PRIMARY KEY,
+  result_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS llm_usage (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT,

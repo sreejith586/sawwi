@@ -6,7 +6,7 @@ export async function ProfileBadge() {
   const profile = await getProfile();
   if (!profile) {
     return (
-      <Link href="/onboarding" className="text-sm font-medium text-accent hover:text-accent-strong">
+      <Link href="/onboarding" className="text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground">
         Get started
       </Link>
     );

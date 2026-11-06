@@ -36,7 +36,7 @@ how big the files get, and the results stay auditable and reproducible.
 | File profiling (headers, types, formats, sample rows) | Code | — |
 | Column → canonical field mapping | Cache first, then LLM | Haiku 5.5 |
 | Clarifying questions (structured JSON chips) | LLM | Haiku 5.5 |
-| Matching and rules | Code (DuckDB) | — |
+| Matching and rules | Code (TypeScript engine, `src/lib/recon`) | — |
 | Exception reason classification | Cache first, then rules, then LLM in batch | Haiku 5.5 |
 | Report narrative, chat and email drafts | LLM | Sonnet 5.5 (Haiku for simple chat) |
 | New-template design (no template found) | LLM | Sonnet 5.5 |
@@ -174,7 +174,9 @@ Track per-run tokens (input, cache read, cache write, output) from day one so ca
 
 ## 7. Build phases
 
-Status: Phase 1 done. Phase 2 done (upload, profiling, cached/heuristic/Haiku mapping, chip questions, cross-file key checks, saved answers). Phase 3 next.
+Status: Phases 1–3 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 next: Sonnet narrative, follow-up chat, email drafts.
+
+Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 
 
 1. Onboarding, template catalogue (seeded specs) and gallery UI

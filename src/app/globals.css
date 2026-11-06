@@ -1,36 +1,51 @@
 @import "tailwindcss";
 
+/*
+ * Neutral palette for every app element (surfaces, borders, buttons, chips).
+ * Color is reserved for meaning: success = reconciled/good, warn = needs follow-up
+ * or lower than expected, danger = money at risk or error, info = planning/neutral facts.
+ */
 :root {
-  --background: #f7f8f7;
+  --background: #fafafa;
   --surface: #ffffff;
-  --surface-muted: #f0f2f1;
-  --foreground: #14201c;
-  --muted: #5d6b66;
-  --border: #dfe4e2;
-  --accent: #0f766e;
-  --accent-strong: #115e59;
-  --accent-soft: #e3f3f1;
+  --surface-muted: #f4f4f5;
+  --foreground: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --accent: #18181b;
+  --accent-strong: #000000;
+  --accent-soft: #f4f4f5;
   --accent-foreground: #ffffff;
-  --warn-soft: #fdf3e1;
-  --warn: #9a5b00;
+  --success: #067647;
+  --success-soft: #ecfdf3;
+  --warn: #dc6803;
+  --warn-soft: #fffaeb;
   --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --info: #175cd3;
+  --info-soft: #eff8ff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0d1311;
-    --surface: #141c19;
-    --surface-muted: #1b2522;
-    --foreground: #e6ecea;
-    --muted: #94a39e;
-    --border: #2a3632;
-    --accent: #2dd4bf;
-    --accent-strong: #5eead4;
-    --accent-soft: #134e48;
-    --accent-foreground: #04201c;
-    --warn-soft: #33270f;
-    --warn: #f5b74e;
+    --background: #09090b;
+    --surface: #111113;
+    --surface-muted: #1c1c1f;
+    --foreground: #fafafa;
+    --muted: #a1a1aa;
+    --border: #27272a;
+    --accent: #fafafa;
+    --accent-strong: #ffffff;
+    --accent-soft: #27272a;
+    --accent-foreground: #09090b;
+    --success: #47cd89;
+    --success-soft: #0a2e1d;
+    --warn: #fdb022;
+    --warn-soft: #3a240b;
     --danger: #f97066;
+    --danger-soft: #3d1410;
+    --info: #53b1fd;
+    --info-soft: #0f2547;
   }
 }
 
@@ -45,9 +60,14 @@
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
   --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -55,4 +75,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Tabular figures keep amounts aligned in tables and tiles. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }

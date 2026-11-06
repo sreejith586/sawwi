@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function Home() {
   return (
     <p className="text-muted">
-      <Link href="/templates" className="font-medium text-accent hover:text-accent-strong">
+      <Link href="/templates" className="font-medium underline decoration-border underline-offset-4 hover:decoration-foreground">
         Open your reconciliations
       </Link>
     </p>

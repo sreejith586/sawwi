@@ -39,7 +39,7 @@ async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
         <span aria-hidden>·</span>
         <span>Usually run: {FREQUENCY_LABELS[template.frequency]}</span>
         {template.featured && (
-          <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn">Edge case</span>
+          <span className="rounded-full border border-border px-2 py-0.5 font-medium text-muted">Edge case</span>
         )}
       </div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{template.title}</h1>

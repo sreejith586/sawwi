@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { TemplateCard } from "@/components/template-card";
 import { COUNTRIES, labelOf, MARKETPLACES, WEBSTORE_PLATFORMS } from "@/lib/profile/options";
 import { getProfile } from "@/lib/profile/session";
 import { TEMPLATES } from "@/lib/templates/catalog";
 import { recommendTemplates } from "@/lib/templates/recommend";
+import { TemplateGallery } from "./template-gallery";
 
 export const metadata: Metadata = { title: "Reconciliation templates" };
 
@@ -15,7 +15,7 @@ async function Gallery() {
   if (!profile) {
     return (
       <p className="mt-4 text-muted">
-        <Link href="/onboarding" className="font-medium text-accent hover:text-accent-strong">
+        <Link href="/onboarding" className="font-medium underline decoration-border underline-offset-4 hover:decoration-foreground">
           Set up your profile
         </Link>{" "}
         to see your reconciliations.
@@ -35,35 +35,12 @@ async function Gallery() {
       <p className="mt-1 text-muted">
         {recommended.length} reconciliations for {profile.company}: selling via {sellsOn.join(", ")} in{" "}
         {profile.countries.map((c) => labelOf(COUNTRIES, c)).join(", ")}.{" "}
-        <Link href="/onboarding" className="font-medium text-accent hover:text-accent-strong">
+        <Link href="/onboarding" className="font-medium underline decoration-border underline-offset-4 hover:decoration-foreground">
           Edit profile
         </Link>
       </p>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Recommended for you</h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {recommended.map((t) => (
-            <TemplateCard key={t.id} template={t} />
-          ))}
-        </div>
-      </section>
-
-      {others.length > 0 && (
-        <details className="group mt-10">
-          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted hover:text-foreground">
-            Other templates ({others.length})
-          </summary>
-          <p className="mt-2 text-sm text-muted">
-            These don&apos;t match your profile, but you can still run them.
-          </p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {others.map((t) => (
-              <TemplateCard key={t.id} template={t} dimmed />
-            ))}
-          </div>
-        </details>
-      )}
+      <TemplateGallery recommended={recommended} others={others} />
 
       <div className="mt-10 rounded-xl border border-dashed border-border p-5 text-sm">
         <p className="font-medium">Don&apos;t see your reconciliation?</p>

@@ -26,24 +26,39 @@ describe("template catalogue", () => {
     expect(new Set(ids(TEMPLATES)).size).toBe(20);
   });
 
-  it("only references sources that the template declares", () => {
+  it("links only declared slots and fields", () => {
     for (const t of TEMPLATES) {
-      const sources = new Set(t.sources.map((s) => s.key));
-      for (const k of t.match.keys) {
-        expect(sources, `${t.id}: ${k.left}`).toContain(k.left.split(".")[0]);
-        expect(sources, `${t.id}: ${k.right}`).toContain(k.right.split(".")[0]);
+      const fields = new Map(t.sources.map((s) => [s.key, new Set(s.fields.map((f) => f.key))]));
+      expect(t.links.length, t.id).toBeGreaterThan(0);
+      for (const link of t.links) {
+        expect(fields.has(link.left), `${t.id}: ${link.left}`).toBe(true);
+        expect(fields.has(link.right), `${t.id}: ${link.right}`).toBe(true);
+        for (const k of link.keys) {
+          expect(fields.get(link.left), `${t.id}: ${link.left}.${k.left}`).toContain(k.left);
+          expect(fields.get(link.right), `${t.id}: ${link.right}.${k.right}`).toContain(k.right);
+        }
       }
     }
   });
 
-  it("only matches on fields that exist in the referenced source", () => {
+  it("only uses fields that exist in amount expressions and check rules", () => {
     for (const t of TEMPLATES) {
-      const fieldsBySource = new Map(t.sources.map((s) => [s.key, new Set(s.fields.map((f) => f.key))]));
-      for (const k of t.match.keys) {
-        for (const ref of [k.left, k.right]) {
-          const [source, field] = ref.split(".");
-          expect(fieldsBySource.get(source), `${t.id}: ${ref}`).toContain(field);
+      const all = new Set(t.sources.flatMap((s) => s.fields.map((f) => f.key)));
+      const idents = (expr: string) => (expr.match(/[a-z_][a-z0-9_]*/g) ?? []).filter((w) => w !== "abs");
+      for (const link of t.links) {
+        if (!link.amount) continue;
+        for (const id of [...idents(link.amount.left), ...idents(link.amount.right)]) expect(all, `${t.id}: ${id}`).toContain(id);
+      }
+      for (const c of t.checks) {
+        const r = c.rule;
+        if (!r) continue;
+        if ("link" in r) expect(r.link, `${t.id}/${c.id}`).toBeLessThan(t.links.length);
+        if (r.kind === "compare") {
+          for (const id of [...idents(r.left ?? ""), ...idents(r.right ?? "")]) expect(all, `${t.id}/${c.id}: ${id}`).toContain(id);
+          if (!r.left || !r.right) expect(t.links[r.link].amount, `${t.id}/${c.id}`).toBeDefined();
         }
+        if ("field" in r && typeof r.field === "string") expect(all, `${t.id}/${c.id}`).toContain(r.field);
+        if ("where" in r && r.where) expect(all, `${t.id}/${c.id}`).toContain(r.where.field);
       }
     }
   });

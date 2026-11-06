@@ -13,7 +13,7 @@ export type SlotMapping = {
   currency?: string;
 };
 
-export type RunStatus = "collecting" | "clarifying" | "ready";
+export type RunStatus = "collecting" | "clarifying" | "ready" | "done";
 
 export type Run = { id: string; orgKey: string; templateId: string; status: RunStatus; createdAt: string };
 

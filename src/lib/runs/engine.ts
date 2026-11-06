@@ -186,7 +186,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
 
   const p = question.payload;
   if (p.kind === "key_format") {
-    store.setRule(run.orgKey, run.templateId, `key_normalizers_${p.keyIndex}`, answer === "yes" ? p.normalizers : []);
+    store.setRule(run.orgKey, run.templateId, keyRuleName(Math.floor(p.keyIndex / 100), p.keyIndex % 100), answer === "yes" ? p.normalizers : []);
     store.addMessage(
       run.id,
       "sawwi",
@@ -252,6 +252,7 @@ export function overrideMapping(run: Run, slotKey: string, fieldKey: string, col
 // ─── After every change ───────────────────────────────────────────────────
 
 function afterChange(run: Run, template: Template) {
+  store.clearResult(run.id);
   const files = store.getRunFiles(run.id);
   const open = store.getQuestions(run.id).filter((q) => q.answer === null);
 
@@ -273,7 +274,7 @@ function afterChange(run: Run, template: Template) {
   const status = computeStatus(template, store.getRunFiles(run.id), store.getQuestions(run.id));
   if (status !== run.status) {
     store.setRunStatus(run.id, status);
-    if (status === "ready") {
+    if (status === "ready" && run.status !== "done") {
       store.addMessage(run.id, "sawwi", "All set. I know how to read every file and how they connect. You can run the reconciliation when you're ready.");
     }
     run.status = status;
@@ -287,44 +288,60 @@ function readColumn(file: RunFile, column: string): string[] {
 
 function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
   const open = store.getQuestions(run.id).filter((q) => q.answer === null);
-  template.match.keys.forEach((key, i) => {
-    const [ls, lf] = key.left.split(".");
-    const [rs, rf] = key.right.split(".");
-    const left = files.find((f) => f.slotKey === ls);
-    const right = files.find((f) => f.slotKey === rs);
-    const lc = left?.mapping.fields[lf]?.column;
-    const rc = right?.mapping.fields[rf]?.column;
-    if (!left || !right || !lc || !rc) return;
-    if (open.some((q) => q.slotKey === ls || q.slotKey === rs)) return;
-    if (store.getRule<KeyNormalizer[]>(run.orgKey, run.templateId, `key_normalizers_${i}`)) return;
+  template.links.forEach((link, li) => {
+    const left = files.find((f) => f.slotKey === link.left);
+    const right = files.find((f) => f.slotKey === link.right);
+    if (!left || !right) return;
+    if (open.some((q) => q.slotKey === link.left || q.slotKey === link.right)) return;
 
-    const checkKey = `key_${i}`;
-    const stamp = `${left.profile.fingerprint}:${left.fileName}|${right.profile.fingerprint}:${right.fileName}|${lc}|${rc}`;
-    if (store.getRunCheck<string>(run.id, checkKey) === stamp) return;
-    store.setRunCheck(run.id, checkKey, stamp);
+    link.keys.forEach((key, ki) => {
+      if (key.mode === "month") return;
+      const lc = left.mapping.fields[key.left]?.column;
+      const rc = right.mapping.fields[key.right]?.column;
+      if (!lc || !rc) return;
+      if (getKeyRule(run.orgKey, run.templateId, li, ki)) return;
 
-    const fieldLabel = requireSlot(template, ls).fields.find((f) => f.key === lf)?.label ?? lf;
-    const result =
-      key.mode === "contains"
-        ? { overlap: containmentOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []), suggestion: undefined }
-        : checkKeyOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []);
-    if (result.suggestion) {
-      store.addQuestion(run.id, null, {
-        kind: "key_format",
-        keyIndex: i,
-        fieldLabel,
-        leftExample: result.suggestion.leftExample,
-        rightExample: result.suggestion.rightExample,
-        normalizers: result.suggestion.normalizers,
-      });
-    } else if (result.overlap < 0.2) {
-      store.addMessage(
-        run.id,
-        "sawwi",
-        `Heads up: only ${Math.round(result.overlap * 100)}% of ${fieldLabel} values appear in both files. Check that both files cover the same period. I'll still run, but expect many unmatched items.`,
-      );
-    }
+      const checkKey = `key_${li}_${ki}`;
+      const stamp = `${left.profile.fingerprint}:${left.fileName}|${right.profile.fingerprint}:${right.fileName}|${lc}|${rc}`;
+      if (store.getRunCheck<string>(run.id, checkKey) === stamp) return;
+      store.setRunCheck(run.id, checkKey, stamp);
+
+      const fieldLabel = requireSlot(template, link.left).fields.find((f) => f.key === key.left)?.label ?? key.left;
+      const result =
+        key.mode === "contains"
+          ? { overlap: containmentOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []), suggestion: undefined }
+          : checkKeyOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []);
+      if (result.suggestion) {
+        store.addQuestion(run.id, null, {
+          kind: "key_format",
+          keyIndex: li * 100 + ki,
+          fieldLabel,
+          leftExample: result.suggestion.leftExample,
+          rightExample: result.suggestion.rightExample,
+          normalizers: result.suggestion.normalizers,
+        });
+      } else if (result.overlap < 0.2 && link.combine !== "or") {
+        store.addMessage(
+          run.id,
+          "sawwi",
+          `Heads up: only ${Math.round(result.overlap * 100)}% of ${fieldLabel} values appear in both files. Check that both files cover the same period. I'll still run, but expect many unmatched items.`,
+        );
+      }
+    });
   });
+}
+
+/** Saved answer to "match ignoring symbols?" for a link key. Read by the matching engine too. */
+export function keyRuleName(linkIndex: number, keyIndex: number) {
+  return `key_normalizers_${linkIndex}_${keyIndex}`;
+}
+
+/** The saved key-format answer, including ones saved before links existed (`key_normalizers_<n>`). */
+export function getKeyRule(orgKey: string, templateId: string, linkIndex: number, keyIndex: number): KeyNormalizer[] | undefined {
+  return (
+    store.getRule<KeyNormalizer[]>(orgKey, templateId, keyRuleName(linkIndex, keyIndex)) ??
+    (linkIndex === 0 ? store.getRule<KeyNormalizer[]>(orgKey, templateId, `key_normalizers_${keyIndex}`) : undefined)
+  );
 }
 
 export function computeStatus(template: Template, files: RunFile[], questions: { answer: string | null }[]): RunStatus {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import type { LlmUsage } from "@/lib/mapping/llm";
+import type { ReconResult } from "@/lib/recon/match";
 import type { Message, Question, QuestionPayload, Run, RunFile, RunStatus, SlotMapping } from "./types";
 
 // All SQL lives here, so moving from SQLite to Postgres touches one file.
@@ -150,6 +151,25 @@ export function setRule(orgKey: string, templateId: string, ruleKey: string, val
        ON CONFLICT (org_key, template_id, rule_key) DO UPDATE SET value_json = excluded.value_json`,
     )
     .run(orgKey, templateId, ruleKey, JSON.stringify(value));
+}
+
+export function saveResult(runId: string, result: ReconResult) {
+  getDb()
+    .prepare(
+      `INSERT INTO run_results (run_id, result_json, created_at) VALUES (?, ?, ?)
+       ON CONFLICT (run_id) DO UPDATE SET result_json = excluded.result_json, created_at = excluded.created_at`,
+    )
+    .run(runId, JSON.stringify(result), now());
+}
+
+export function getResult(runId: string): (ReconResult & { createdAt: string }) | undefined {
+  const r = getDb().prepare("SELECT result_json, created_at FROM run_results WHERE run_id = ?").get(runId) as Row | undefined;
+  return r ? { ...JSON.parse(String(r.result_json)), createdAt: String(r.created_at) } : undefined;
+}
+
+/** Results go stale the moment a file, mapping or answer changes. */
+export function clearResult(runId: string) {
+  getDb().prepare("DELETE FROM run_results WHERE run_id = ?").run(runId);
 }
 
 export function getRunCheck<T>(runId: string, checkKey: string): T | undefined {

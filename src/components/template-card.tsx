@@ -15,7 +15,7 @@ export function TemplateCard({ template, dimmed = false }: { template: Template;
         <span aria-hidden>·</span>
         <span>{FREQUENCY_LABELS[template.frequency]}</span>
         {template.featured && (
-          <span className="ml-auto rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn">Edge case</span>
+          <span className="ml-auto rounded-full border border-border px-2 py-0.5 font-medium text-muted">Edge case</span>
         )}
       </div>
       <h3 className="mt-2 font-semibold tracking-tight group-hover:text-accent-strong">{template.title}</h3>

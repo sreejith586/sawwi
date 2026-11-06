@@ -2,14 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { answer, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
+import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
 import type { RunView, SlotView } from "@/lib/runs/view";
 import type { MappingSource } from "@/lib/runs/types";
+import { Report } from "./report";
 
 const STATUS_COPY: Record<RunView["status"], { label: string; tone: string }> = {
   collecting: { label: "Waiting for files", tone: "bg-surface-muted text-muted" },
   clarifying: { label: "A few questions", tone: "bg-warn-soft text-warn" },
-  ready: { label: "Ready to reconcile", tone: "bg-accent-soft text-accent-strong" },
+  ready: { label: "Ready to reconcile", tone: "bg-info-soft text-info" },
+  done: { label: "Reconciled", tone: "bg-success-soft text-success" },
 };
 
 export function RunWorkspace({ initial }: { initial: RunView }) {
@@ -37,9 +39,16 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
         <h1 className="text-2xl font-semibold tracking-tight">{view.templateTitle}</h1>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
       </div>
-      {error && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{error}</p>}
+      {error && <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      {view.report && (
+        <div className="mt-6">
+          <Report runId={view.id} report={view.report} />
+        </div>
+      )}
+
+      {view.report && <h2 className="mt-10 text-lg font-semibold tracking-tight">Inputs</h2>}
+      <div className={`${view.report ? "mt-3" : "mt-6"} grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]`}>
         <div className="space-y-4">
           {view.slots.map((slot, i) => (
             <SlotCard
@@ -56,14 +65,18 @@ export function RunWorkspace({ initial }: { initial: RunView }) {
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-4">
             <button
               type="button"
-              disabled
-              title="The matching engine arrives in Phase 3"
-              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+              disabled={pending || (view.status !== "ready" && view.status !== "done")}
+              onClick={() => startTransition(async () => apply(await reconcileRun(view.id)))}
+              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-40"
             >
-              Run reconciliation
+              {pending ? "Working…" : view.report ? "Run again" : "Run reconciliation"}
             </button>
             <span className="text-sm text-muted">
-              {view.status === "ready" ? "Everything is mapped. Matching arrives in the next phase." : "Upload the files and answer the questions first."}
+              {view.status === "done"
+                ? "Change a file or mapping and run again to refresh the report."
+                : view.status === "ready"
+                  ? "Everything is mapped. Matching takes a few seconds and uses no AI tokens."
+                  : "Upload the files and answer the questions first."}
             </span>
           </div>
         </div>
@@ -141,7 +154,7 @@ function SlotCard(props: {
         }}
         className={
           "mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-5 text-center text-sm transition " +
-          (dragging ? "border-accent bg-accent-soft" : "border-border hover:border-accent/60 hover:bg-surface-muted")
+          (dragging ? "border-foreground/50 bg-surface-muted" : "border-border hover:border-foreground/30 hover:bg-surface-muted")
         }
       >
         <input
@@ -166,7 +179,7 @@ function SlotCard(props: {
           </>
         ) : (
           <>
-            <span className="font-medium text-accent">Choose a file or drop it here</span>
+            <span className="font-medium">Choose a file or drop it here</span>
             <span className="mt-0.5 text-xs text-muted">CSV or Excel · e.g. {slot.examples.slice(0, 2).join(", ")}</span>
           </>
         )}
@@ -180,7 +193,7 @@ function SlotCard(props: {
               {mapped} of {slot.file.fields.length} fields
             </span>
             {slot.file.remembered && (
-              <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-strong">Remembered</span>
+              <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">Remembered</span>
             )}
             {missingRequired > 0 && (
               <span className="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">{missingRequired} required missing</span>
@@ -265,7 +278,7 @@ function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer
                   type="button"
                   disabled={busy}
                   onClick={() => onAnswer(current.id, o.value)}
-                  className="rounded-full border border-accent/50 px-3 py-1 text-sm font-medium text-accent-strong hover:bg-accent-soft disabled:opacity-50"
+                  className="rounded-full border border-border bg-surface px-3 py-1 text-sm font-medium hover:border-foreground/40 hover:bg-surface-muted disabled:opacity-50"
                 >
                   {o.label}
                 </button>

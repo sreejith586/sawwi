@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/profile/session";
 import { getOwnedRun, orgKeyFor } from "@/lib/runs/access";
 import { answerQuestion, overrideMapping, RunInputError } from "@/lib/runs/engine";
+import { runReconciliation } from "@/lib/runs/reconcile";
 import { createRun } from "@/lib/runs/store";
 import type { Run } from "@/lib/runs/types";
+import type { Country } from "@/lib/profile/options";
 import { buildRunView, type RunView } from "@/lib/runs/view";
 import { getTemplate } from "@/lib/templates/catalog";
 
@@ -19,11 +21,11 @@ export async function startRun(templateId: string) {
   redirect(`/runs/${run.id}`);
 }
 
-async function withRun(runId: string, fn: (run: Run) => void): Promise<RunActionResult> {
+async function withRun(runId: string, fn: (run: Run, countries: Country[]) => void): Promise<RunActionResult> {
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
   try {
-    fn(owned.run);
+    fn(owned.run, owned.profile.countries);
   } catch (error) {
     if (error instanceof RunInputError) return { error: error.message, view: buildRunView(runId) };
     throw error;
@@ -37,4 +39,10 @@ export async function answer(runId: string, questionId: string, value: string): 
 
 export async function setFieldColumn(runId: string, slotKey: string, fieldKey: string, column: string | null): Promise<RunActionResult> {
   return withRun(runId, (run) => overrideMapping(run, slotKey, fieldKey, column));
+}
+
+export async function reconcileRun(runId: string): Promise<RunActionResult> {
+  return withRun(runId, (run, countries) => {
+    runReconciliation(run, countries);
+  });
 }
