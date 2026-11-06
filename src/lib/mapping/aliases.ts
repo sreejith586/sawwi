@@ -79,4 +79,10 @@ export const ALIASES: Record<string, string[]> = {
   return_date: ["return date", "returned on", "date returned"],
   return_reason: ["return reason", "reason"],
   return_type: ["return type", "type"],
+
+  // Invoice tables read from PDFs (see src/lib/pdf/invoice.ts for the headers they get).
+  supplier: ["supplier", "seller", "vendor", "supplier name", "vendor name"],
+  po_no: ["po number", "po no", "purchase order", "purchase order no", "po"],
+  qty_invoiced: ["qty invoiced", "invoiced qty", "qty", "quantity"],
+  line_amount: ["line amount excl vat", "line amount", "amount excl vat", "net amount", "line total excl vat"],
 };

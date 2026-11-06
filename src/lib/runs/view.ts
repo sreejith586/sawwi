@@ -1,3 +1,4 @@
+import type { PdfFileInfo } from "@/lib/pdf/types";
 import { severityOf, type Severity } from "@/lib/recon/severity";
 import type { ReconResult } from "@/lib/recon/match";
 import type { Template } from "@/lib/templates/types";
@@ -31,6 +32,8 @@ export type SlotView = {
     columns: string[];
     fields: FieldRow[];
     remembered: boolean;
+    /** For PDFs: how each file was read, its statement/invoice details and pre-match checks. */
+    pdf?: PdfFileInfo[];
   };
 };
 
@@ -153,6 +156,7 @@ export function buildRunView(runId: string): RunView | undefined {
             rowCount: file.profile.rowCount,
             columns: file.profile.columns.map((c) => c.name),
             remembered: Object.values(file.mapping.fields).every((f) => f.source === "remembered"),
+            pdf: store.getPdfInfo(run.id, slot.key),
             fields: slot.fields.map((f) => ({
               key: f.key,
               label: f.label,

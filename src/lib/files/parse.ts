@@ -1,21 +1,61 @@
 import ExcelJS from "exceljs";
 import Papa from "papaparse";
+import { extractPdf, PdfInputError, type PdfFileInfo, type PdfOptions } from "@/lib/pdf";
 
-export type ParsedTable = { headers: string[]; rows: string[][] };
+export type ParsedTable = {
+  headers: string[];
+  rows: string[][];
+  /** Set for PDFs: how each file was read, its statement/invoice details and pre-match checks. */
+  pdf?: PdfFileInfo[];
+};
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-export const SUPPORTED_EXTENSIONS = [".csv", ".tsv", ".txt", ".xlsx"];
+export const SUPPORTED_EXTENSIONS = [".csv", ".tsv", ".txt", ".xlsx", ".pdf"];
+/** Several files can go into one slot (e.g. a month of supplier invoices). */
+export const MAX_FILES_PER_SLOT = 50;
+export const SOURCE_FILE_COLUMN = "Source file";
 
 export class UnsupportedFileError extends Error {}
 
-export async function parseUpload(fileName: string, data: Uint8Array): Promise<ParsedTable> {
+export type ParseOptions = { pdf?: PdfOptions };
+
+export async function parseUpload(fileName: string, data: Uint8Array, options: ParseOptions = {}): Promise<ParsedTable> {
   const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf") || isPdf(data)) {
+    try {
+      const { headers, rows, info } = await extractPdf(fileName, data, options.pdf);
+      return { headers, rows, pdf: [info] };
+    } catch (error) {
+      if (error instanceof PdfInputError) throw new UnsupportedFileError(`${fileName}: ${error.message}`);
+      throw error;
+    }
+  }
   if (lower.endsWith(".xlsx")) return toTable(await readXlsx(data));
   if (lower.endsWith(".xls")) {
     throw new UnsupportedFileError("Old .xls files aren't supported yet. Save the file as .xlsx or .csv and upload again.");
   }
   if (SUPPORTED_EXTENSIONS.some((ext) => lower.endsWith(ext))) return toTable(readDelimited(decodeText(data)));
-  throw new UnsupportedFileError("Upload a CSV, TSV or Excel (.xlsx) file.");
+  throw new UnsupportedFileError("Upload a CSV, TSV, Excel (.xlsx) or PDF file.");
+}
+
+const isPdf = (data: Uint8Array) => data.length > 4 && data[0] === 0x25 && data[1] === 0x50 && data[2] === 0x44 && data[3] === 0x46;
+
+/**
+ * Several files into one slot become one table: columns are the union in first-seen order,
+ * with a "Source file" column first so every row can be traced back.
+ */
+export async function parseUploads(files: { name: string; data: Uint8Array }[], options: ParseOptions = {}): Promise<ParsedTable> {
+  if (files.length === 1) return parseUpload(files[0].name, files[0].data, options);
+  if (files.length > MAX_FILES_PER_SLOT) throw new UnsupportedFileError(`Upload up to ${MAX_FILES_PER_SLOT} files at once into one slot.`);
+  const tables = [];
+  for (const f of files) tables.push({ name: f.name, table: await parseUpload(f.name, f.data, options) });
+  const headers = [SOURCE_FILE_COLUMN, ...new Set(tables.flatMap((t) => t.table.headers))];
+  const rows = tables.flatMap(({ name, table }) => {
+    const at = headers.map((h) => table.headers.indexOf(h));
+    return table.rows.map((r) => headers.map((_, i) => (i === 0 ? name : at[i] >= 0 ? (r[at[i]] ?? "") : "")));
+  });
+  const pdf = tables.flatMap((t) => t.table.pdf ?? []);
+  return { headers, rows, ...(pdf.length ? { pdf } : {}) };
 }
 
 /** UTF-8 first; fall back to Windows-1256 (Arabic), which older GCC ERP exports often use. */
