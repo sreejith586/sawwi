@@ -67,11 +67,13 @@ export type Where = { field: string; pattern: string; negate?: boolean };
 
 /**
  * Declarative check rules the engine evaluates generically. Links are referenced by index.
+ * `value` on row-level rules is an expression for the money at risk on that row, for links
+ * whose side has no amount expression (e.g. goods received notes carry no prices).
  * A check without a rule is reported as "not automated yet", never silently passed.
  */
 export type CheckRule =
-  | { kind: "unmatched_left"; link: number; where?: Where }
-  | { kind: "unmatched_right"; link: number; where?: Where }
+  | { kind: "unmatched_left"; link: number; where?: Where; value?: string }
+  | { kind: "unmatched_right"; link: number; where?: Where; value?: string }
   | {
       kind: "compare";
       link: number;
@@ -83,10 +85,11 @@ export type CheckRule =
       leftWhere?: Where;
       rightWhere?: Where;
     }
-  | { kind: "duplicate"; link: number; side: "left" | "right" }
+  /** Same key twice on one side. `by` overrides the link keys (e.g. supplier + invoice no.). */
+  | { kind: "duplicate"; link: number; side: "left" | "right"; by?: string[] }
   | { kind: "multi_value"; link: number; side: "left" | "right"; field: string }
-  | { kind: "older_than"; link: number; field: string; days: number }
-  | { kind: "due_within"; link: number; field: string; days: number }
+  | { kind: "older_than"; link: number; field: string; days: number; value?: string }
+  | { kind: "due_within"; link: number; field: string; days: number; value?: string }
   | { kind: "row_match"; slot: string; where: Where }
   | { kind: "pair_match"; link: number; leftWhere: Where; rightWhere: Where }
   | { kind: "date_outside"; link: number; date: string; from: string; to: string }
@@ -94,7 +97,7 @@ export type CheckRule =
 
 export type Check = { id: string; label: string; description: string; rule?: CheckRule };
 
-export type TemplateGroup = "marketplace" | "webstore" | "b2b" | "payouts";
+export type TemplateGroup = "marketplace" | "webstore" | "b2b" | "purchasing" | "payouts";
 
 export type Template = {
   id: string;
@@ -111,6 +114,10 @@ export type Template = {
     requiresCreditTerms?: boolean;
     requiresB2B?: boolean;
     requiresMarketplaceFulfilment?: boolean;
+    /** Buys stock from suppliers against purchase orders. */
+    requiresSuppliers?: boolean;
+    /** Imports stock, so customs and freight forwarders are involved. */
+    requiresImports?: boolean;
   };
   /** Roles that usually own this reco; used for ranking. */
   roles: Role[];
@@ -126,6 +133,7 @@ export const GROUP_LABELS: Record<TemplateGroup, string> = {
   marketplace: "Marketplace seller",
   webstore: "Own webstore",
   b2b: "Direct B2B sales",
+  purchasing: "Purchasing & suppliers",
   payouts: "Payouts & bank",
 };
 

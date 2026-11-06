@@ -50,6 +50,57 @@ describe("date parsing", () => {
   });
 });
 
+describe("3-way match: PO vs GRN vs supplier invoice", () => {
+  const T = "p2p-three-way-match";
+  const result = run(T, [
+    ds(T, "po", [
+      { po_no: "PO-1", supplier: "Acme", sku: "A", qty_ordered: "10", po_price: "5.00", expected_date: "2026-10-01" },
+      { po_no: "PO-1", supplier: "Acme", sku: "B", qty_ordered: "4", po_price: "20.00", expected_date: "2026-10-01" },
+      { po_no: "PO-2", supplier: "Acme", sku: "C", qty_ordered: "6", po_price: "10.00", expected_date: "2026-10-05" },
+      { po_no: "PO-3", supplier: "Beta", sku: "D", qty_ordered: "3", po_price: "8.00", expected_date: "2026-10-01" },
+    ]),
+    ds(T, "grn", [
+      // A delivered in two parts, 1 unit rejected; B over-received; C short; D nothing received.
+      { grn_no: "G1", po_no: "po-1", sku: "A", qty_received: "6", grn_date: "2026-10-02" },
+      { grn_no: "G2", po_no: "PO-1", sku: "A", qty_received: "4", qty_rejected: "1", grn_date: "2026-10-04" },
+      { grn_no: "G3", po_no: "PO-1", sku: "B", qty_received: "5", grn_date: "2026-10-02" },
+      { grn_no: "G4", po_no: "PO-2", sku: "C", qty_received: "4", grn_date: "2026-10-06" },
+      { grn_no: "G5", po_no: "PO-9", sku: "Z", qty_received: "1", grn_date: "2026-10-06" },
+    ]),
+    ds(T, "invoices", [
+      { invoice_no: "INV-1", supplier: "Acme", po_no: "PO-1", sku: "A", qty_invoiced: "10", line_amount: "50.00", invoice_date: "2026-10-05" },
+      { invoice_no: "INV-1", supplier: "Acme", po_no: "PO-1", sku: "A", qty_invoiced: "10", line_amount: "50.00", invoice_date: "2026-10-05" },
+      { invoice_no: "INV-2", supplier: "Acme", po_no: "PO-1", sku: "B", qty_invoiced: "4", line_amount: "88.00", invoice_date: "2026-10-05" },
+      { invoice_no: "INV-3", supplier: "Beta", po_no: "PO-3", sku: "D", qty_invoiced: "3", line_amount: "24.00", invoice_date: "2026-10-06" },
+      { invoice_no: "INV-4", supplier: "Gamma", po_no: "PO-7", sku: "X", qty_invoiced: "1", line_amount: "15.00", invoice_date: "2026-10-06" },
+    ]),
+  ]);
+
+  it("holds invoices for goods that weren't received or exceed accepted quantity", () => {
+    expect(keysOf(result, "invoiced_not_received").sort()).toEqual(["PO-3 / D", "PO-7 / X"]);
+    expect(check(result, "invoiced_not_received").value).toBe(39);
+    // 20 invoiced (incl. a duplicate line) against 9 accepted (10 received − 1 rejected).
+    const over = result.exceptions.find((e) => e.check === "qty_over_received")!;
+    expect([over.key, over.leftValue, over.rightValue]).toEqual(["po-1 / A", 9, 20]);
+  });
+
+  it("checks billed amounts against the PO price, PO existence and duplicates", () => {
+    const price = result.exceptions.filter((e) => e.check === "price_above_po");
+    expect(price.map((e) => [e.key, e.diff])).toEqual([["PO-1 / B", 8]]);
+    expect(keysOf(result, "no_po")).toEqual(["PO-7 / X"]);
+    expect(keysOf(result, "duplicate_invoice")).toEqual(["Acme / INV-1 / A"]);
+  });
+
+  it("tracks the receiving side: GRNI, over/short receipts, unknown POs and overdue POs", () => {
+    expect(keysOf(result, "received_not_invoiced")).toEqual(["PO-2 / C", "PO-9 / Z"]);
+    expect(keysOf(result, "over_received")).toEqual(["PO-1 / B"]);
+    expect(keysOf(result, "short_received")).toEqual(["PO-2 / C"]);
+    expect(keysOf(result, "grn_no_po")).toEqual(["PO-9 / Z"]);
+    expect(keysOf(result, "overdue_po")).toEqual(["PO-3 / D"]);
+    expect(check(result, "overdue_po").value).toBe(24);
+  });
+});
+
 describe("orders vs gateway", () => {
   const T = "web-orders-vs-gateway";
   const result = run(T, [

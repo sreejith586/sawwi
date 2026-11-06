@@ -31,6 +31,10 @@ export type Profile = {
   payments: PaymentMethod[];
   b2bPayments: B2BPaymentMethod[];
   givesCreditTerms: boolean;
+  /** Buys stock from suppliers against purchase orders (3-way match). Optional: older profiles lack it. */
+  buysFromSuppliers?: boolean;
+  /** Imports stock through customs and freight forwarders. */
+  importsStock?: boolean;
 };
 
 export const PROFILE_COOKIE = "sawwi_profile";
@@ -95,6 +99,8 @@ export function parseProfile(raw: unknown): { profile?: Profile; errors: Profile
       payments,
       b2bPayments,
       givesCreditTerms: sellsDirectB2B && input.givesCreditTerms === true,
+      buysFromSuppliers: input.buysFromSuppliers === true,
+      importsStock: input.importsStock === true,
     },
   };
 }

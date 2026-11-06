@@ -21,9 +21,9 @@ const base: Profile = {
 const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
 
 describe("template catalogue", () => {
-  it("has 20 templates with unique ids", () => {
-    expect(TEMPLATES).toHaveLength(20);
-    expect(new Set(ids(TEMPLATES)).size).toBe(20);
+  it("has 23 templates with unique ids", () => {
+    expect(TEMPLATES).toHaveLength(23);
+    expect(new Set(ids(TEMPLATES)).size).toBe(23);
   });
 
   it("links only declared slots and fields", () => {
@@ -107,6 +107,18 @@ describe("recommendTemplates", () => {
     );
     expect(withCredit).toContain("b2b-customer-statement");
     expect(withCredit).toContain("b2b-pdc-clearing");
+  });
+
+  it("gates purchasing templates on the supplier and import answers, defaulting to no", () => {
+    const off = ids(recommendTemplates(TEMPLATES, base).recommended);
+    expect(off).not.toContain("p2p-three-way-match");
+    const buyer = ids(recommendTemplates(TEMPLATES, { ...base, buysFromSuppliers: true }).recommended);
+    expect(buyer).toContain("p2p-three-way-match");
+    expect(buyer).toContain("p2p-supplier-statement");
+    expect(buyer).not.toContain("p2p-import-landed-cost");
+    const importer = ids(recommendTemplates(TEMPLATES, { ...base, importsStock: true }).recommended);
+    expect(importer).toContain("p2p-import-landed-cost");
+    expect(parseProfile({ ...base }).profile?.buysFromSuppliers).toBe(false);
   });
 
   it("ranks templates owned by the user's role first", () => {

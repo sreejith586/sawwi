@@ -384,7 +384,7 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const side = rule.kind === "unmatched_left" ? "left" : "right";
       for (const r of side === "left" ? m.leftOnly : m.rightOnly) {
         if (!matches(r, rule.where)) continue;
-        const v = c.amountOfSide(rule.link, side, r);
+        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : c.amountOfSide(rule.link, side, r);
         c.push({
           link: rule.link,
           key: c.displayKey(link, r, side),
@@ -441,13 +441,16 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const field = (k: LinkKey) => (rule.side === "left" ? k.left : k.right);
       const groups = new Map<string, Rec[]>();
       for (const r of c.datasets.get(slot)!.rows) {
-        const k = link.keys.map((key) => normalizeKey(r.raw[field(key)] ?? "", key.normalize ?? [])).join("\u0001");
+        const k = rule.by
+          ? rule.by.map((f) => normalizeKey(r.raw[f] ?? "", ["trim", "upper", "strip_non_alnum"])).join("\u0001")
+          : link.keys.map((key) => normalizeKey(r.raw[field(key)] ?? "", key.normalize ?? [])).join("\u0001");
         if (k.replace(/\u0001/g, "")) groups.set(k, [...(groups.get(k) ?? []), r]);
       }
       for (const recs of groups.values()) {
         if (recs.length < 2) continue;
         const v = c.amountOfSide(rule.link, rule.side, recs[0]) ?? 0;
-        c.push({ link: rule.link, key: c.displayKey(link, recs[0], rule.side), [rule.side]: c.ref(slot, recs), value: v * (recs.length - 1), note: `Appears ${recs.length} times` });
+        const key = rule.by ? rule.by.map((f) => recs[0].raw[f]).filter(Boolean).join(" / ") : c.displayKey(link, recs[0], rule.side);
+        c.push({ link: rule.link, key, [rule.side]: c.ref(slot, recs), value: v * (recs.length - 1), note: `Appears ${recs.length} times` });
       }
       return;
     }
@@ -470,7 +473,7 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
         const ageDays = Math.floor((c.asOfMs - Date.parse(d)) / DAY);
         const hit = rule.kind === "older_than" ? ageDays >= rule.days : ageDays < 0 && -ageDays <= rule.days;
         if (!hit) continue;
-        const v = c.amountOfSide(rule.link, "left", r);
+        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : c.amountOfSide(rule.link, "left", r);
         c.push({
           link: rule.link,
           key: c.displayKey(link, r, "left"),

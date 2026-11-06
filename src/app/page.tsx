@@ -160,7 +160,7 @@ export default function LandingPage() {
           <SectionHeading
             eyebrow="Templates"
             title={`${TEMPLATES.length} reconciliations ready on day one`}
-            body="Marketplace, own webstore and direct B2B. Each one knows the files, the matching rules and the checks."
+            body="Marketplace, own webstore, direct B2B and purchasing. Each one knows the files, the matching rules and the checks."
           />
           <div className="mt-12 grid gap-6 md:grid-cols-2">
             {groups.map(([group, list]) => (

@@ -62,7 +62,7 @@ Templates, saved mappings and answers are stored per org. A user-created templat
 
 ## 4. Starter template catalogue (seeded)
 
-### v1 catalogue: GCC sellers/brands (Marketplace + Webstore + Direct B2B), 20 templates
+### v1 catalogue: GCC sellers/brands (Marketplace + Webstore + Direct B2B + Purchasing), 23 templates
 
 Perspective: a **seller/brand** selling on marketplaces and/or its own webstore in the GCC.
 Currencies: AED, SAR, KWD, QAR, BHD, OMR (multi-currency and FX are handled throughout).

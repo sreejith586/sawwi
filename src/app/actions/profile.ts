@@ -27,6 +27,8 @@ export async function saveProfile(_prev: SaveProfileState, formData: FormData): 
     payments: formData.getAll("payments"),
     b2bPayments: formData.getAll("b2bPayments"),
     givesCreditTerms: formData.get("givesCreditTerms") === "yes",
+    buysFromSuppliers: formData.get("buysFromSuppliers") === "yes",
+    importsStock: formData.get("importsStock") === "yes",
   });
   if (!profile) return { errors };
 

@@ -2,7 +2,7 @@ import type { Profile } from "@/lib/profile/profile";
 import type { Template } from "./types";
 
 export function isApplicable(template: Template, profile: Profile): boolean {
-  const { channels, payments, b2bPayments, requiresB2B, requiresMarketplaceFulfilment, requiresCreditTerms } =
+  const { channels, payments, b2bPayments, requiresB2B, requiresMarketplaceFulfilment, requiresCreditTerms, requiresSuppliers, requiresImports } =
     template.appliesTo;
   if (!channels.some((c) => profile.channels.includes(c))) return false;
   if (payments && !payments.some((p) => profile.payments.includes(p))) return false;
@@ -10,6 +10,9 @@ export function isApplicable(template: Template, profile: Profile): boolean {
   if (requiresB2B && !profile.sellsB2B) return false;
   if (requiresCreditTerms && !profile.givesCreditTerms) return false;
   if (requiresMarketplaceFulfilment && !profile.usesMarketplaceFulfilment) return false;
+  // Older workspace profiles predate these answers; missing means "no".
+  if (requiresSuppliers && !profile.buysFromSuppliers) return false;
+  if (requiresImports && !profile.importsStock) return false;
   return true;
 }
 

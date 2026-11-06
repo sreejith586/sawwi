@@ -41,6 +41,8 @@ const EMPTY: Draft = {
   payments: [],
   b2bPayments: [],
   givesCreditTerms: false,
+  buysFromSuppliers: false,
+  importsStock: false,
 };
 
 function validateStep(step: StepId, d: Draft): ProfileErrors {
@@ -71,7 +73,7 @@ export function OnboardingWizard({
   defaultCompany?: string;
   submitLabel?: string;
 }) {
-  const [draft, setDraft] = useState<Draft>(initial ?? { ...EMPTY, company: defaultCompany });
+  const [draft, setDraft] = useState<Draft>(initial ? { ...EMPTY, ...initial } : { ...EMPTY, company: defaultCompany });
   const [stepIndex, setStepIndex] = useState(0);
   const [localErrors, setLocalErrors] = useState<ProfileErrors>({});
   const [state, formAction, pending] = useActionState<SaveProfileState, FormData>(saveProfile, { errors: {} });
@@ -152,6 +154,12 @@ export function OnboardingWizard({
       <Step active={current === "channels"}>
         <Question title="Where do you sell?" hint="Pick all that apply.">
           <MultiChips name="channels" options={CHANNELS} value={draft.channels} onChange={(v) => set("channels", v)} error={errors.channels} />
+        </Question>
+        <Question title="Do you buy stock from suppliers with purchase orders?" hint="Adds 3-way matching: PO, goods received and supplier invoice.">
+          <YesNo name="buysFromSuppliers" value={draft.buysFromSuppliers ?? false} onChange={(v) => set("buysFromSuppliers", v)} />
+        </Question>
+        <Question title="Do you import stock (customs, freight forwarders)?">
+          <YesNo name="importsStock" value={draft.importsStock ?? false} onChange={(v) => set("importsStock", v)} />
         </Question>
       </Step>
 
