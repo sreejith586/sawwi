@@ -80,15 +80,15 @@ async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
 
       <section className="mt-10">
         <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold">Columns Sawwina looks for</h2>
-          <p className="text-xs text-muted">Names don&apos;t need to match. Sawwina maps them and remembers next time.</p>
+          <h2 className="text-sm font-semibold">Columns Sawwi looks for</h2>
+          <p className="text-xs text-muted">Names don&apos;t need to match. Sawwi maps them and remembers next time.</p>
         </div>
         <SpecTable templateId={template.id} rows={specRows(template)} />
       </section>
 
       <section className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div>
-          <h2 className="text-sm font-semibold">What Sawwina checks</h2>
+          <h2 className="text-sm font-semibold">What Sawwi checks</h2>
           <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-surface">
             {template.checks.map((c) => (
               <li key={c.id} className="flex gap-3 p-4">

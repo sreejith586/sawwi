@@ -17,7 +17,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/ma
   const bytes = await tableWorkbook({
     sheetName: `${slot.label} mapping`,
     columns: [
-      { header: "Sawwina field", key: "field" },
+      { header: "Sawwi field", key: "field" },
       { header: "Required", key: "required" },
       { header: `Column in ${slot.file.name}`, key: "column" },
       { header: "Status", key: "status" },

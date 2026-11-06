@@ -11,7 +11,7 @@ const NUMBER = "#,##0.##;[Red]-#,##0.##";
 
 export async function tableWorkbook(opts: { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] }): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Sawwina";
+  wb.creator = "Sawwi";
   const ws = wb.addWorksheet(opts.sheetName.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Sheet1");
 
   ws.columns = opts.columns.map((c) => {

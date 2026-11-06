@@ -1,4 +1,4 @@
-# Sawwina
+# Sawwi
 
 Reconciliation for e-commerce sellers in the GCC: marketplace sellers, own webstores (Shopify,
 Magento 1 & 2, WooCommerce, Salla, Zid) and companies selling directly to businesses.

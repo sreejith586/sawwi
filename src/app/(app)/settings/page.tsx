@@ -23,7 +23,7 @@ export default function SettingsPage() {
 
       <section id="profile" className="scroll-mt-20">
         <h2 className="text-sm font-semibold">Business profile</h2>
-        <p className="mt-0.5 text-sm text-muted">Sawwina uses this to pick the reconciliations that apply to you.</p>
+        <p className="mt-0.5 text-sm text-muted">Sawwi uses this to pick the reconciliations that apply to you.</p>
         <div className="mt-4 rounded-xl border border-border bg-surface p-5 sm:p-8">
           <Suspense fallback={<p className="text-muted">Loading…</p>}>
             <ProfileForm />

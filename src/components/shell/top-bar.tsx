@@ -27,15 +27,15 @@ export function TopBar() {
         </button>
         <Link href="/home" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight md:hidden">
           <span className="grid size-7 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-          Sawwina
+          Sawwi
         </Link>
         <button
           type="button"
           onClick={() => setChatOpen((o) => !o)}
           aria-expanded={chatOpen}
           className={`${iconButton} ml-auto ${chatOpen ? "bg-surface-muted text-foreground" : ""}`}
-          aria-label="Ask Sawwina"
-          title="Ask Sawwina"
+          aria-label="Ask Sawwi"
+          title="Ask Sawwi"
         >
           <ChatIcon />
         </button>
@@ -43,12 +43,12 @@ export function TopBar() {
 
       {chatOpen && (
         <aside
-          aria-label="Ask Sawwina"
+          aria-label="Ask Sawwi"
           className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-border bg-surface shadow-xl"
         >
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
             <ChatIcon className="size-4 text-muted" />
-            <h2 className="text-sm font-semibold">Ask Sawwina</h2>
+            <h2 className="text-sm font-semibold">Ask Sawwi</h2>
             <button type="button" onClick={() => setChatOpen(false)} className={`${iconButton} ml-auto`} aria-label="Close chat">
               <CloseIcon />
             </button>

@@ -284,7 +284,7 @@ function MappingTable({ runId, slot, busy, onRemap }: { runId: string; slot: Slo
   const columns: QueryColumn<MappingRow>[] = [
     {
       key: "field",
-      header: "Sawwina field",
+      header: "Sawwi field",
       render: (r) => (
         <span className="font-medium">
           {r.field}
@@ -424,7 +424,7 @@ function Chat({ view, busy, onAnswer }: { view: RunView; busy: boolean; onAnswer
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
         <span className="grid size-7 place-items-center rounded-full bg-accent text-xs font-bold text-accent-foreground">S</span>
         <div className="leading-tight">
-          <p className="text-sm font-semibold">Sawwina</p>
+          <p className="text-sm font-semibold">Sawwi</p>
           <p className="text-xs text-muted">{busy ? "Working…" : current ? "Waiting for your answer" : "Here to help"}</p>
         </div>
       </div>

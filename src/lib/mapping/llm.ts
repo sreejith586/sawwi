@@ -46,7 +46,7 @@ function buildGlossary(): string {
     .join("\n");
 }
 
-const SYSTEM_INSTRUCTIONS = `You map columns from a finance or operations export file onto Sawwina's canonical fields. Sawwina is a reconciliation tool for e-commerce sellers in the GCC: marketplace sellers (Amazon, Noon, Namshi and others), webstores (Shopify, Magento 1 and 2, WooCommerce, Salla, Zid) and companies selling directly to businesses. Files come from marketplaces, payment gateways, BNPL providers, couriers, banks and ERPs (Odoo, Zoho Books, SAP Business One, Dynamics, NetSuite, QuickBooks, Tally). Headers may be in English or Arabic, abbreviated, or vendor-specific.
+const SYSTEM_INSTRUCTIONS = `You map columns from a finance or operations export file onto Sawwi's canonical fields. Sawwi is a reconciliation tool for e-commerce sellers in the GCC: marketplace sellers (Amazon, Noon, Namshi and others), webstores (Shopify, Magento 1 and 2, WooCommerce, Salla, Zid) and companies selling directly to businesses. Files come from marketplaces, payment gateways, BNPL providers, couriers, banks and ERPs (Odoo, Zoho Books, SAP Business One, Dynamics, NetSuite, QuickBooks, Tally). Headers may be in English or Arabic, abbreviated, or vendor-specific.
 
 You will receive the canonical fields that still need a column, and a profile of every column in the file: its header, inferred kind (number, date, id, text, empty), fill rate and up to five sample values.
 

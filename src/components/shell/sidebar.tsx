@@ -94,7 +94,7 @@ export function Sidebar({ nav, footer }: { nav: ReactNode; footer: ReactNode }) 
         <div className="flex h-14 shrink-0 items-center gap-2 px-3 collapsed:justify-center collapsed:px-0">
           <Link href="/home" className="flex min-w-0 items-center gap-2 text-[15px] font-semibold tracking-tight collapsed:hidden">
             <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-            Sawwina
+            Sawwi
           </Link>
           <button
             type="button"

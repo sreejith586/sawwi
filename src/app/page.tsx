@@ -10,7 +10,7 @@ import { TEMPLATES } from "@/lib/templates/catalog";
 import { GROUP_LABELS, type TemplateGroup } from "@/lib/templates/types";
 
 export const metadata: Metadata = {
-  title: { absolute: "Sawwina · Reconciliation for GCC e-commerce sellers" },
+  title: { absolute: "Sawwi · Reconciliation for GCC e-commerce sellers" },
   description:
     "Match marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices in minutes. Built for sellers in the UAE, Saudi Arabia and the GCC.",
 };
@@ -23,17 +23,17 @@ const CHANNELS = ["Amazon.ae", "Amazon.sa", "Noon", "Namshi", "Trendyol", "Shopi
 const FEATURES = [
   {
     title: "Templates for the reconciliations you actually do",
-    body: "Marketplace settlements, gateway payouts, COD remittances, BNPL, customer statements, post-dated cheques. Pick one and Sawwina knows which files it needs and what to check.",
+    body: "Marketplace settlements, gateway payouts, COD remittances, BNPL, customer statements, post-dated cheques. Pick one and Sawwi knows which files it needs and what to check.",
     icon: "M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 11h5v5h-5z",
   },
   {
     title: "Upload any export as it is",
-    body: "CSV or Excel straight from Seller Central, Shopify, your bank or your ERP. Sawwina maps the columns for you and remembers the layout next time.",
+    body: "CSV or Excel straight from Seller Central, Shopify, your bank or your ERP. Sawwi maps the columns for you and remembers the layout next time.",
     icon: "M10 13V4M6.5 7.5 10 4l3.5 3.5M4 13v2.5h12V13",
   },
   {
     title: "One-click questions, not settings screens",
-    body: "When something is ambiguous (is 03/04 March or April? which column is the order ID?) Sawwina asks once, with buttons, and never asks again.",
+    body: "When something is ambiguous (is 03/04 March or April? which column is the order ID?) Sawwi asks once, with buttons, and never asks again.",
     icon: "M4.5 4h11A1.5 1.5 0 0 1 17 5.5v7a1.5 1.5 0 0 1-1.5 1.5H9l-3.5 2.5V14h-1A1.5 1.5 0 0 1 3 12.5v-7A1.5 1.5 0 0 1 4.5 4Z",
   },
   {
@@ -54,7 +54,7 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { title: "Pick a template", body: "Sawwina suggests the reconciliations that fit how you sell, from a two-minute setup." },
+  { title: "Pick a template", body: "Sawwi suggests the reconciliations that fit how you sell, from a two-minute setup." },
   { title: "Drop in your files", body: "Columns are mapped automatically. Answer a couple of one-click questions if anything is unclear." },
   { title: "Work the exceptions", body: "See matched, short and missing items with amounts in AED or SAR, and export the list to Excel." },
 ];
@@ -84,7 +84,7 @@ export default function LandingPage() {
               Know where every dirham of your sales went.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-muted">
-              Sawwina reconciles marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices in
+              Sawwi reconciles marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices in
               minutes, and shows you exactly what&apos;s missing.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -187,7 +187,7 @@ export default function LandingPage() {
       <section className="border-y border-border bg-surface">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 sm:px-6 md:grid-cols-3">
           {[
-            { title: "Your numbers stay yours", body: "AI only sees column headers and a few sample values to map a file. Matching runs on Sawwina's own engine." },
+            { title: "Your numbers stay yours", body: "AI only sees column headers and a few sample values to map a file. Matching runs on Sawwi's own engine." },
             { title: "Same answer every time", body: "Rules are deterministic, so a re-run on the same files gives the same report: easy to review and audit." },
             { title: "GCC-ready", body: "VAT at 5% and 15%, AED, SAR and other GCC currencies, cash on delivery, Tabby and Tamara built in." },
           ].map((t) => (
@@ -227,7 +227,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
           <span className="flex items-center gap-2">
             <span className="grid size-6 place-items-center rounded-md bg-accent text-[11px] font-bold text-accent-foreground">S</span>
-            Sawwina
+            Sawwi
           </span>
           <nav className="flex gap-5">
             <a href="#features" className="hover:text-foreground">

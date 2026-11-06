@@ -11,7 +11,7 @@ export async function checkoutBlocker(plan: string): Promise<string | undefined>
   if (!session) return "Log in to subscribe.";
   if (!canManageTeam(session.access)) return "Only workspace owners and admins can change the plan.";
   if (!PAID_PLANS.includes(plan as PaidPlan)) return "This plan can't be bought online. Talk to us instead.";
-  if (!getSettings().paywallEnabled) return "Paid plans aren't open yet. Sawwina is free during early access.";
+  if (!getSettings().paywallEnabled) return "Paid plans aren't open yet. Sawwi is free during early access.";
   if (!checkoutReady(plan as PaidPlan)) return "Card payments aren't set up yet.";
   if (session.org.subscriptionStatus && KEEPS_ACCESS.has(session.org.subscriptionStatus)) {
     return "This workspace already has a subscription. Use Manage billing to change plan.";

@@ -59,7 +59,7 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
             <p className="mt-1 text-xl font-semibold tracking-tight">{plan.name}</p>
             <p className="mt-1 text-sm text-muted">
               {!settings.paywallEnabled
-                ? "Sawwina is free during early access. Plan limits aren't enforced yet."
+                ? "Sawwi is free during early access. Plan limits aren't enforced yet."
                 : plan.id === "trial"
                   ? `Trial ${trialOver(org.trialEndsAt) ? "ended" : "ends"} ${day(org.trialEndsAt)}.`
                   : plan.price}

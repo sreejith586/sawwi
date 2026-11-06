@@ -22,7 +22,7 @@ export const PLANS: Plan[] = [
     id: "trial",
     name: "Free trial",
     price: "Free",
-    blurb: "Everything in Growth while you try Sawwina.",
+    blurb: "Everything in Growth while you try Sawwi.",
     runsPerMonth: 50,
     members: 5,
     features: ["All templates", "Excel exports", "Up to 5 teammates"],

@@ -117,7 +117,7 @@ export async function buildWorkbook(
   datasets?: Map<string, Dataset>,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Sawwina";
+  wb.creator = "Sawwi";
   wb.created = new Date(report.ranAt);
   if (table === "checks" || table === "all") addChecks(wb, report, table === "all" ? {} : query);
   if (table === "exceptions" || table === "all") addExceptions(wb, report, table === "all" ? {} : query, datasets);

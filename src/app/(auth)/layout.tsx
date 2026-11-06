@@ -1,7 +1,7 @@
 import { Logo } from "@/components/marketing/header";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-// Sign-up and log-in: form on the left, a short reminder of what Sawwina does on the right.
+// Sign-up and log-in: form on the left, a short reminder of what Sawwi does on the right.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1fr_minmax(0,0.9fr)]">
@@ -15,7 +15,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </main>
       </div>
       <aside className="hidden border-l border-border bg-surface lg:flex lg:flex-col lg:justify-center lg:px-14">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Why teams use Sawwina</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Why teams use Sawwi</p>
         <ul className="mt-6 space-y-6">
           {[
             ["Every payout accounted for", "Match marketplace, gateway, COD and B2B payments against orders and invoices."],

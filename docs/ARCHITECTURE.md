@@ -1,6 +1,6 @@
-# Sawwina — Product & Architecture Plan
+# Sawwi — Product & Architecture Plan
 
-Sawwina is a reconciliation platform for finance, operations and logistics teams across verticals
+Sawwi is a reconciliation platform for finance, operations and logistics teams across verticals
 (E-commerce, Trading, Manufacturing, FMCG, Logistics). You upload files, answer a few one-click
 questions, and get back a reconciliation report, an analysis of it, and suggested follow-up actions.
 
@@ -16,13 +16,13 @@ questions, and get back a reconciliation report, an analysis of it, and suggeste
 2. **Template gallery**: shows the recos that apply to that profile, ranked by industry and role.
 3. **Run a template**: the template lists the source slots it needs (e.g. "Marketplace settlement
    report", "Sales invoice register"). The user drops files into those slots.
-4. **Clarify**: Sawwina profiles the files and asks only what it could not work out, using yes/no
+4. **Clarify**: Sawwi profiles the files and asks only what it could not work out, using yes/no
    and single-select chips (e.g. "Is `Ord_Ref` the same as `Order ID`?  [Yes] [No]").
 5. **Run**: the deterministic engine does the matching, and the LLM writes the narrative.
 6. **Report and chat**: you get matched, unmatched and partial results, the variances and the root
    causes. Follow-up chips include "Draft email to marketplace", "Raise debit note list",
    "Export exceptions" and "Re-run with tolerance ±₹1".
-7. **No template fits**: Sawwina asks 3–5 chip questions (what is being compared, the key and amount
+7. **No template fits**: Sawwi asks 3–5 chip questions (what is being compared, the key and amount
    fields, the tolerance), shows a generic two-source form, and offers to **save it as a template**.
 
 ## 2. Core principle: the LLM never matches rows
@@ -142,11 +142,11 @@ in layers. The cheapest one comes first:
    for this org and template, we reuse the saved mapping and skip both the mapping and questions steps.
    Repeat runs should usually make **zero** LLM calls before the report.
 2. **Answer memory.** Every clarification answer is saved against (org, template, fingerprint), so
-   Sawwina never asks the same question twice. Answers act as rules the next time.
+   Sawwi never asks the same question twice. Answers act as rules the next time.
 3. **Exception-reason cache.** We normalise exception patterns (e.g. "settlement short by exactly
    commission delta on category X") and cache the reason classification. Only new patterns go to the LLM.
 4. **Anthropic prompt caching** for the calls that remain. Prompts are ordered *most static → most dynamic*:
-   `tools` → system prompt (Sawwina persona + reco rules) → template spec + glossary → org profile and
+   `tools` → system prompt (Sawwi persona + reco rules) → template spec + glossary → org profile and
    saved mappings → **cache breakpoint** → this run's summary stats → user turn.
    Use the 1-hour cache TTL for chat sessions and bursty month-end runs. Chat history grows by
    appending only, so each turn reads the earlier turns from cache.

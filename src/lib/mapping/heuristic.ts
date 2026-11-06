@@ -6,7 +6,7 @@ export type Candidate = { field: string; column: string; score: number };
 
 /** Above this, a heuristic match is accepted without asking. */
 export const AUTO_ACCEPT = 0.85;
-/** Between this and AUTO_ACCEPT, Sawwina asks a yes/no confirmation. */
+/** Between this and AUTO_ACCEPT, Sawwi asks a yes/no confirmation. */
 export const CONFIRM_FLOOR = 0.55;
 
 function bigrams(s: string): string[] {
