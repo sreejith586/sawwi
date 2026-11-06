@@ -186,7 +186,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–4 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8) are built and in review.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
 
 Phase 4 (`src/lib/insights/`):
 - **Analysis above the report.** Claude Sonnet 5.5 writes a headline, up to four findings and three next steps from a digest (`digestText`: totals, per-check counts/values and the 8 largest exceptions by key, never rows). Fetched after the report renders, then cached per result in `run_narratives`, so re-opening a run costs nothing. No API key, or a viewer opening an uncached run: the rule-based summary (`ruleNarrative`), not cached so a later key still writes one.

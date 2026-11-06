@@ -12,7 +12,7 @@ _Updated in every commit. Newest first within each section._
 | — | UI refresh, sidebar, theme switch, accounts, workspaces, paywall, Stripe | Done (965a8b5 → cddff64) |
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
-| 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Built, in review (#4, `phase-5-pdf-inputs`) |
+| 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Not started |
 
 ## In flight
@@ -20,12 +20,11 @@ _Updated in every commit. Newest first within each section._
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
 | PDF inputs plan (D-20, §8 planned) | `docs/plan-pdf-inputs` | #3 | Phase 4 session |
-| Phase 5: PDF inputs | `phase-5-pdf-inputs` (worktree) | #4 | Phase 5 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Phase 5, PDF inputs** (D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Password-protected PDFs are refused with a message. 25 new tests with synthetic fixture PDFs (golden tables for text PDFs, key fields for OCR).
+- **Phase 5, PDF inputs (#4, bd5c07c), merged** (plan D-20; build D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Password-protected PDFs are refused with a message. 25 new tests with synthetic fixture PDFs (golden tables for text PDFs, key fields for OCR).
 - **Scanned PDFs: local OCR** (D-24, the user's decision on D-20): image-only pages (up to 20) are OCR'd on the server with `tesseract.js` (English + Arabic, bundled language data, nothing sent out). The OCR text goes through the same table reader, layout memory and checks; OCR files are marked (confidence, low-confidence rows) and a scan with nothing to check against holds the run.
 - **Phase 4 (#2, 285587a):** merged.
   - An analysis above each report, written by Sonnet from a digest of totals, per-check counts and the 8 largest exceptions. It is cached per result and falls back to a rule-based summary.
@@ -43,7 +42,8 @@ _Updated in every commit. Newest first within each section._
 ## Next
 
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
-2. Review and merge Phase 5 (PDF inputs, #4). Then test it on real anonymised statements and invoices, text and scanned.
+2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
+3. Phase 6 planning: usage/cost dashboard, scheduled runs, connectors.
 
 ## Open questions
 
