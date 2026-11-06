@@ -29,7 +29,7 @@
 
 /*
  * Dark theme. The inline script in layout.tsx sets data-theme on <html> before first
- * paint: the user's saved choice, otherwise the system setting.
+ * paint: the user's saved choice, otherwise (the "System" option) the OS setting.
  */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -53,6 +53,15 @@
   --danger-soft: #3d1410;
   --info: #53b1fd;
   --info-soft: #0f2547;
+}
+
+/* Theme switch: the picked segment follows data-theme-pref, so it's right before hydration. */
+:root[data-theme-pref="light"] .theme-option[data-theme-option="light"],
+:root[data-theme-pref="system"] .theme-option[data-theme-option="system"],
+:root[data-theme-pref="dark"] .theme-option[data-theme-option="dark"] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.06);
 }
 
 @theme inline {

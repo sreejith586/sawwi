@@ -51,7 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <NavLink href="/templates">Templates</NavLink>
               </Suspense>
             </nav>
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex items-center gap-2">
               <ThemeToggle />
               <Suspense fallback={null}>
                 <ProfileBadge />
