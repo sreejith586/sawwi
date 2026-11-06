@@ -228,7 +228,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
   const question = store.getQuestions(run.id).find((q) => q.id === questionId);
   if (!question || question.answer !== null) throw new RunInputError("That question was already answered.");
 
-  const view = presentQuestion(question.payload, template, question.slotKey);
+  const view = presentQuestion(question.payload, template, question.slotKey, store.getRunFiles(run.id).find((f) => f.slotKey === question.slotKey));
   const option = view.options.find((o) => o.value === answer);
   if (!option) throw new RunInputError("Pick one of the offered answers.");
 
@@ -279,10 +279,44 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       mapping.currency = answer;
     }
 
+    retargetStaleConfirms(run, template, file);
     store.updateRunFileMapping(run.id, file.slotKey, mapping);
   }
 
   afterChange(run, template);
+}
+
+/** Columns already mapped to other fields of this file: a column holds one field only. */
+export function takenColumns(file: RunFile | undefined, field: string): Set<string> {
+  if (!file) return new Set();
+  return new Set(
+    Object.entries(file.mapping.fields)
+      .filter(([k, m]) => k !== field && m.column)
+      .map(([, m]) => m.column!),
+  );
+}
+
+/**
+ * Questions are created up front, so a later answer can take a column an open question still
+ * proposes ("Is Credit Amt the key?" after Credit Amt became the amount). Those become a fresh
+ * "Which column…?" question instead of offering a column that's no longer free.
+ */
+function retargetStaleConfirms(run: Run, template: Template, file: RunFile) {
+  const slot = requireSlot(template, file.slotKey);
+  for (const q of store.getQuestions(run.id)) {
+    if (q.answer !== null || q.slotKey !== file.slotKey || q.payload.kind !== "confirm_column") continue;
+    const p = q.payload;
+    if (!takenColumns(file, p.field).has(p.column)) continue;
+    const field = slot.fields.find((f) => f.key === p.field);
+    store.deleteQuestion(q.id);
+    if (field) {
+      store.addQuestion(run.id, file.slotKey, {
+        kind: "choose_column",
+        field: p.field,
+        options: columnOptions(field, file.profile, file.mapping.fields, [p.column], template.confirmColumns),
+      });
+    }
+  }
 }
 
 /** Lets the user correct any field from the mapping table. */
@@ -408,9 +442,21 @@ export function computeStatus(template: Template, files: RunFile[], questions: {
 
 // ─── Presentation ─────────────────────────────────────────────────────────
 
+function freeOptions(fieldKey: string, options: string[], slot: SourceSlot | undefined, file: RunFile | undefined, template: Template): string[] {
+  const taken = takenColumns(file, fieldKey);
+  const free = options.filter((c) => !taken.has(c));
+  const field = slot?.fields.find((f) => f.key === fieldKey);
+  if (free.length || !file || !field) return free;
+  return columnOptions(field, file.profile, file.mapping.fields, [], template.confirmColumns);
+}
+
 export type QuestionView = { prompt: string; options: { value: string; label: string }[] };
 
-export function presentQuestion(p: QuestionPayload, template: Template, slotKey: string | null): QuestionView {
+/**
+ * `file` is the slot's current file: "Which column…?" options drop columns that other answers have
+ * taken since the question was asked, and fall back to fresh suggestions if none are left.
+ */
+export function presentQuestion(p: QuestionPayload, template: Template, slotKey: string | null, file?: RunFile): QuestionView {
   const slot = slotKey ? template.sources.find((s) => s.key === slotKey) : undefined;
   const label = (field: string) => slot?.fields.find((f) => f.key === field)?.label ?? field;
   const yesNo = [
@@ -423,7 +469,7 @@ export function presentQuestion(p: QuestionPayload, template: Template, slotKey:
     case "choose_column":
       return {
         prompt: `Which column in your ${slot?.label ?? "file"} holds the ${label(p.field)}?`,
-        options: [...p.options.map((c) => ({ value: c, label: c })), { value: NONE_OPTION, label: "It's not in this file" }],
+        options: [...freeOptions(p.field, p.options, slot, file, template).map((c) => ({ value: c, label: c })), { value: NONE_OPTION, label: "It's not in this file" }],
       };
     case "date_format":
       return {

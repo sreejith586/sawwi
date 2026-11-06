@@ -30,6 +30,7 @@ _Updated in every commit. Newest first within each section._
   - New tables `run_narratives` and `custom_templates`, plus `messages.payload_json`. 75 tests.
   - Decisions D-15 to D-19.
   - Fix: the custom reco no longer proposes a free-text column (e.g. a bank "Narrative") as the matching key. Identifier-like columns win, and "txn ref" / "transaction ref" are now known reference headers.
+  - Fix (all templates): "Which column…?" chips no longer offer a column that a later answer has already taken. An open "Is X the …?" question whose X has since been taken becomes a fresh "Which column…?" question.
 - **PR process (#1, 62052b3):** merged. `main` is branch-protected and CI must pass.
 - **Process:** PR-based workflow, CI, PR template and living docs (`CLAUDE.md`, `docs/PROCESS.md`, `docs/DECISIONS.md`, this file).
 - **Purchasing templates (65d80c0):** "Purchasing & suppliers" group with 3 templates (23 in total). Onboarding now asks "buy from suppliers on POs?" and "import stock?". Engine: `value` expression on row rules, and `by` fields on duplicate checks.
@@ -50,4 +51,3 @@ _Updated in every commit. Newest first within each section._
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
 - "Value at risk" adds quantity differences into money totals for quantity checks (D-13).
-- A "which column" chip can list a column that a later answer has already taken. This is long-standing engine behaviour, now more visible because custom recos ask more chips.

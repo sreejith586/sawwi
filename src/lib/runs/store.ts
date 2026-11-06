@@ -86,6 +86,10 @@ export function addQuestion(runId: string, slotKey: string | null, payload: Ques
   return q;
 }
 
+export function deleteQuestion(id: string) {
+  getDb().prepare("DELETE FROM questions WHERE id = ? AND answer_json IS NULL").run(id);
+}
+
 /** Drops unanswered questions for a slot, e.g. when the user replaces its file. */
 export function deleteOpenQuestions(runId: string, slotKey: string) {
   getDb().prepare("DELETE FROM questions WHERE run_id = ? AND slot_key = ? AND answer_json IS NULL").run(runId, slotKey);

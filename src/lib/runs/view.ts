@@ -167,7 +167,7 @@ export function buildRunView(runId: string): RunView | undefined {
     messages: store.getMessages(run.id),
     openQuestions: questions
       .filter((q) => q.answer === null)
-      .map((q) => ({ id: q.id, ...presentQuestion(q.payload, template, q.slotKey) })),
+      .map((q) => ({ id: q.id, ...presentQuestion(q.payload, template, q.slotKey, files.find((f) => f.slotKey === q.slotKey)) })),
     usage: store.getUsage(run.id),
     report: result ? buildReport(template, result) : undefined,
     insights: result ? buildInsights(template, result, files) : undefined,

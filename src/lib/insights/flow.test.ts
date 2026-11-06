@@ -150,6 +150,42 @@ describe("custom reconciliation, chat and save-as-template", () => {
     else expect(q.kind === "choose_column" && q.options[0]).toBe("Bank Ref");
   });
 
+  it("never offers a column that a later answer has already taken", async () => {
+    const run = store.createRun("stale-chip-co", GENERIC_TEMPLATE_ID);
+    await ingestFile(run, "left", "bank.csv", bank, ctx);
+    const open = () => store.getQuestions(run.id).filter((q) => q.answer === null);
+    const find = (kind: string, field: string) => open().find((q) => q.payload.kind === kind && "field" in q.payload && q.payload.field === field)!;
+    const shown = (id: string) => buildRunView(run.id)!.openQuestions.find((q) => q.id === id)!.options.map((o) => o.value);
+
+    // Reject the key guess while the amount is still unconfirmed: the follow-up lists Credit Amt.
+    answerQuestion(store.getRun(run.id)!, find("confirm_column", "reference").id, "no");
+    const chooseKey = find("choose_column", "reference");
+    expect(chooseKey.payload.kind === "choose_column" && chooseKey.payload.options).toContain("Credit Amt");
+
+    // Credit Amt becomes the amount: the key chips no longer offer it, and picking it is refused.
+    answerQuestion(store.getRun(run.id)!, find("confirm_column", "amount").id, "yes");
+    expect(shown(chooseKey.id)).not.toContain("Credit Amt");
+    expect(shown(chooseKey.id)).toContain("Narrative");
+    expect(() => answerQuestion(store.getRun(run.id)!, chooseKey.id, "Credit Amt")).toThrow(/offered answers/);
+  });
+
+  it("turns an open 'Is X the key?' into a fresh choice once X is taken", async () => {
+    const run = store.createRun("stale-chip-co", GENERIC_TEMPLATE_ID);
+    await ingestFile(run, "left", "bank.csv", bank, ctx);
+    const open = () => store.getQuestions(run.id).filter((q) => q.answer === null);
+    const find = (kind: string, field: string) => open().find((q) => q.payload.kind === kind && "field" in q.payload && q.payload.field === field);
+
+    expect(find("confirm_column", "amount")?.payload).toMatchObject({ column: "Credit Amt" });
+    // Reject the key guess and (oddly) pick Credit Amt as the key while "Is Credit Amt the amount?" is open.
+    answerQuestion(store.getRun(run.id)!, find("confirm_column", "reference")!.id, "no");
+    answerQuestion(store.getRun(run.id)!, find("choose_column", "reference")!.id, "Credit Amt");
+
+    expect(find("confirm_column", "amount")).toBeUndefined();
+    const chooseAmount = find("choose_column", "amount")!;
+    expect(chooseAmount.payload.kind === "choose_column" && chooseAmount.payload.options).not.toContain("Credit Amt");
+    expect(open().filter((q) => "field" in q.payload && q.payload.field === "amount")).toHaveLength(1);
+  });
+
   it("refuses chat before there is a result", async () => {
     const run = store.createRun("acme", GENERIC_TEMPLATE_ID);
     await expect(chat(run, { kind: "fix_first" }, "Acme")).rejects.toBeInstanceOf(ChatInputError);
