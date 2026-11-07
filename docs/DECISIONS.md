@@ -435,12 +435,12 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Dropping `sawwi.hypermaxsolutions.com`: links already shared would break.
 - **Consequences:** users signed in on the old address sign in once more on `sawwiapp.ai`. The domain redirects and `APP_URL` are set by the user in Vercel; the code default only matters where `APP_URL` is unset.
 
-### D-44: Logo: two sheets, the front one ticked, with a "sawwiapp" wordmark
+### D-48: Logo: two sheets, the front one ticked, with a "sawwiapp" wordmark
 - **Context:** the app showed a black square with an "S" as its logo, plus Next's default favicon. A Saudi company trades as "Sawwi" at sawwi.ai (D-12). Its logo is a blue four-point star, and its "Sawwi" wordmark draws the "ww" as one joined stroke. Our address is sawwiapp.ai (D-43), so the logo has to be clearly different from theirs.
 - **Decision:**
   - **Mark:** two rounded sheets, with the front one ticked, standing for two files, reconciled. It sits on a rounded tile. Chosen by the user from several concepts.
   - **Wordmark:** lowercase `sawwiapp` in Geist, with "app" in the brand colour, matching the domain. The letters are plain, with no stylised "ww".
-  - **Colour:** emerald (`#0e7c66` in light mode, `#2bbf95` in dark mode). It's a different shade from the success green, so it never reads as a status. Where else it appears is set in D-45.
+  - **Colour:** emerald (`#0e7c66` in light mode, `#2bbf95` in dark mode). It's a different shade from the success green, so it never reads as a status. Where else it appears is set in D-49.
   - **Theme:** the mark's colours are tokens (`--brand`, `--logo-*` in `globals.css`). The tile is dark on light pages and light on dark pages.
   - **Files:** `src/components/brand/logo.tsx` (`LogoMark`, `Wordmark`, `LogoLockup`) is used in the marketing header, footer, auth and checkout pages, onboarding, sidebar and phone top bar. `src/app/icon.svg`, `apple-icon.png` and `favicon.ico` (16/32/48) use the dark tile.
   - Product copy still says "Sawwi" ("Open Sawwi", "Ask Sawwi", page titles). Only the logo lockup says "sawwiapp".
@@ -450,8 +450,8 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Balance tick and merge tick: offered; the user picked the two sheets.
 - **Consequences:** the two-sheet mark is close to generic "copy" and "done" icons, so the tile, colours and wordmark carry most of the recognition. Always show the mark on its tile. The trademark question in D-12 stays open; a distinct logo lowers the risk of confusion but doesn't settle it.
 
-### D-45: The brand emerald as a quiet accent across the app
-- **Context:** after D-44 the user asked for the brand colours to be used "smart and subtle" across the app pages. D-9 kept the chrome neutral (near-black and white) and kept colour for meaning (danger, warn, info, success).
+### D-49: The brand emerald as a quiet accent across the app
+- **Context:** after D-48 the user asked for the brand colours to be used "smart and subtle" across the app pages. D-9 kept the chrome neutral (near-black and white) and kept colour for meaning (danger, warn, info, success).
 - **Decision:** emerald marks the main call to action, focus, selection and "where you are". It never marks a value or a status.
   - Tokens: `--brand`, `--brand-strong` (hover), `--brand-soft` (a pale tint), `--on-brand` (text on the solid), with matching Tailwind colours.
   - **Call-to-action buttons are emerald**, at the user's request: `buttonClass("primary")`, the sidebar's "New reconciliation" button and the chat's Send button. Secondary buttons stay neutral.

@@ -1,4 +1,4 @@
-// The Sawwi logo (D-44): two sheets, the front one ticked. Two files, reconciled.
+// The Sawwi logo (D-48): two sheets, the front one ticked. Two files, reconciled.
 // Colours come from the --logo-* tokens in globals.css, so the mark follows the theme:
 // a dark tile on light pages and a light tile on dark pages. The app icons in src/app
 // (icon.svg, apple-icon.png, favicon.ico) are the same drawing on the dark tile.

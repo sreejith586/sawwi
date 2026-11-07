@@ -1,4 +1,4 @@
-// Shared button styles: primary is the brand emerald (D-45), secondary stays neutral.
+// Shared button styles: primary is the brand emerald (D-49), secondary stays neutral.
 export function buttonClass(variant: "primary" | "secondary" = "primary") {
   const base =
     "inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors " +

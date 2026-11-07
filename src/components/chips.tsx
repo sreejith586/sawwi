@@ -8,7 +8,7 @@ type BaseProps<T extends string> = {
   error?: string;
 };
 
-// Selection shows as a brand outline, a soft brand tint and a check mark (D-45).
+// Selection shows as a brand outline, a soft brand tint and a check mark (D-49).
 const chipClass =
   "group relative flex cursor-pointer flex-col rounded-lg border border-border bg-surface py-2.5 pl-3.5 pr-8 text-sm shadow-sm transition " +
   "hover:border-foreground/30 hover:bg-surface-muted/60 " +

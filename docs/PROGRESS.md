@@ -22,16 +22,16 @@ _Updated in every commit. Newest first within each section._
 | --- | --- | --- | --- |
 | Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | #23 | Stripe setup session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
-| New logo, app icons and brand accents (D-44, D-45) | `feature/sawwiapp-logo` | — | Logo session |
+| New logo, app icons and brand accents (D-48, D-49) | `feature/sawwiapp-logo` | — | Logo session |
 
 ## Recent changes
 
-- **New logo and app icons** (D-44, `feature/sawwiapp-logo`).
+- **New logo and app icons** (D-48, `feature/sawwiapp-logo`).
   - The mark is two sheets, with the front one ticked, on a theme-aware tile, next to a `sawwiapp` wordmark. It replaces the black "S" square in the marketing header, footer, auth, checkout, onboarding, sidebar and phone top bar.
   - New `favicon.ico`, `icon.svg` and `apple-icon.png` replace Next's default favicon.
   - The logo is kept clearly apart from sawwi.ai's blue star and joined "ww" wordmark.
 - **Dropdowns** (same branch): every select gets its own chevron, inset 10px from the right edge, with 32px of right padding so text never runs under it (`globals.css`).
-- **Brand emerald as a quiet accent** (D-45, same branch): focus rings, text selection, selected chips, the active sidebar item, progress markers, landing-page eyebrows and feature icons. Primary (call-to-action) buttons are emerald; the landing page's bottom CTA band stays black. Secondary buttons and status colours are unchanged.
+- **Brand emerald as a quiet accent** (D-49, same branch): focus rings, text selection, selected chips, the active sidebar item, progress markers, landing-page eyebrows and feature icons. Primary (call-to-action) buttons are emerald; the landing page's bottom CTA band stays black. Secondary buttons and status colours are unchanged.
 
 - **Primary domain `sawwiapp.ai`** (D-43, #23).
   - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.

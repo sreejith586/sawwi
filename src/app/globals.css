@@ -27,7 +27,7 @@
   --info-soft: #eff8ff;
   /* Single-series chart marks (validated: lightness band and 3:1 vs surface, both themes). */
   --chart-1: #175cd3;
-  /* Brand emerald (D-44, D-45): the logo plus a few quiet accents (focus, selection, active state). Never a status. */
+  /* Brand emerald (D-48, D-49): the logo plus a few quiet accents (focus, selection, active state). Never a status. */
   --brand: #0e7c66;
   --brand-strong: #0a6453;
   --brand-soft: #e8f5f0;
