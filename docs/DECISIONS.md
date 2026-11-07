@@ -174,3 +174,23 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - **Admin username and password tokens** (`integration/admin/token`): they'd hold an admin's login and expire after hours.
     - **Pinning the host like Shopify**: impossible for self-hosted stores, hence the guard.
 - **Consequences:** no real store has been called. The user, or the merchant, creates the integration and pastes its token once. Magento 1 isn't covered (its API is SOAP/XML-RPC and end-of-life); Magento 1 grid exports keep coming in as uploads. The guard resolves DNS before each request, so a host that changes its DNS between the check and the connection (DNS rebinding) is a small remaining risk. Pinning the resolved address per request would close it.
+
+### D-31: One-click demo data for every reconciliation the mocks can cover
+- **Context:** the user wanted to see how reconciliations work from the demo connections ("Let me import mock data when I use Import from connection so I can see demo how the recon works"). The Business Central and Magento mocks only fill their own side. Orders vs gateway, for example, also needs a gateway settlement, and COD needs courier files. Importing slot by slot was also slow for a demo.
+- **Decision:**
+  - **"Demo data" source** (`src/lib/connectors/demo.ts`, data in `mock/demo-files.ts`): made-up counterpart files that fit the mock store's and mock company's documents, each with planted exceptions:
+    - a card gateway settlement and a Tabby settlement;
+    - courier COD status and remittance;
+    - a courier freight invoice and rate card;
+    - warehouse returns received;
+    - bank receipts for cash application.
+
+    It has no credentials, calls nothing, and has `template/slot` hints so the right file is offered for each slot. Dated files are filtered to the period.
+  - **"Fill with demo data"** on the run page (`/api/runs/[id]/demo-fill`, `demo-fill.ts`): it connects the mocked sources and Demo data if they aren't connected yet. For each empty slot it imports the best-fitting report from those sources only, never a real connection, for October 2026. It goes through `runBlocker()` like any import, and is offered to editors.
+  - **Covered templates:** orders vs gateway, BNPL, COD remittance, refunds vs returns, courier freight, cash application, order → delivery → invoice and the three-way match all fill completely, ask nothing, and find their planted exceptions (tested).
+  - **Only in demo mode:** all of this needs `SAWWI_CONNECTOR_MOCK` set, and none of it works in production. The source isn't offered, its saved connections are hidden, and the route answers 404.
+  - **Rejected alternatives:**
+    - **Static sample CSVs to upload by hand:** slower to demo, and they would drift from the mock data.
+    - **A "demo workspace" seeded in the database:** it hides how a real run is built, and it would be hard to keep in step with templates and mappings.
+    - **Running the reconciliation automatically after the fill:** a demo should show the "Ready to reconcile" step.
+- **Consequences:** marketplace templates, price compliance, returns vs credit notes and the supplier and customer statements have no demo data yet. The button names the slots it couldn't fill. Changing the mock documents means updating the counterpart files and their tests together.

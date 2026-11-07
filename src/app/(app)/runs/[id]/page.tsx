@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { demoModeOn } from "@/lib/connectors/mock";
 import { importSources } from "@/lib/connectors/sources";
 import { getOwnedRun } from "@/lib/runs/access";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
@@ -19,8 +20,9 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
   if (!view) notFound();
   // Importing from a connection is new work on the run: offered to editors and up only.
   const session = await getCurrentSession();
-  const sources = session && canRun(session.access) ? importSources(session.org.key) : [];
-  return <RunWorkspace initial={view} sources={sources} />;
+  const editor = Boolean(session && canRun(session.access));
+  const sources = session && editor ? importSources(session.org.key) : [];
+  return <RunWorkspace initial={view} sources={sources} demo={editor && demoModeOn()} />;
 }
 
 export default function RunPage(props: PageProps<"/runs/[id]">) {

@@ -13,18 +13,19 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central connector (D-29, #9) merged; Magento 2 connector (D-30) in review |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors merged; demo data fill (D-31) in review |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Magento 2 connector + mock store + network guard (D-30) | `phase-6-magento-connector` | (this PR) | Phase 6 session |
+| One-click demo data for reconciliations (D-31) | `phase-6-demo-data` | (this PR) | Phase 6 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Magento 2 connector** (D-30, branch `phase-6-magento-connector`, in review). Magento 2 / Adobe Commerce REST with an integration token. Three reports, all mapping by name:
+- **Demo data fill** (D-31, branch `phase-6-demo-data`, in review). In demo mode (`SAWWI_CONNECTOR_MOCK`), a run page offers **Fill with demo data**. It connects the mocked Business Central and Magento sources plus a new credential-free "Demo data" source (made-up gateway, Tabby, courier, warehouse and bank files), then imports every empty slot for October 2026. Eight templates fill completely and find their planted exceptions: orders vs gateway, BNPL, COD, refunds vs returns, courier freight, cash application, order → delivery → invoice and the three-way match. None of it is available in production. 11 new tests.
+- **Magento 2 connector** (D-30, #10, merged). Magento 2 / Adobe Commerce REST with an integration token. Three reports, all mapping by name:
   - orders, for orders vs gateway, COD and BNPL;
   - credit memo lines, for refunds vs returns;
   - shipments with tracking numbers and weight in kg, for courier freight.

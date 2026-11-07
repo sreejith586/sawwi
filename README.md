@@ -66,7 +66,9 @@ pnpm build
     instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
     `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
     **Demo without real accounts:** add `SAWWI_CONNECTOR_MOCK=business-central,magento` to `.env.local`
-    (dev only). Both are then simulated with invented data; click **Fill demo values**, connect, and
-    import October 2026 into e.g. the three-way match (Business Central) or orders vs gateway (Magento).
+    (dev only). Both are then simulated with invented data. Start a reconciliation and click **Fill with
+    demo data**: every file is imported for October 2026 (Business Central, Magento, plus made-up gateway,
+    courier, warehouse and bank files), then **Run reconciliation**. Or connect them yourself in Settings
+    with **Fill demo values** and use "Import from a connection" slot by slot.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connectorsEnabled } from "@/lib/connectors/crypto";
 import { mockDemoValues } from "@/lib/connectors/mock";
-import { CONNECTORS } from "@/lib/connectors/registry";
+import { availableConnectors, CONNECTORS } from "@/lib/connectors/registry";
 import { syncRows } from "@/lib/connectors/rows";
 import { listConnections } from "@/lib/connectors/store";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
@@ -18,7 +18,7 @@ async function Connections() {
   const enabled = connectorsEnabled();
   // Only what the browser needs: no secrets ever leave the server.
   const items = listConnections(orgKey).map(({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }) => ({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }));
-  const connectors = CONNECTORS.map(({ id, label, description, fields }) => ({ id, label, description, fields }));
+  const connectors = availableConnectors().map(({ id, label, description, fields }) => ({ id, label, description, fields }));
 
   return (
     <div className="space-y-10">
