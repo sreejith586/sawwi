@@ -321,3 +321,96 @@ export function listRuns(orgKey: string): RunSummary[] {
     currency: r.currency === null ? undefined : String(r.currency),
   }));
 }
+
+// ─── Usage dashboard (Phase 6) ────────────────────────────────────────────────────
+
+export type UsageRecord = {
+  runId: string | null;
+  orgKey: string | null;
+  orgName: string | null;
+  templateId: string | null;
+  runStartedAt: string | null;
+  purpose: string;
+  model: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  createdAt: string;
+};
+
+/**
+ * Every logged LLM call, oldest first, for one workspace (orgKey) or all of them (null,
+ * superadmin only). A call belongs to the workspace of its run. Only the all-workspaces
+ * query joins `orgs` (created by the SaaS store), for the workspace name.
+ */
+export function listUsageRecords(orgKey: string | null, since?: string): UsageRecord[] {
+  const where: string[] = [];
+  const args: string[] = [];
+  if (orgKey !== null) {
+    where.push("r.org_key = ?");
+    args.push(orgKey);
+  }
+  if (since) {
+    where.push("u.created_at >= ?");
+    args.push(since);
+  }
+  const rows = getDb()
+    .prepare(
+      `SELECT u.run_id, r.org_key, ${orgKey !== null ? "NULL" : "o.name"} AS org_name, r.template_id, r.created_at AS run_started_at,
+              u.purpose, u.model, u.input_tokens, u.cache_read_tokens, u.cache_write_tokens, u.output_tokens, u.created_at
+       FROM llm_usage u
+       ${orgKey !== null ? "JOIN" : "LEFT JOIN"} runs r ON r.id = u.run_id
+       ${orgKey !== null ? "" : "LEFT JOIN orgs o ON o.key = r.org_key"}
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY u.created_at, u.id`,
+    )
+    .all(...args) as Row[];
+  const str = (v: string | number | null) => (v === null ? null : String(v));
+  return rows.map((r) => ({
+    runId: str(r.run_id),
+    orgKey: str(r.org_key),
+    orgName: str(r.org_name),
+    templateId: str(r.template_id),
+    runStartedAt: str(r.run_started_at),
+    purpose: String(r.purpose),
+    model: String(r.model),
+    inputTokens: Number(r.input_tokens),
+    cacheReadTokens: Number(r.cache_read_tokens),
+    cacheWriteTokens: Number(r.cache_write_tokens),
+    outputTokens: Number(r.output_tokens),
+    createdAt: String(r.created_at),
+  }));
+}
+
+export type RunActivityRecord = {
+  id: string;
+  orgKey: string;
+  templateId: string;
+  createdAt: string;
+  questions: number;
+  mappingCalls: number;
+  hasResult: boolean;
+};
+
+/** Every run (all history, for repeat detection) with how much it had to ask. */
+export function listRunActivity(orgKey: string | null): RunActivityRecord[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT r.id, r.org_key, r.template_id, r.created_at,
+              (SELECT COUNT(*) FROM questions q WHERE q.run_id = r.id) AS questions,
+              (SELECT COUNT(*) FROM llm_usage u WHERE u.run_id = r.id AND u.purpose = 'column_mapping') AS mapping_calls,
+              EXISTS (SELECT 1 FROM run_results rr WHERE rr.run_id = r.id) AS has_result
+       FROM runs r ${orgKey !== null ? "WHERE r.org_key = ?" : ""}`,
+    )
+    .all(...(orgKey !== null ? [orgKey] : [])) as Row[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    orgKey: String(r.org_key),
+    templateId: String(r.template_id),
+    createdAt: String(r.created_at),
+    questions: Number(r.questions),
+    mappingCalls: Number(r.mapping_calls),
+    hasResult: Number(r.has_result) === 1,
+  }));
+}

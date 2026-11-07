@@ -25,6 +25,8 @@
   --danger-soft: #fef3f2;
   --info: #175cd3;
   --info-soft: #eff8ff;
+  /* Single-series chart marks (validated: lightness band and 3:1 vs surface, both themes). */
+  --chart-1: #175cd3;
 }
 
 /*
@@ -53,6 +55,7 @@
   --danger-soft: #3d1410;
   --info: #53b1fd;
   --info-soft: #0f2547;
+  --chart-1: #2e90fa;
 }
 
 /*
