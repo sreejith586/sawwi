@@ -103,6 +103,7 @@ export async function deleteFiles(keys: string[]) {
 
 /** Deletes everything under these prefixes (a run's tables and any unparsed uploads). */
 export async function deletePrefixes(prefixes: string[]) {
+  if (prefixes.length === 0) return;
   requireStore();
   prefixes.forEach(assertKey);
   if (blobEnabled()) {

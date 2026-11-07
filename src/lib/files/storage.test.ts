@@ -108,6 +108,9 @@ describe("Blob specifics", () => {
   it("won't fall back to a disk that disappears on Vercel", async () => {
     env.VERCEL = "1";
     await expect(putFile("runs/r/s.csv", "a\n")).rejects.toThrow(/BLOB_READ_WRITE_TOKEN/);
+    // Deleting nothing needs no store: the demo reset with no runs mustn't fail (seen on a preview).
+    await expect(deletePrefixes([])).resolves.toBeUndefined();
+    await expect(deleteFiles([])).resolves.toBeUndefined();
   });
 });
 
