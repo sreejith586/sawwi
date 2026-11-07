@@ -5,6 +5,7 @@ import { requireSuperadminPage } from "@/lib/saas/admin";
 import { orgRows } from "@/lib/saas/admin-rows";
 import { getSettings, listOpenRequests, listOrgsForAdmin, listUsersForAdmin } from "@/lib/saas/store";
 import { keyringStatus } from "@/lib/connectors/keyring";
+import { listRecentJobs } from "@/lib/jobs/store";
 import { ConnectorKeys } from "./connector-keys";
 import { PlatformControls, UpgradeRequests } from "./platform-controls";
 
@@ -19,6 +20,7 @@ async function Overview() {
   const users = await listUsersForAdmin();
   const requests = await listOpenRequests();
   const keys = await keyringStatus();
+  const jobs = await listRecentJobs(15);
   const rows = orgRows(orgs);
   const onTrial = rows.filter((o) => o.trialState === "Active").length;
   const trialEnded = rows.filter((o) => o.trialState === "Ended").length;
@@ -54,6 +56,39 @@ async function Overview() {
         <p className="mt-0.5 text-sm text-muted">Connection tokens are encrypted at rest under a named key; rotate it here.</p>
         <div className="mt-3">
           <ConnectorKeys status={keys} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold">Background jobs</h2>
+        <p className="mt-0.5 text-sm text-muted">Run every 15 minutes by Vercel Cron: the demo reset, cleanup of abandoned uploads (D-42).</p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
+          {jobs.length === 0 ? (
+            <p className="p-5 text-sm text-muted">Nothing has run yet. On Vercel this needs CRON_SECRET (docs/DEPLOY.md).</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Job</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Tries</th>
+                  <th className="px-4 py-2 font-medium">Queued</th>
+                  <th className="px-4 py-2 font-medium">Result</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {jobs.map((j) => (
+                  <tr key={j.id}>
+                    <td className="px-4 py-2 font-medium">{j.key}</td>
+                    <td className={`px-4 py-2 ${j.status === "failed" ? "text-danger" : j.status === "done" ? "text-success" : "text-warn"}`}>{j.status}</td>
+                    <td className="tabular px-4 py-2">{j.attempts}</td>
+                    <td className="px-4 py-2 text-muted">{day(j.createdAt)}</td>
+                    <td className="max-w-xs truncate px-4 py-2 text-muted">{j.lastError ?? (j.result ? JSON.stringify(j.result) : "")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
     </div>

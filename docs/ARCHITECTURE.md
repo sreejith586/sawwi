@@ -203,6 +203,15 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via
 
 Vercel project `hypermax-solutions/sawwi`, functions in `fra1` (`vercel.json`) next to the Neon database. `/api/health` reports whether the database and file store answer. Everything else (what production needs, environment variables, shipping, rollback, restore) is in `docs/DEPLOY.md`.
 
+## 6e. Background jobs (Phase 7, D-42)
+
+- `jobs` table (migration 2): kind, unique key, payload, status (queued → running → done / failed), run-after time, attempts, lock expiry, result or last error.
+- `src/lib/jobs/store.ts`: queue by key (a duplicate key is a no-op), claim due jobs with `FOR UPDATE SKIP LOCKED` (a running job whose lock expired is taken again), finish, fail with retry, prune.
+- `src/lib/jobs/runner.ts`: `tick()` queues the periodic jobs for the current period (keys like `demo_reset:2026-11-07`, `cleanup_incoming:2026-11-07T10`), then runs due jobs in batches of 5 within a 45 s budget. Failures retry after 1 and 2 minutes, and fail for good after 3 attempts; an unknown kind fails at once. Handlers are idempotent.
+- Jobs: `demo_reset` (D-32, also still checked on each demo request), `cleanup_incoming` (raw uploads over an hour old, D-39), `prune_jobs` (done jobs over 30 days).
+- `/api/cron/tick` is called every 15 minutes by Vercel Cron (`vercel.json`), with `Authorization: Bearer $CRON_SECRET` checked in constant time. Admin shows the last 15 jobs.
+- Next on this: scheduled connector pulls and emailed reminders (D-26, D-27) as new job kinds.
+
 ## 7. Build phases
 
 Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–6 done (Phase 6: usage dashboard §5, scheduled runs, connectors and the demo store §9, chat panel). Phase 7 (D-37) is in progress: go live on Vercel + Neon (Postgres everywhere with PGlite in dev and tests, private Blob uploads, connector keyring, deploy, jobs table + Vercel Cron). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.

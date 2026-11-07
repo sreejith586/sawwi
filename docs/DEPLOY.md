@@ -28,7 +28,7 @@ a person, never by an agent or committed to the repo.
 | `APP_URL` | `https://sawwi.hypermaxsolutions.com` | unset | Pins links and Stripe return URLs. |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_WEBHOOK_SECRET` | Live keys, Sensitive | Test-mode keys | Card checkout. Only shown while the paywall is on. |
 | `SAWWI_DEMO` | unset (demo on) | unset | `off` hides the public demo store. |
-| `CRON_SECRET` | Sensitive | Sensitive | Protects the jobs route (Phase 7, PR 6). |
+| `CRON_SECRET` | Secret | Secret (a different one) | Protects `/api/cron/tick`; Vercel Cron sends it as a bearer token. `openssl rand -base64 32`. Without it, background jobs are off (D-42). |
 
 After changing a variable, **redeploy**: running deployments keep the values they were built with.
 
@@ -64,4 +64,7 @@ deployment keeps serving until the new one is promoted, against the same databas
   Where customer data may live (UAE, KSA PDPL) is an open question in PROGRESS.
 - Neon is on its Free plan: fine for previews and a soft launch, but its storage, compute hours and
   restore window are small. Move to a paid plan before real customer data goes in.
-- Raw uploads abandoned mid-upload stay in `incoming/` until the jobs runner cleans them (PR 6).
+- Background jobs (D-42) run every 15 minutes from Vercel Cron, on production deployments only (Vercel
+  doesn't run cron on previews). Admin → Background jobs shows the last runs. To run one by hand:
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://sawwi.hypermaxsolutions.com/api/cron/tick`.
+- Cron more often than daily needs Vercel Pro: on Hobby, a deploy with this schedule fails.

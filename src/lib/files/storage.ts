@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dataDir } from "@/lib/db";
 
@@ -130,4 +130,30 @@ export async function deletePrefixes(prefixes: string[]) {
     return;
   }
   await Promise.all(prefixes.map((p) => rm(onDisk(p.replace(/\/$/, "")), { recursive: true, force: true })));
+}
+
+/** Keys under a prefix last written before `before` (e.g. abandoned raw uploads). */
+export async function listOlderThan(prefix: string, before: Date): Promise<string[]> {
+  requireStore();
+  assertKey(prefix);
+  if (blobEnabled()) {
+    const { list } = await import("@vercel/blob");
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await list({ prefix, cursor, limit: 1000, ...blobAuth() });
+      for (const b of page.blobs) if (new Date(b.uploadedAt) < before) keys.push(b.pathname);
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+    return keys;
+  }
+  const root = onDisk(prefix.replace(/\/$/, ""));
+  const entries = await readdir(root, { recursive: true, withFileTypes: true }).catch(() => []);
+  const keys: string[] = [];
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    const full = path.join(e.parentPath, e.name);
+    if ((await stat(full)).mtime < before) keys.push(path.relative(path.join(dataDir(), "files"), full).split(path.sep).join("/"));
+  }
+  return keys;
 }
