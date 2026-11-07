@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { saveAsTemplate, sendChat } from "@/app/actions/insights";
 import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
 import type { ChatIntent } from "@/lib/insights/chat";
+import { DemoFill } from "@/components/connectors/demo-fill";
 import { ImportFromConnection } from "@/components/connectors/import-from-connection";
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
@@ -18,7 +19,7 @@ import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type P
 import { Chat } from "./chat";
 import { Report } from "./report";
 
-export function RunWorkspace({ initial, sources = [] }: { initial: RunView; sources?: ImportSource[] }) {
+export function RunWorkspace({ initial, sources = [], demo = false }: { initial: RunView; sources?: ImportSource[]; demo?: boolean }) {
   const [view, setView] = useState(initial);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -56,6 +57,7 @@ export function RunWorkspace({ initial, sources = [] }: { initial: RunView; sour
       </p>
       <Steps status={view.status} />
       {error && <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {demo && view.slots.some((s) => !s.file) && <DemoFill runId={view.id} onView={update} onError={setError} />}
 
       {view.report && (
         <div className="mt-8">

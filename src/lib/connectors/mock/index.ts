@@ -14,8 +14,11 @@ const MOCKS: Mock[] = [
   { id: "magento", matches: isMagentoMockUrl, fetch: mockMagento(), demoValues: DEMO_MAGENTO_CREDENTIALS },
 ];
 
+/** Local demo mode: SAWWI_CONNECTOR_MOCK is set to anything, outside production. */
+export const demoModeOn = () => process.env.NODE_ENV !== "production" && (process.env.SAWWI_CONNECTOR_MOCK ?? "").trim() !== "";
+
 export function activeMocks(): Mock[] {
-  if (process.env.NODE_ENV === "production") return [];
+  if (!demoModeOn()) return [];
   const wanted = (process.env.SAWWI_CONNECTOR_MOCK ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return MOCKS.filter((m) => wanted.includes(m.id) || wanted.includes("all"));
 }
