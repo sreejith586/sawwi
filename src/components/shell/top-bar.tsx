@@ -5,9 +5,10 @@ import { ChatIcon, MenuIcon } from "@/components/icons";
 import { toggleChatPanel } from "@/lib/chat-panel";
 import { useChatPanelOpen } from "./chat-panel";
 import { setNavOpen } from "./sidebar";
+import { LogoLockup } from "@/components/brand/logo";
 
 const iconButton =
-  "grid size-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30";
+  "grid size-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40";
 
 // Content top bar: menu + logo on phones, and the button that opens the right chat panel
 // (components/shell/chat-panel.tsx) everywhere.
@@ -19,9 +20,8 @@ export function TopBar() {
       <button type="button" onClick={() => setNavOpen(true)} className={`${iconButton} md:hidden`} aria-label="Open menu">
         <MenuIcon />
       </button>
-      <Link href="/home" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight md:hidden">
-        <span className="grid size-7 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-        Sawwi
+      <Link href="/home" className="flex items-center md:hidden">
+        <LogoLockup />
       </Link>
       <button
         type="button"

@@ -10,8 +10,16 @@ export default function OpenGraphImage() {
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: "#fafafa", padding: 72, color: "#18181b" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: "#18181b", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, fontWeight: 700 }}>S</div>
-          <div style={{ fontSize: 40, fontWeight: 600 }}>Sawwi</div>
+          {/* The logo mark (D-48): two sheets, the front one ticked, on the dark tile. */}
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <rect width="64" height="64" rx="15" fill="#18181b" />
+            <rect x="11" y="13" width="26" height="32" rx="6" fill="#1f5346" />
+            <rect x="27" y="19" width="26" height="32" rx="6" fill="#0e7c66" />
+            <path d="M33 35L38.5 40.5L48 30" fill="none" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div style={{ display: "flex", fontSize: 40, fontWeight: 600, letterSpacing: -1 }}>
+            sawwi<span style={{ color: "#0e7c66" }}>app</span>
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 68, fontWeight: 600, lineHeight: 1.1, letterSpacing: -1.5 }}>Know where every dirham of your sales went.</div>
