@@ -13,18 +13,19 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5) and scheduled runs (D-26, #6) merged; connectors planned (D-27, §9) |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) merged; connector framework + Shopify connector (D-28) in review |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Phase 6, part 3: connectors plan (D-27, §9) | `docs/phase-6-connectors-plan` | (this PR) | Phase 6 session |
+| Phase 6, part 3b: connector framework + Shopify orders (D-28) | `phase-6-connectors` | (this PR) | Phase 6 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Phase 6, part 3: connectors plan** (D-27, ARCHITECTURE §9, docs only, in review). A connector emits the same table as an upload, so mapping and matching don't change. Recommended order: Shopify or Odoo, then Amazon SP-API, then Salla/Zid, gateways, other ERPs, and bank feeds via an open-banking aggregator. The plan covers encrypted credentials, and pulls per schedule period through slot bindings. It needs a job runner (user to approve).
+- **Phase 6, part 3b: connectors built** (D-28, branch `phase-6-connectors`, in review). A connector framework with credentials encrypted per workspace (`SAWWI_CONNECTOR_KEY`) and an import history. The first connector is **Shopify orders** (Admin GraphQL, read-only). Owners and admins manage connections in Settings → Connections; each run slot has "Import from a connection". Imports go through the same mapping and engine as an upload. 10 new tests with synthetic Shopify responses; no live calls.
+- **Phase 6, part 3: connectors plan** (D-27, ARCHITECTURE §9, docs only, #7, merged). A connector emits the same table as an upload, so mapping and matching don't change. Recommended order: Shopify or Odoo, then Amazon SP-API, then Salla/Zid, gateways, other ERPs, and bank feeds via an open-banking aggregator. The plan covers encrypted credentials, and pulls per schedule period through slot bindings. It needs a job runner (user to approve).
 - **Phase 6, part 2: scheduled runs** (D-26, #6, merged). Schedule a template weekly or monthly from its page. When it comes due it shows in **Due now** on Home and on the new **Schedules** page. Start creates that period's run (once; reused on a second click), and saved mappings make a repeat ask nothing. Pause, resume and delete are available, and the schedules table sorts, filters and exports to Excel. Due dates are computed on read; there's no job runner. 10 new tests.
 - **Phase 6, part 1: usage and cost dashboard** (D-25, #5, merged). Settings → Usage & cost: estimated cost, tokens, cache hit rate and "repeat runs that asked nothing", a cost-per-day chart, and breakdowns by day, purpose, model and run with sort, filter and Excel. `/admin/usage` adds every workspace and a by-workspace view. Prices in one dated table (`src/lib/usage/pricing.ts`). No new LLM calls; 12 new tests.
 - **Docs:** the PDF plan (#3) is merged, so it's out of the in-flight table.
@@ -47,12 +48,15 @@ _Updated in every commit. Newest first within each section._
 
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
-3. **User decision:** which connector to build first (recommended: Shopify or Odoo, see §9), and which job runner to allow (D-26, D-27).
-4. Scheduled runs, later: emailed reminders and connector-triggered runs need a job runner and an email provider. Ask the user first.
+3. **Live check of the Shopify connector** with the user's own store (custom app with `read_orders`), then the next connector (Odoo or Amazon SP-API, see §9).
+4. **User decision:** which job runner to allow for scheduled pulls and emailed reminders (D-26, D-27).
 
 ## Open questions
 
-- **First connector and job runner:** which source first (Shopify, Odoo, Amazon SP-API, …), and whether to add a job runner (DB jobs table + cron, Inngest, or a worker). Connectors and emailed reminders need one.
+- **Job runner:** whether to add one (DB jobs table + cron, Inngest, or a worker) for scheduled pulls and emailed reminders.
+- **Shopify live test:** needs a store and a custom-app token from the user. Should Sawwi also get a public Shopify app (OAuth, one-click install)?
+- **Next connector:** Odoo (easy, free trial) or Amazon SP-API (most valuable, needs a developer registration, which only the user can start).
+- **Production key management:** `SAWWI_CONNECTOR_KEY` from the environment for now; a KMS when deployed?
 - **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want? Emailed reminders need a job runner and an email provider: add them?
 - **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?

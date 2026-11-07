@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { importSources } from "@/lib/connectors/sources";
 import { getOwnedRun } from "@/lib/runs/access";
+import { canRun, getCurrentSession } from "@/lib/saas/session";
 import { buildRunView } from "@/lib/runs/view";
 import { RunWorkspace } from "./run-workspace";
 
@@ -15,7 +17,10 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
   const owned = await getOwnedRun(id);
   const view = owned && buildRunView(id);
   if (!view) notFound();
-  return <RunWorkspace initial={view} />;
+  // Importing from a connection is new work on the run: offered to editors and up only.
+  const session = await getCurrentSession();
+  const sources = session && canRun(session.access) ? importSources(session.org.key) : [];
+  return <RunWorkspace initial={view} sources={sources} />;
 }
 
 export default function RunPage(props: PageProps<"/runs/[id]">) {

@@ -60,5 +60,9 @@ pnpm build
 12. **Schedules:** set a template to come due weekly or monthly. When it's due it appears under
     "Due now" on Home and on the Schedules page; Start opens that period's run, and saved mappings
     make a repeat ask nothing. No background jobs: due dates are worked out when the page loads.
+13. **Connections** (Settings → Connections, owners and admins): connect a Shopify store with a
+    read-only Admin API token, then use "Import from a connection" on a run's file slot to pull that
+    period's orders instead of uploading a file. Tokens are encrypted at rest with `SAWWI_CONNECTOR_KEY`
+    (set it in `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.
