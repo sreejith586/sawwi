@@ -188,7 +188,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (usage dashboard, §5, merged in #5; scheduled runs below). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (usage dashboard §5, #5, and scheduled runs, #6, merged; connectors plan in §9). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
 
 Phase 4 (`src/lib/insights/`):
 - **Analysis above the report.** Claude Sonnet 5.5 writes a headline, up to four findings and three next steps from a digest (`digestText`: totals, per-check counts/values and the 8 largest exceptions by key, never rows). Fetched after the report renders, then cached per result in `run_narratives`, so re-opening a run costs nothing. No API key, or a viewer opening an uncached run: the rule-based summary (`ruleNarrative`), not cached so a later key still writes one.
@@ -248,3 +248,43 @@ Results show under the file (✓/✕ with figures). A failed check is posted in 
 **Storage.** How each PDF was read (kind, method, pages, metadata, checks, rows set aside) is stored with the run's other checks (`run_checks`, key `pdf_<slot>`, via `store.setPdfInfo`) and served in the run view. The extracted table is stored as CSV like any upload, so preview and Excel export work unchanged.
 
 **Tests:** `src/lib/pdf/pdf.test.ts` and `src/lib/runs/pdf-ingest.test.ts` generate synthetic PDFs (`src/lib/pdf/fixtures/make.ts`, with `pdf-lib` and `qrcode` as dev dependencies): a one-page statement, a three-page statement with carried-forward lines and repeated headers, a misprinted statement, a text invoice, a ZATCA PDF/A-3 with UBL XML and QR, a QR-only invoice, a password-protected file, and scanned (image-only) versions of the statements and the invoice rendered with Liberation Sans through `pureimage`. Text PDFs have golden tables; OCR tests assert the key fields and checks, so they tolerate OCR noise. Arabic and RTL reading is tested on positioned text items, because the standard PDF fonts can't draw Arabic, and there is no Arabic scan fixture yet: the fixture renderer can't shape Arabic script. The Arabic OCR data loads in every OCR test. Real anonymised samples are still wanted (Emirates NBD, ADCB, Al Rajhi and SNB statements; Noon and Amazon invoices).
+
+## 9. Connectors (planned, Phase 6 part 3, D-27)
+
+Status: **plan only, no code.** Each connector needs real accounts and credentials, so the user picks the first one and connects it themselves. An agent never enters real credentials.
+
+**Principle: a connector is just another way a file arrives.** A connector pulls a report from a source's API and turns it into the same `{ headers, rows }` table that `parseUpload` returns. From there the path is unchanged: `ingestFiles` → profile → fingerprint → mapping cache → chips → engine (D-3, D-5). No connector code touches matching, and nothing new goes to the LLM (D-2). Each connector and report type emits a fixed set of column names, so its fingerprint is stable. After the first run's mapping is confirmed, every later pull maps from the cache and asks nothing.
+
+**Which sources first.** Ranked by value to GCC sellers, ease of getting API access, and whether a free test account exists:
+
+| Order | Source | Feeds templates | API and auth | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | **Shopify** | Orders vs gateway, refunds vs returns, bank vs payouts | Admin GraphQL API, OAuth (custom or public app), read-only scopes `read_orders`, `read_shopify_payments_payouts` | Free development stores. Payouts and balance transactions only for Shopify Payments; other gateways come from the gateway connector |
+| 2 | **Odoo** | Ledger side of bank, customer, supplier and B2B recos | JSON-RPC / XML-RPC with a per-user API key (Odoo 14+) | Free trial or self-hosted Docker for testing. Read-only user. `account.move.line`, `sale.order`, `purchase.order`, `stock.picking` |
+| 3 | **Amazon SP-API** | Settlement vs orders, fees vs rate card, returns, FBA inventory, reimbursements | Reports API (`GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2`, order and FBA reports), Login with Amazon OAuth, seller authorises the app | Needs a registered developer profile and app review (weeks). Highest value for marketplace sellers. Amazon.ae and .sa share the EU/ME endpoint |
+| 4 | **Salla / Zid** | Webstore orders vs gateway/COD/BNPL (KSA) | OAuth partner apps (Salla Partners, Zid apps), REST | Needs a partner account per platform |
+| 5 | **Payment gateways**: Stripe, Checkout.com, Tap, PayTabs | Orders vs gateway settlements, fees, chargebacks | API keys (restricted, read-only) or OAuth (Stripe Connect) | Stripe has free test mode; the others need a merchant account |
+| 6 | **Zoho Books**, then QuickBooks / Xero / NetSuite / SAP B1 / Dynamics | Ledger side, like Odoo | OAuth REST (Zoho, QBO, Xero); token-based for NetSuite; Service Layer for SAP B1 | One at a time, as customers ask |
+| 7 | **Bank feeds** | Bank vs payouts (template 14), cash application | Through an open-banking aggregator (Lean Technologies or Tarabut in UAE/KSA; UAE Open Finance and SAMA open banking), or MT940 / CAMT.053 statements dropped on SFTP | Licensed aggregators sit between Sawwi and the bank, so Sawwi never holds bank logins. Until then, PDF and CSV statements (§8) cover it |
+| — | **Noon, Namshi, Trendyol** | Marketplace templates | Partner APIs are limited or invite-only; check per marketplace | Until access exists: forward the emailed report to a per-workspace inbox address, or keep uploading |
+
+My recommendation is to build **Shopify or Odoo first**. Both have free test accounts and simple auth, so they prove the whole pipeline (connect, pull, map, reconcile, schedule) cheaply. **Amazon SP-API** should come next: it is the most valuable source, but it is gated by app review, so start its developer registration in parallel.
+
+**Credentials and auth.**
+- Only an owner or admin can connect or disconnect a source, from Settings → Connections. They sign in on the provider's own page (OAuth), or paste a key the provider issued into a form. The app never asks for a password to another service.
+- Scopes are read-only, and as narrow as each provider allows.
+- New table `connections`, per workspace: provider, account label, scopes, status, last sync, error. Secrets go in a separate `connection_secrets` row encrypted at rest with AES-256-GCM. The key comes from `SAWWI_CONNECTOR_KEY` for now and from a KMS (envelope encryption) in production. Secrets are never sent to the browser, logged or shown again; the UI shows only "Connected as …".
+- Refresh tokens are rotated on use. Disconnecting revokes the token at the provider where possible, then deletes the secret. A failed refresh marks the connection "Needs reconnecting" and pauses its syncs.
+
+**Sync model: pull, per period, idempotent.**
+- A **binding** links a schedule's slot (D-26) to a connection and report type, e.g. "Settlement vs. sales invoices → settlement slot ← Amazon settlement report; orders slot ← Odoo invoices".
+- When a scheduled period comes due, a **sync job** pulls each bound slot for the period's date window and writes the result as CSV, stored like an upload with source metadata. It then calls `ingestFiles` on that period's run, which it creates if needed, behind the same `runBlocker()` check as the Start button. When every slot is filled and nothing needs an answer, it runs the reconciliation and puts the result in Due now / Home as "Ready to review". Anything that needs a human (a new layout, a failed check) stays as a chip question, exactly as for an upload.
+- Idempotency is keyed on (connection, report type, window), or on the provider's report id. Re-pulling a window replaces that slot's file rather than appending. Cursors and pull history go in `connection_syncs`.
+- Rate limits are respected with backoff. Large windows are paged. A pull is capped at the upload limits (25 MB, ~200k rows); over that, the period is split.
+
+**Infrastructure needed (ask before adding).** Syncs need to run without a user on the page, which the app can't do today (D-26):
+- (a) a `jobs` table in the database, plus a cron hitting a protected route (Vercel Cron or any external cron), which is the smallest option;
+- (b) a hosted queue such as Inngest;
+- (c) a separate worker process.
+Any of these also enables the emailed reminders that D-26 deferred.
+
