@@ -47,7 +47,7 @@ const EXPECTED: Record<string, string[]> = {
   "web-courier-freight": ["duplicate_awb: 4410023302", "unknown_awb: 4410029999", "weight_dispute: 4410023301", "weight_dispute: 4410023302"],
   // Magento ↔ Business Central (the store company's books). 104 is posted twice, so its total and VAT differ too.
   "web-erp-invoices": [
-    "customer_mismatch: 000000102", "duplicate_posting: 000000104 / 840.00", "not_synced: 000000103",
+    "customer_mismatch: 000000102", "duplicate_posting: 000000104 / 840.00", "not_synced: 000000103", "not_synced: 000000123", // the Oman store isn't connected (D-58)
     "total_mismatch: 000000104", "total_mismatch: 000000106", "vat_mismatch: 000000104", "vat_mismatch: 000000106", "vat_mismatch: 000000108",
   ],
   // 103's refund is posted twice, so its amount and VAT differ too; 108's goodwill refund carries no VAT in Magento.
@@ -57,6 +57,11 @@ const EXPECTED: Record<string, string[]> = {
   ],
   "web-erp-stock": ["hidden_stock: SND-42", "not_in_erp: OUD-100", "overselling: OUD-50"],
   "web-erp-prices": ["not_in_erp: OUD-100", "special_expired: ABY-BLK-M", "special_not_lower: MAT-01", "wrong_price: SND-42"],
+  // Store views in AED, SAR and OMR vs Business Central's FCY and LCY. 104 (posted twice) and 106 (posted with shipping) differ in AED too.
+  "web-erp-fx": [
+    "fx_difference: 000000104", "fx_difference: 000000106", "fx_difference: 000000121", "fx_difference: 000000122",
+    "not_posted: 000000103", "not_posted: 000000123", "store_missing: omn_en", "wrong_currency: 000000121",
+  ],
   "b2b-cash-application": ["overdue: SI-3102", "overdue: SI-3104", "overdue: SI-3105", "overdue: SI-3106", "short_paid: SI-3103", "unapplied_receipt: TT REF 88213 MARINA FM"],
   "b2b-order-delivery-invoice": ["invoiced_not_delivered: LED-40", "open_orders: SO-1043 / CBL-25", "qty_mismatch: SSH-2103 / AC-18K"],
   // Marketplace templates: one invented seller (MP-10xx orders, two October settlements).
@@ -80,7 +85,9 @@ const EXPECTED: Record<string, string[]> = {
   "b2b-pdc-clearing": ["amount_diff: 000416", "bounced: RETURNED CHEQUE INSUFFICIENT FUNDS", "due_not_deposited: 000414"],
   // Magento sales by provider vs payouts (before fees) vs the bank. Stripe: 108 captured 5.00 short; Tabby: 109 not paid out; COD: 107 collected 10.00 short.
   "web-payouts-by-method": [
-    "credit_difference: po_1119", "not_paid_out: Cash on delivery", "not_paid_out: Stripe", "not_paid_out: Tabby", "unidentified_credit: REF 99812",
+    // Per provider and currency (D-58): the KSA and Oman stores' COD sales have no payouts in the file.
+    "credit_difference: po_1119", "no_payouts: Cash on delivery / OMR", "no_payouts: Cash on delivery / SAR",
+    "not_paid_out: Cash on delivery / AED", "not_paid_out: Stripe / AED", "not_paid_out: Tabby / AED", "unidentified_credit: REF 99812",
   ],
   // Adobe Commerce gift cards (mock store) and store credit (demo export).
   "web-gift-cards": [
@@ -126,7 +133,7 @@ describe("Fill with demo data", () => {
   it("keeps the two Business Central companies' reports apart (D-52)", async () => {
     const sources = await importSources(DEMO_ORG_KEY);
     const reports = (id: string) => sources.find((s) => s.connectionId === id)!.reports.map((r) => r.id);
-    expect(reports("demo:business-central-store")).toEqual(["web_sales_invoices", "web_sales_credit_memos", "items"]);
+    expect(reports("demo:business-central-store")).toEqual(["web_sales_invoices", "web_sales_invoices_fx", "web_sales_credit_memos", "items"]);
     expect(reports("demo:business-central")).not.toContain("web_sales_invoices");
     expect(reports("demo:business-central")).toContain("sales_invoices");
     const run = await runStore.createRun(DEMO_ORG_KEY, "b2b-cash-application");

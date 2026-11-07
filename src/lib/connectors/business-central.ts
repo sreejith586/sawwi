@@ -142,7 +142,18 @@ export function deliveryNoteFor(index: ShipmentIndex, order: string, item: strin
   return exact.length === 1 ? exact[0].dn : ""; // otherwise only an unambiguous quantity match
 }
 
-type Ctx = { lcy: string; shipments?: ShipmentIndex };
+type Rate = { currency: string; from: string; lcyPerUnit: number };
+type Ctx = { lcy: string; shipments?: ShipmentIndex; rates?: Rate[] };
+
+/**
+ * LCY per unit of a currency on a date, from the currency exchange rates table. API v2.0 posted
+ * invoices carry no currency factor, so this is the rate BC would apply on that posting date (D-58).
+ */
+export function lcyRate(rates: Rate[], currency: string, date: string, lcy: string): number | undefined {
+  if (!currency || currency === lcy) return 1;
+  const hit = rates.filter((r) => r.currency === currency && r.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
+  return hit?.lcyPerUnit;
+}
 type ReportSpec = {
   id: string;
   label: string;
@@ -154,6 +165,7 @@ type ReportSpec = {
   expand?: string;
   keep?: (d: Doc) => boolean;
   needsShipments?: boolean;
+  needsRates?: boolean;
   columns: readonly string[];
   rows: (d: Doc, ctx: Ctx) => string[][];
 };
@@ -215,6 +227,23 @@ export const BC_REPORTS: ReportSpec[] = [
     rows: (d, { lcy }) => [
       [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.invoiceDate), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
     ],
+  },
+  {
+    id: "web_sales_invoices_fx",
+    label: "Posted web invoices in document and local currency",
+    description: "Posted sales invoices for web orders with their currency, the amount in that currency, the exchange rate on the posting date and the amount in local currency, plus the store dimension (Global Dimension 1).",
+    slots: ["web-erp-fx/erp_invoices"],
+    entity: "salesInvoices",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    needsRates: true,
+    columns: ["Posted invoice no.", "Store order no. (external document no.)", "Posting date", "Store (dimension 1)", "Invoice currency", "Amount incl. VAT (FCY)", "Exchange rate (LCY per unit)", "Amount incl. VAT (LCY)"],
+    rows: (d, { lcy, rates }) => {
+      const cur = currency(d, lcy);
+      const rate = lcyRate(rates ?? [], cur, str(d.postingDate), lcy);
+      const fcy = Number(d.totalAmountIncludingTax ?? 0);
+      return [[str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.shortcutDimension1Code), cur, num(fcy), rate === undefined ? "" : num(rate), rate === undefined ? "" : num(Math.round(fcy * rate * 100) / 100)]];
+    },
   },
   {
     id: "web_sales_credit_memos",
@@ -342,6 +371,18 @@ async function shipmentIndex(s: Session, companyId: string, w: PullWindow): Prom
   return index;
 }
 
+/** The whole currency exchange rates table (it is small): LCY per unit = relational ÷ exchange rate amount. */
+async function exchangeRates(s: Session, companyId: string): Promise<Rate[]> {
+  const out: Rate[] = [];
+  for await (const page of allPages(s, `${apiRoot(s.creds)}/companies(${companyId})/currencyExchangeRates`)) {
+    for (const r of page) {
+      const amount = Number(r.exchangeRateAmount ?? 0);
+      if (amount) out.push({ currency: str(r.currencyCode), from: str(r.startingDate), lcyPerUnit: Number(r.relationalExchangeRateAmount ?? 0) / amount });
+    }
+  }
+  return out;
+}
+
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
@@ -382,6 +423,7 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
     const info = await getJson(s, `${apiRoot(creds)}/companies(${c.id})/companyInformation`);
     const ctx: Ctx = { lcy: str(info.value?.[0]?.currencyCode) };
     if (spec.needsShipments) ctx.shipments = await shipmentIndex(s, c.id, window);
+    if (spec.needsRates) ctx.rates = await exchangeRates(s, c.id);
 
     const rows: string[][] = [];
     for await (const page of allPages(s, entityUrl(s, c.id, spec, window))) {
