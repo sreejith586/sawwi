@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ABOUT_QUESTIONS } from "@/lib/insights/about";
 import type { ChatIntent } from "@/lib/insights/chat";
 import { ExcelButton, SeverityDot } from "@/components/data-table";
+import { useChatPanelSlot } from "@/components/shell/chat-panel";
 import type { RunView } from "@/lib/runs/view";
 import type { ChatPayload, Message } from "@/lib/runs/types";
 
@@ -36,22 +39,30 @@ export function Chat({
   }, [view.messages.length, current?.id, thinking]);
 
   const followUps = Boolean(view.report && view.insights && !current);
+  // Canned questions (D-35): shown on a fresh chat, and the ones not asked yet stay until there's
+  // a report (then the follow-up buttons take over). Hidden while a setup question waits.
+  const asked = new Set(view.messages.filter((m) => m.payload?.type === "question").map((m) => m.body));
+  const askedAny = asked.size > 0;
+  const suggestions = ABOUT_QUESTIONS.filter((q) => !asked.has(q.question));
+  const showSuggestions = !current && suggestions.length > 0 && (!askedAny || !view.report);
+  const headerSlot = useChatPanelSlot("header");
 
   return (
     // Fills the right-hand chat panel (components/shell/chat-panel.tsx), which the run page portals it into.
     <section aria-label="Reconciliation chat" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
-        <span className="grid size-7 place-items-center rounded-full bg-accent text-xs font-bold text-accent-foreground">S</span>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="text-sm font-semibold">Sawwi</p>
-          <p className="text-xs text-muted">{thinking ? "Thinking…" : busy ? "Working…" : current ? "Waiting for your answer" : followUps ? "Ask about this result" : "Here to help"}</p>
-        </div>
-        {followUps && !view.insights!.ai && (
-          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-muted" title="No API key is set, so answers are written by Sawwi's rules.">
-            AI off
-          </span>
+      {/* The panel header already says "Ask Sawwi": this run's status goes into it, not a second header. */}
+      {headerSlot &&
+        createPortal(
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-xs text-muted">{thinking ? "Thinking…" : busy ? "Working…" : current ? "Waiting for your answer" : followUps ? "Ask about this result" : "Here to help"}</p>
+            {followUps && !view.insights!.ai && (
+              <span className="shrink-0 rounded-full bg-surface-muted px-1.5 py-px text-[10px] text-muted" title="Answers are written by Sawwi's rules, without AI.">
+                AI off
+              </span>
+            )}
+          </div>,
+          headerSlot,
         )}
-      </div>
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
         <Bubble role="sawwi">Upload each file on the left. I&apos;ll read them, match the columns, and only ask when something is unclear.</Bubble>
         {view.messages.map((m) => (
@@ -66,6 +77,7 @@ export function Chat({
             </p>
           </div>
         )}
+        {showSuggestions && !thinking && <SuggestedQuestions questions={suggestions} more={askedAny} disabled={busy} onIntent={onIntent} />}
         {current && (
           <div className="space-y-2.5">
             <Bubble role="sawwi" highlight>
@@ -90,6 +102,36 @@ export function Chat({
         </div>
       )}
     </section>
+  );
+}
+
+/** Canned questions for a fresh chat, answered from the template by rules (D-35). */
+function SuggestedQuestions({
+  questions,
+  more,
+  disabled,
+  onIntent,
+}: {
+  questions: typeof ABOUT_QUESTIONS;
+  more: boolean;
+  disabled: boolean;
+  onIntent: (i: ChatIntent) => void;
+}) {
+  return (
+    <div className="space-y-1.5 pt-1">
+      <p className="text-xs font-medium text-muted">{more ? "More questions" : "Suggested questions"}</p>
+      {questions.map((q) => (
+        <button
+          key={q.topic}
+          type="button"
+          disabled={disabled}
+          onClick={() => onIntent({ kind: "about", topic: q.topic })}
+          className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm transition hover:border-foreground/40 hover:bg-surface-muted disabled:opacity-50"
+        >
+          {q.question}
+        </button>
+      ))}
+    </div>
   );
 }
 
