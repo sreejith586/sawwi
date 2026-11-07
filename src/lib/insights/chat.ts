@@ -1,4 +1,5 @@
 import { isDemoOrg } from "@/lib/demo/demo";
+import { ABOUT_QUESTIONS, aboutAnswer, aboutQuestion, type AboutTopic } from "./about";
 import { llmAvailable } from "@/lib/mapping/llm";
 import type { ReconResult } from "@/lib/recon/match";
 import { loadRunDatasets } from "@/lib/runs/reconcile";
@@ -38,7 +39,9 @@ export type ChatIntent =
   | { kind: "breakdown"; check: string; by: string }
   | { kind: "email"; check: string; audience?: string }
   | { kind: "explain"; exception: number }
-  | { kind: "ask"; text: string };
+  | { kind: "ask"; text: string }
+  /** A canned question about the template, answered by rules (D-35); works before there's a result. */
+  | { kind: "about"; topic: AboutTopic };
 
 const MAX_QUESTION = 500;
 const HISTORY_TURNS = 10;
@@ -110,6 +113,7 @@ export async function narrativeFor(run: Run, generate: boolean): Promise<Narrati
 // ─── Chat ───────────────────────────────────────────────────────────────────
 
 export async function chat(run: Run, intent: ChatIntent, company: string): Promise<void> {
+  if (intent.kind === "about") return aboutTurn(run, intent.topic);
   const ctx = context(run);
   switch (intent.kind) {
     case "fix_first":
@@ -123,6 +127,15 @@ export async function chat(run: Run, intent: ChatIntent, company: string): Promi
     case "ask":
       return askTurn(ctx, intent.text);
   }
+}
+
+/** A canned question from a fresh chat: answered from the template, no AI, no tokens. */
+function aboutTurn(run: Run, topic: AboutTopic) {
+  const template = templateForRun(run);
+  if (!template) throw new ChatInputError("This run's template no longer exists.");
+  if (!ABOUT_QUESTIONS.some((q) => q.topic === topic)) throw new ChatInputError("Pick one of the suggested questions.");
+  ask({ run }, aboutQuestion(topic));
+  store.addMessage(run.id, "sawwi", aboutAnswer(template, topic), null, { type: "answer", source: "rules" });
 }
 
 function fixFirstTurn({ run, template, result }: Ctx) {

@@ -13,19 +13,29 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#13, #14): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-34), chat sidebar (D-33). Live checks and open decisions below |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 7 | Not defined yet: to be proposed in a new session | Next |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Demo data for the remaining 7 templates; Phase 6 closed (D-34) | `phase-6-remaining-demo-data` | (this PR) | Phase 6 session |
+| Demo data for the remaining 7 templates; Phase 6 closed (D-36) | `phase-6-remaining-demo-data` | (this PR) | Phase 6 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Demo data for every template; Phase 6 done** (D-34, branch `phase-6-remaining-demo-data`, in review). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
+- **Demo data for every template; Phase 6 done** (D-36, branch `phase-6-remaining-demo-data`, in review). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
+- **Chat panel opens by default on run pages** (D-34, #14, merged).
+  - Where the panel can dock (64rem and up), a reconciliation opens it. A direct visit opens it before first paint.
+  - Leaving the run restores your own open/closed choice; narrow screens keep it closed.
+  - One header: the run's status ("Ask about this result", "AI off") sits under "Ask Sawwi" instead of in a second header.
+  - Also fixes the run's chat sometimes not landing in the panel after a direct visit.
+- **Canned questions in a fresh chat** (D-35, same branch).
+  - On a reconciliation: "What files do I need?", "What does this reconciliation check?", "How are the files matched?" and "Where do I find these exports?". They're answered from the template by rules, with no AI and no tokens, even before any upload.
+  - Unasked ones stay listed until there's a report.
+  - The general panel offers four questions about Sawwi, with links.
+  - 6 new tests.
 - **Chat in a resizable right sidebar** (D-33, #13, merged).
   - "Ask Sawwi" is now a right-hand panel that mirrors the left nav: docked from 64rem, a drawer on narrow screens.
   - Drag its left border to resize it (300 to 720 px). Double-click resets the width, and arrow keys work too. The width and whether it's open are remembered.

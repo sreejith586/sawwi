@@ -1,6 +1,6 @@
 import type { DemoFile } from "./demo-files";
 
-// Made-up files for the last seven templates in the demo store (D-34): statements, price lists,
+// Made-up files for the last seven templates in the demo store (D-36): statements, price lists,
 // returns, post-dated cheques, bank payouts and imports. They refer to the demo Business Central
 // company's documents (SI-31xx, SCM-501, GLS-2291, PO-7001…) and to the demo store's payouts
 // (po_1029, TB-1014, RMT-2026-041…), so every reconciliation lines up. October 2026, AED.

@@ -245,7 +245,36 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Width in React state:** it would flash the default width before hydration, and layouts would re-render while dragging.
 - **Consequences:** on a run page the chat is closed until the user opens it, unless a question is waiting, so it no longer takes 360 px by default. On narrow screens it covers the page while open.
 
-### D-34: Demo data for every template, and Phase 6 closed
+### D-34: Run pages open the chat panel by default, under one header
+- **Context:** after D-33 the user asked: "open the chat panel by default on run pages". On a reconciliation, the chat is where setup questions are answered and the report's follow-ups happen, so it should be in view without a click.
+- **Decision:**
+  - **Where it can dock** (64rem and up), a run page opens the panel. On a direct visit the inline script opens it before first paint, so it doesn't pop in late. On a click-through, the run page opens it when it mounts.
+  - **Not saved as the user's choice.** Leaving the run restores the panel to how the user left it elsewhere. Only the top bar's button and the close button save a choice. Explain, the follow-ups and "Answer in the chat" also open it without saving.
+  - **Narrow screens:** the panel stays closed, because it would cover the page. The chat button's dot still shows when a question is waiting.
+  - **One header.** The user asked: "Do we need both the headers?" The panel header ("Ask Sawwi" and close) and the run chat's own header ("S · Sawwi · Ask about this result · AI off") are merged. The run's status and the AI off tag now sit under "Ask Sawwi", portalled into a second panel slot (`header`), and the run chat no longer has a header of its own.
+  - **Robustness fix:** the panel announces its slots when it mounts, and run pages subscribe to them. The run's chat therefore lands in the panel whichever of the two renders first. Before, a run page could miss the slot and never look again.
+- **Rejected alternatives:**
+  - **Saving "open" when a run page opens it:** the panel would then stay open on every page afterwards, which the user didn't ask for.
+  - **Opening it on narrow screens too:** it covers the whole page there.
+- **Consequences:** closing the panel on a run page closes it for this visit only; the next run page opens it again. Testing note: a hidden browser pane never runs animation frames, so React never reveals streamed page content there and pages look stuck on "Loading…". That is a test-environment effect, not an app bug.
+
+### D-35: Canned questions in a fresh chat, answered by rules
+- **Context:** the user asked: "Add a list of canned questions when the chat is fresh." A new chat showed only a greeting, so people didn't know what to ask. Before a report there was nothing to ask at all, and the general panel was a "coming soon" placeholder.
+- **Decision:**
+  - **On a reconciliation:** while nobody has asked anything and no setup question is waiting, the chat lists "What files do I need?", "What does this reconciliation check?", "How are the files matched?" and "Where do I find these exports?".
+    - Each is a new chat intent (`about`), answered from the template by rules (`src/lib/insights/about.ts`): the files with their required fields, the automatic and manual checks, each link's keys, tolerances and date window, and typical exports per file. That means no AI and no tokens.
+    - It works before any file is uploaded, and in the demo store. The answers are saved in the run's chat like any other.
+    - Questions not yet asked stay listed as "More questions" until there's a report. After that, the report's follow-up buttons take over, so "What should I fix first?" isn't listed twice.
+  - **In the general panel** (no reconciliation open): "What can Sawwi reconcile?", "How does matching work?", "Is my data sent to AI?" and "Which reconciliations need my attention?".
+    - The answers are fixed, shown on the spot in the panel, and link to Templates, Reconciliations and Home.
+    - They aren't saved. Free questions across all reconciliations are still to come.
+- **Rejected alternatives:**
+  - **Sending canned questions to the AI:** it costs tokens for answers the template already knows, and it wouldn't work in the demo or without a key.
+  - **Showing them only before the first message:** the remaining ones were lost after one click.
+  - **Static FAQ text in the panel:** a question and its answer read better in a chat.
+- **Consequences:** the answers change automatically when a template changes. They are only as good as the template's descriptions and examples.
+
+### D-36: Demo data for every template, and Phase 6 closed
 - **Context:** the user asked to "add demo data for the remaining templates" and to start the next phase in a new session if Phase 6 is then finished. Seven templates had no demo data: customer and supplier statements, price compliance, returns vs credit notes, post-dated cheques, bank vs payouts, and import landed cost.
 - **Decision:**
   - Add made-up files for them (`src/lib/connectors/mock/finance-files.ts`), served by the demo store's Demo data source (D-31, D-32). They refer to the demo company's own documents, so each reconciliation lines up end to end:
