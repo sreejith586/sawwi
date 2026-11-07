@@ -1,5 +1,4 @@
 import { Logo } from "@/components/marketing/header";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 // Sign-up and log-in: form on the left, a short reminder of what Sawwi does on the right.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -8,7 +7,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="flex flex-col px-4 sm:px-8">
         <header className="flex h-16 items-center justify-between">
           <Logo />
-          <ThemeToggle />
         </header>
         <main className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-sm">{children}</div>

@@ -25,9 +25,15 @@ _Updated in every commit. Newest first within each section._
 | Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | #26 | Phase 8 session |
 | Phase 8: SEO pages (D-47), based on #26 | `feature/phase-8-seo-pages` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
+| Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 
 ## Recent changes
+
+- **Light by default; theme switching only inside the app** (D-51, `feature/light-default-theme`).
+  - With nothing saved, the theme is light (it used to follow the OS). "System" and "Dark" are still in Settings and the account menu.
+  - The switch is gone from the homepage, public pages, log in, checkout and onboarding, and those pages are always light.
+  - Checked in the browser: with dark saved, the homepage stays light; going into the app (client navigation and full reload) turns it dark; going back turns it light; the Settings switch applies and saves; with nothing saved the app is light.
 
 - **AI in production was failing** (D-50, `fix/anthropic-workspace-header`). Every summary, chat answer and AI column mapping returned a 400, because the API key isn't scoped to a workspace. Found by asking the chat a question on a test run in production.
   - All clients now come from `anthropicClient()`, which sends `anthropic-workspace-id` when `ANTHROPIC_WORKSPACE_ID` is set. 2 new tests.
