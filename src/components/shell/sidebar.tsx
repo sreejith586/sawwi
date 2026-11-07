@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { CalendarIcon, CloseIcon, HomeIcon, PanelIcon, PlusIcon, RunsIcon, TemplatesIcon } from "@/components/icons";
 import { toggleSidebar } from "@/lib/sidebar";
+import { LogoLockup } from "@/components/brand/logo";
 
 // Left navigation. Desktop: sticky panel that collapses to an icon rail (button or ⌘/Ctrl+B).
 // Phone: off-canvas drawer opened from the top bar. Both states live on <html> as data
@@ -35,7 +36,7 @@ function RailTip({ children }: { children: ReactNode }) {
 }
 
 const itemClass =
-  "group/item relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 collapsed:justify-center collapsed:px-0";
+  "group/item relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 collapsed:justify-center collapsed:px-0";
 
 /** Plain markup, so it can render as the Suspense fallback before the pathname is known. */
 export function NavItems({ active }: { active?: string | null }) {
@@ -48,7 +49,7 @@ export function NavItems({ active }: { active?: string | null }) {
             <Link
               href={href}
               aria-current={on ? "page" : undefined}
-              className={`${itemClass} ${on ? "bg-surface-muted font-medium text-foreground" : "text-muted hover:bg-surface-muted/60 hover:text-foreground"}`}
+              className={`${itemClass} ${on ? "bg-brand-soft font-medium text-foreground [&>svg]:text-brand" : "text-muted hover:bg-surface-muted/60 hover:text-foreground"}`}
             >
               <Icon />
               <span className="truncate collapsed:sr-only">{label}</span>
@@ -93,14 +94,13 @@ export function Sidebar({ nav, footer }: { nav: ReactNode; footer: ReactNode }) 
         className="app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-surface md:sticky md:top-0 md:h-dvh md:shrink-0"
       >
         <div className="flex h-14 shrink-0 items-center gap-2 px-3 collapsed:justify-center collapsed:px-0">
-          <Link href="/home" className="flex min-w-0 items-center gap-2 text-[15px] font-semibold tracking-tight collapsed:hidden">
-            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-            Sawwi
+          <Link href="/home" className="flex min-w-0 items-center collapsed:hidden">
+            <LogoLockup />
           </Link>
           <button
             type="button"
             onClick={toggleSidebar}
-            className="ml-auto hidden size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 md:grid collapsed:ml-0"
+            className="ml-auto hidden size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 md:grid collapsed:ml-0"
             aria-label="Collapse or expand sidebar"
             title="Collapse or expand sidebar (⌘B / Ctrl+B)"
           >
@@ -119,7 +119,7 @@ export function Sidebar({ nav, footer }: { nav: ReactNode; footer: ReactNode }) 
         <div className="px-3 collapsed:px-2.5">
           <Link
             href="/templates"
-            className="group/item relative flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 collapsed:px-0"
+            className="group/item relative flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 collapsed:px-0"
           >
             <PlusIcon className="size-4" />
             <span className="collapsed:sr-only">New reconciliation</span>

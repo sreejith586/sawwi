@@ -27,6 +27,14 @@
   --info-soft: #eff8ff;
   /* Single-series chart marks (validated: lightness band and 3:1 vs surface, both themes). */
   --chart-1: #175cd3;
+  /* Brand emerald (D-44, D-45): the logo plus a few quiet accents (focus, selection, active state). Never a status. */
+  --brand: #0e7c66;
+  --brand-soft: #e8f5f0;
+  --on-brand: #ffffff;
+  --logo-tile: #18181b;
+  --logo-sheet-back: #1f5346;
+  --logo-sheet: #0e7c66;
+  --logo-check: #ffffff;
 }
 
 /*
@@ -56,6 +64,13 @@
   --info: #53b1fd;
   --info-soft: #0f2547;
   --chart-1: #2e90fa;
+  --brand: #2bbf95;
+  --brand-soft: #0b2b24;
+  --on-brand: #06231c;
+  --logo-tile: #fafafa;
+  --logo-sheet-back: #b3d4ce;
+  --logo-sheet: #0e7c66;
+  --logo-check: #ffffff;
 }
 
 /*
@@ -98,6 +113,9 @@
   --color-danger-soft: var(--danger-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -105,6 +123,10 @@
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
 }
 
 /* Tabular figures keep amounts aligned in tables and tiles. */

@@ -304,7 +304,7 @@ function SlotCard(props: {
       <div className="flex items-start gap-3 p-5">
         <span
           className={`tabular grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold ${
-            slot.file ? "bg-accent text-accent-foreground" : "border border-border text-muted"
+            slot.file ? "bg-brand text-on-brand" : "border border-border text-muted"
           }`}
         >
           {slot.file ? "✓" : props.index}

@@ -220,7 +220,7 @@ export function ChatPanel() {
           <button
             type="button"
             onClick={() => setChatOpen(false)}
-            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             aria-label="Close chat"
             title="Close chat"
           >
