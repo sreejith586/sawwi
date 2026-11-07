@@ -1,3 +1,4 @@
+import { num, str } from "./format";
 import { ConnectorError, type Connector, type ConnectorDeps, type PullWindow } from "./types";
 
 // Microsoft Dynamics 365 Business Central (online), standard API v2.0 (D-29).
@@ -127,17 +128,6 @@ async function company(s: Session): Promise<Company> {
 
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
-const str = (v: unknown) => (v === null || v === undefined ? "" : String(v));
-/**
- * Decimal fields as Business Central shows them: at least 2 places ("7350.00"), up to 5.
- * Whole numbers would otherwise look like IDs to the file profiler on small pulls.
- */
-export function num(v: unknown): string {
-  if (typeof v !== "number" || !Number.isFinite(v)) return str(v);
-  const s = v.toFixed(5).replace(/0+$/, "");
-  const [whole, frac = ""] = s.split(".");
-  return `${whole}.${frac.padEnd(2, "0")}`;
-}
 const lines = (d: Doc, key: string) => ((d[key] as Doc[] | undefined) ?? []).filter((l) => l.lineType !== "Comment");
 /** Unposted documents ("Draft", "In Review") are not in the books yet. */
 const posted = (d: Doc) => !["", " ", "Draft", "In Review"].includes(str(d.status));

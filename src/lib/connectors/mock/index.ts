@@ -1,13 +1,18 @@
 import type { FetchLike } from "../types";
 import { DEMO_BC_CREDENTIALS, isBusinessCentralUrl, mockBusinessCentral } from "./business-central";
+import { DEMO_MAGENTO_CREDENTIALS, isMagentoMockUrl, mockMagento } from "./magento";
 
-// Local demo mode (D-29): with SAWWI_CONNECTOR_MOCK=business-central (or "all"), requests to
-// Business Central's hosts are answered in-process by the mock tenant instead of Microsoft.
+// Local demo mode (D-29, D-30): with SAWWI_CONNECTOR_MOCK=business-central,magento (or "all"),
+// requests to those providers are answered in-process by invented data instead of the real service.
 // Never in production: there the variable is ignored.
 
 type Mock = { id: string; matches: (url: string) => boolean; fetch: FetchLike; demoValues: Record<string, string> };
 
-const MOCKS: Mock[] = [{ id: "business-central", matches: isBusinessCentralUrl, fetch: mockBusinessCentral({ pageSize: 50 }), demoValues: DEMO_BC_CREDENTIALS }];
+const MOCKS: Mock[] = [
+  { id: "business-central", matches: isBusinessCentralUrl, fetch: mockBusinessCentral({ pageSize: 50 }), demoValues: DEMO_BC_CREDENTIALS },
+  // The demo store sits at a reserved .example address, so nothing real is ever shadowed.
+  { id: "magento", matches: isMagentoMockUrl, fetch: mockMagento(), demoValues: DEMO_MAGENTO_CREDENTIALS },
+];
 
 export function activeMocks(): Mock[] {
   if (process.env.NODE_ENV === "production") return [];

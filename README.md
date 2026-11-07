@@ -61,12 +61,12 @@ pnpm build
     "Due now" on Home and on the Schedules page; Start opens that period's run, and saved mappings
     make a repeat ask nothing. No background jobs: due dates are worked out when the page loads.
 13. **Connections** (Settings → Connections, owners and admins): connect a Shopify store (read-only
-    Admin API token) or Microsoft Dynamics 365 Business Central (Entra app: tenant, environment, client
-    ID and secret), then use "Import from a connection" on a run's file slot to pull that period's data
+    Admin API token), Microsoft Dynamics 365 Business Central (Entra app: tenant, environment, client
+    ID and secret) or a Magento 2 store (integration access token), then use "Import from a connection" on a run's file slot to pull that period's data
     instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
     `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
-    **Demo without a tenant:** add `SAWWI_CONNECTOR_MOCK=business-central` to `.env.local` (dev only).
-    Business Central is then simulated with an invented company; click **Fill demo values**, connect,
-    and import October 2026 into e.g. the three-way match.
+    **Demo without real accounts:** add `SAWWI_CONNECTOR_MOCK=business-central,magento` to `.env.local`
+    (dev only). Both are then simulated with invented data; click **Fill demo values**, connect, and
+    import October 2026 into e.g. the three-way match (Business Central) or orders vs gateway (Magento).
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

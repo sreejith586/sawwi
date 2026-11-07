@@ -47,7 +47,7 @@ async function Connections() {
               </p>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted">More sources (Magento 2, Amazon SP-API, Odoo, Zoho Books, Salla, Zid, payment gateways, bank feeds) are planned.</p>
+          <p className="mt-2 text-xs text-muted">More sources (Amazon SP-API, Odoo, Zoho Books, Salla, Zid, payment gateways, bank feeds) are planned.</p>
         </section>
       )}
 

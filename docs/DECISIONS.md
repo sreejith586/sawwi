@@ -151,3 +151,26 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - **BC on-premises**: needs Entra auth configured on their server and a reachable URL; online first.
     - **A recorded-fixture JSON file** like Shopify's: fine for unit tests, but can't drive a browser demo. The mock answers real URLs, so the same code path runs in tests and in the demo.
 - **Consequences:** no live tenant has been called. The partner needs an Entra app registration, a client secret, and the app enabled in BC with a read-only permission set; then a live check (D-28's rule: the user connects with their own account). Customer and vendor ledger statements (b2b-customer-statement, p2p-supplier-statement) aren't covered by v2.0 and still come from uploads.
+
+### D-30: Magento 2 connector (REST, integration token), a network guard for self-hosted sources, and a mock store
+- **Context:** the user asked for Magento 2 after Business Central ("yes, start Magento 2 with a mock store"). Magento 1/2 exports are already the most common webstore uploads (the alias table is built around their grids), so a connector removes the most frequent manual export. Unlike Shopify or Business Central, every Magento store runs on its own domain.
+- **Decision:**
+  - **Auth:** an integration access token (System → Extensions → Integrations) with read-only resources: Sales → Operations (Orders, Credit Memos, Shipments) and Stores → Settings (for the weight unit). Sent as a Bearer token, which Magento 2.4.4+ accepts only with "Allow OAuth Access Tokens to be used as standalone Bearer tokens" = Yes; the help text and error message say so. Sawwi only sends GETs to `/rest/V1`.
+  - **Three reports** with fixed columns named after the template fields:
+    - **Orders** feed the orders slot of orders vs gateway, COD remittance and BNPL. They include the payment method code and title, and totals, refunds and shipping.
+    - **Credit memo lines** feed the refunds slot of refunds vs returns. There is one line per refunded item, configurable parent/child pairs are collapsed to one line, and the order's number is looked up because credit memos only carry its internal ID.
+    - **Shipments** feed the courier freight shipments slot. There is one row per tracking number. Weight is in kg, converted from lbs if the store uses lbs. When the unit can't be read, the row says "kgs (assumed)".
+  - Windows use `created_at` in UTC as whole days, both ends inclusive. Paging stops at `total_count`, because Magento repeats the last page when asked past the end.
+  - **Network guard for every live connector request** (`net-guard.ts`):
+    - only https, and the store URL must be a public host name (no IPs, ports, logins or internal names);
+    - every request's host is resolved and refused if any address is private, loopback, link-local, CGNAT or reserved;
+    - redirects aren't followed.
+    This stops a connection from pointing Sawwi's server at its own network. Shopify and Business Central go through the same guard.
+  - **Mock store** (`mock/magento*.ts`): the invented *Sawwi Demo Store* at the reserved address `demo-store.sawwi-mock.example`, with October 2026 orders paid by card, cash on delivery and BNPL, a cancellation, a partial and a full refund, a shipment with two tracking numbers and one with none, and orders just outside the month. It answers Magento's search criteria (filters, `in`, paging). Tests use it. `SAWWI_CONNECTOR_MOCK=magento` (or `business-central,magento`) enables it locally, never in production.
+  - **Connection form:** it now submits without React's automatic form reset. The reset made the source picker show Shopify while Magento's fields were on screen.
+  - **Rejected alternatives:**
+    - **Magento GraphQL**: built for the storefront; admin sales data (credit memos, shipments) is in REST.
+    - **OAuth 1.0a signed requests**: work on every version without the bearer setting, but every request has to be signed with four secrets. The bearer token is one secret and is Adobe's documented path for 2.4.4+. Signing can come later if a store can't change the setting.
+    - **Admin username and password tokens** (`integration/admin/token`): they'd hold an admin's login and expire after hours.
+    - **Pinning the host like Shopify**: impossible for self-hosted stores, hence the guard.
+- **Consequences:** no real store has been called. The user, or the merchant, creates the integration and pastes its token once. Magento 1 isn't covered (its API is SOAP/XML-RPC and end-of-life); Magento 1 grid exports keep coming in as uploads. The guard resolves DNS before each request, so a host that changes its DNS between the check and the connection (DNS rebinding) is a small remaining risk. Pinning the resolved address per request would close it.
