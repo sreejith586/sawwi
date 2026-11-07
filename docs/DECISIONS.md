@@ -194,3 +194,32 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - **A "demo workspace" seeded in the database:** it hides how a real run is built, and it would be hard to keep in step with templates and mappings.
     - **Running the reconciliation automatically after the fill:** a demo should show the "Ready to reconcile" step.
 - **Consequences:** marketplace templates, price compliance, returns vs credit notes and the supplier and customer statements have no demo data yet. The button names the slots it couldn't fill. Changing the mock documents means updating the counterpart files and their tests together.
+
+### D-32: A public demo store, reset daily, replaces the developer demo switch
+- **Context:** the user asked for demo data for the marketplace templates too, then: "Make the demo data only available for a default demo store so visitors can run it and see how the reconciliation works", and "let the demo store reset every 24 hours." Until now demo data was a developer switch (`SAWWI_CONNECTOR_MOCK`, D-29 to D-31). It added demo connections to whichever workspace was signed in, and it never ran in production.
+- **Decision:**
+  - **One shared demo workspace** (`src/lib/demo/`), key `_sawwi_demo`, named "Sawwi Demo Trading".
+    - Real keys come from company names and only contain letters, digits and hyphens, so no customer workspace can ever be mistaken for it.
+    - It is created on first use, on the unlimited plan, with a profile covering every channel so every template applies.
+    - One shared visitor user has Editor access and a random, discarded password. Visitors can run reconciliations but can't manage the team, plan or profile, and nobody can log in as the visitor.
+  - **Entry:** "Try the live demo" on the landing and login pages is a form POST, so link prefetching never starts a session. It signs the browser in as the visitor; no account is needed. A banner in the app says it's the live demo, that the data is invented and shared, and when it next resets, with a link to create a real workspace. `SAWWI_DEMO=off` hides the demo.
+  - **Demo data lives only there.**
+    - The Business Central and Magento mocks and the Demo data files are built-in sources of the demo workspace (`demo:<provider>`), not saved connections. They hold no secrets, need no encryption key, and their requests are answered in-process.
+    - Real workspaces never see these sources, can't add Demo data, and get "no longer exists" if they try to pull from a `demo:` source.
+    - `SAWWI_CONNECTOR_MOCK` and the "Fill demo values" form are removed.
+  - **Marketplace demo data:** one invented seller (MP-10xx orders, two October settlements, fees, ads, returns, claims, fulfilment stock, business-order invoices). All 8 marketplace templates fill completely and find their planted exceptions, so 16 templates have demo data in total.
+  - **Shared and public, so:**
+    - **Uploads are off.** Nobody's real files end up where other visitors can see them; the upload area explains this.
+    - **Connections can't be added or removed** in the demo.
+    - **No AI calls.** `llmAvailable()` is false for the demo workspace, so visitors can't run up token costs. Summaries, emails and explanations use the rule-based text, and free-text chat says it is off in the demo.
+  - **Daily reset at 00:00 UTC**, on the first request after midnight (checked in `getCurrentSession`), like due dates in D-26, so no job runner is needed.
+    - It deletes every row filed under the demo's key, and its runs' rows, in every table, including tables added later. It also removes the runs' uploaded files.
+    - The workspace and its visitor stay, so an open tab keeps working; earlier runs simply disappear.
+    - The last reset time is stored in a new `demo_state` table.
+  - **Rejected alternatives:**
+    - **A private sandbox per visitor:** nobody sees anyone else's runs, but every visit creates a workspace, which needs cleanup and abuse limits. One shared store, wiped daily, is the "default demo store" the user described.
+    - **Keeping the developer switch alongside:** two ways to get demo data, one of which could put mock sources in a real workspace.
+    - **Allowing uploads with a warning:** visitors would still put real customer files into a shared space.
+    - **A cron job for the reset:** needs a job runner (D-26). Resetting on read does the same without one.
+    - **Allowing AI in the demo with a quota:** possible later; the rule-based text already shows the flow.
+- **Consequences:** visitors share one store, so they can see each other's runs for up to a day. That's acceptable for invented data, and the banner says so. A visitor working at midnight UTC sees their runs vanish. The supplier and customer statement, price compliance and returns-vs-credit-notes templates still have no demo data. The demo's runs count in admin usage and lists like any workspace. Developers now try the connectors through the demo store; there's no switch to mock them in their own workspace.

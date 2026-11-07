@@ -174,18 +174,18 @@ export function buildRunView(runId: string): RunView | undefined {
       .map((q) => ({ id: q.id, ...presentQuestion(q.payload, template, q.slotKey, files.find((f) => f.slotKey === q.slotKey)) })),
     usage: store.getUsage(run.id),
     report: result ? buildReport(template, result) : undefined,
-    insights: result ? buildInsights(template, result, files) : undefined,
+    insights: result ? buildInsights(template, result, files, run.orgKey) : undefined,
     generic: run.templateId === GENERIC_TEMPLATE_ID ? genericSetupFor(run.id) : undefined,
     custom: isCustomId(run.templateId),
   };
 }
 
-function buildInsights(template: Template, result: ReconResult, files: RunFile[]): InsightsView {
+function buildInsights(template: Template, result: ReconResult, files: RunFile[], orgKey: string): InsightsView {
   const mapped = mappedFields(files);
   const severity = new Map(template.checks.map((c) => [c.id, severityOf(c.rule)]));
   const own = AUDIENCES[template.group];
   return {
-    ai: llmAvailable(),
+    ai: llmAvailable(orgKey),
     audience: own.key,
     audiences: [own, ...Object.entries(AUDIENCE_LABELS).filter(([k]) => k !== own.key).map(([key, label]) => ({ key, label }))],
     checks: result.checks

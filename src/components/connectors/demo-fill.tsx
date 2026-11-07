@@ -4,7 +4,7 @@ import { useState } from "react";
 import { buttonClass } from "@/components/ui";
 import type { RunView } from "@/lib/runs/view";
 
-/** Local demo mode only (D-31): one click fills every empty slot from the demo sources. */
+/** The demo store only (D-31, D-32): one click fills every empty slot from its built-in sources. */
 export function DemoFill(props: { runId: string; onView: (v: RunView) => void; onError: (e?: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string>();
@@ -33,8 +33,8 @@ export function DemoFill(props: { runId: string; onView: (v: RunView) => void; o
   return (
     <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-border bg-surface px-4 py-3 text-sm">
       <div className="min-w-0 flex-1">
-        <p className="font-medium">Demo mode</p>
-        <p className="text-muted">Fill every empty file with invented October 2026 data from the demo sources (Business Central, Magento and demo counterpart files), then run the reconciliation.</p>
+        <p className="font-medium">Live demo</p>
+        <p className="text-muted">Fill every empty file with invented October 2026 data (a marketplace seller, a Magento store, a Business Central company, and their gateway, courier, warehouse and bank files), then run the reconciliation.</p>
         {note && (
           <p role="status" className="mt-1 text-success">
             {note}

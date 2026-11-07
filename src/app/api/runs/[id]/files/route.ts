@@ -1,4 +1,5 @@
 import { MAX_FILES_PER_SLOT, MAX_UPLOAD_BYTES, UnsupportedFileError } from "@/lib/files/parse";
+import { isDemoOrg } from "@/lib/demo/demo";
 import { getOwnedRun } from "@/lib/runs/access";
 import { ingestFiles, RunInputError } from "@/lib/runs/engine";
 import { buildRunView } from "@/lib/runs/view";
@@ -8,6 +9,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/f
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
   if (!owned) return Response.json({ error: "Run not found." }, { status: 404 });
+  // The demo store is shared by everyone who opens it, so nobody's real files go into it (D-32).
+  if (isDemoOrg(owned.run.orgKey)) return Response.json({ error: "Uploads are off in the live demo. Use “Fill with demo data”, or sign up to reconcile your own files." }, { status: 403 });
 
   const form = await request.formData();
   const slot = form.get("slot");

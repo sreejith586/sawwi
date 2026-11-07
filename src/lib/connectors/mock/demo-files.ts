@@ -4,6 +4,8 @@
 // (orders 000000101…, invoices SI-31xx), so a demo run reconciles end to end, and each file
 // plants a few exceptions. October 2026, AED. Nothing here is real.
 
+import { MARKETPLACE_FILES } from "./marketplace-files";
+
 export type DemoFile = {
   id: string;
   label: string;
@@ -16,7 +18,7 @@ export type DemoFile = {
   rows: string[][];
 };
 
-export const DEMO_FILES: DemoFile[] = [
+const WEB_AND_B2B_FILES: DemoFile[] = [
   {
     id: "card_settlement",
     label: "Card gateway settlement",
@@ -136,5 +138,7 @@ export const DEMO_FILES: DemoFile[] = [
     ],
   },
 ];
+
+export const DEMO_FILES: DemoFile[] = [...WEB_AND_B2B_FILES, ...MARKETPLACE_FILES];
 
 export const demoFileById = (id: string) => DEMO_FILES.find((f) => f.id === id);

@@ -3,7 +3,9 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { MarketingHeader } from "@/components/marketing/header";
+import { TryDemoButton } from "@/components/demo/try-demo";
 import { buttonClass } from "@/components/ui";
+import { demoEnabled } from "@/lib/demo/enabled";
 import { PLANS } from "@/lib/saas/plans";
 import { getSettings } from "@/lib/saas/store";
 import { TEMPLATES } from "@/lib/templates/catalog";
@@ -93,11 +95,15 @@ export default function LandingPage() {
               <Link href="/signup" className={`${buttonClass("primary")} h-11 px-5 text-[15px]`}>
                 Start free
               </Link>
-              <a href="#how" className={`${buttonClass("secondary")} h-11 px-5 text-[15px]`}>
-                See how it works
-              </a>
+              {demoEnabled() ? (
+                <TryDemoButton className="h-11 px-5 text-[15px]" />
+              ) : (
+                <a href="#how" className={`${buttonClass("secondary")} h-11 px-5 text-[15px]`}>
+                  See how it works
+                </a>
+              )}
             </div>
-            <p className="mt-4 text-sm text-muted">No card needed. Set up in two minutes.</p>
+            <p className="mt-4 text-sm text-muted">No card needed. Set up in two minutes{demoEnabled() ? ", or try the demo store with invented data first, no sign-up." : "."}</p>
           </div>
           <ProductPreview />
         </div>

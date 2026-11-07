@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connectorsEnabled } from "@/lib/connectors/crypto";
-import { mockDemoValues } from "@/lib/connectors/mock";
+import { DEMO_SOURCES } from "@/lib/connectors/mock";
 import { availableConnectors, CONNECTORS } from "@/lib/connectors/registry";
 import { syncRows } from "@/lib/connectors/rows";
 import { listConnections } from "@/lib/connectors/store";
+import { isDemoOrg } from "@/lib/demo/demo";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 import { AddConnection, ConnectionList, SyncHistory } from "./connections-panel";
 
@@ -14,6 +15,8 @@ async function Connections() {
   const session = await getCurrentSession();
   if (!session) return null;
   const orgKey = session.org.key;
+  const labels = Object.fromEntries(CONNECTORS.map((c) => [c.id, c.label]));
+  if (isDemoOrg(orgKey)) return <DemoConnections labels={labels} history={syncRows(orgKey)} />;
   const canManage = canManageTeam(session.access);
   const enabled = connectorsEnabled();
   // Only what the browser needs: no secrets ever leave the server.
@@ -30,7 +33,7 @@ async function Connections() {
       <section>
         <h2 className="text-sm font-semibold">Your connections</h2>
         <div className="mt-3">
-          <ConnectionList items={items} canManage={canManage} labels={Object.fromEntries(CONNECTORS.map((c) => [c.id, c.label]))} />
+          <ConnectionList items={items} canManage={canManage} labels={labels} />
         </div>
       </section>
 
@@ -39,7 +42,7 @@ async function Connections() {
           <h2 className="text-sm font-semibold">Add a connection</h2>
           <div className="mt-3">
             {enabled ? (
-              <AddConnection connectors={connectors} demoValues={mockDemoValues()} />
+              <AddConnection connectors={connectors} />
             ) : (
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted">
                 Connections are switched off on this server: it needs an encryption key for stored tokens (<code>SAWWI_CONNECTOR_KEY</code>, see the
@@ -55,6 +58,36 @@ async function Connections() {
         <h2 className="text-sm font-semibold">Import history</h2>
         <div className="mt-3">
           <SyncHistory rows={syncRows(orgKey)} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** The demo store (D-32): its built-in sources, read-only. Visitors can't add real connections here. */
+function DemoConnections({ labels, history }: { labels: Record<string, string>; history: ReturnType<typeof syncRows> }) {
+  return (
+    <div className="space-y-10">
+      <p className="text-sm text-muted">
+        This live demo has three built-in sources with invented data: a Business Central company, a Magento store, and demo files for the other side of
+        each reconciliation (marketplace, gateway, courier, warehouse, bank). On a reconciliation, click <strong>Fill with demo data</strong>, or use
+        “Import from a connection” on a file. In your own workspace you connect your real systems here.
+      </p>
+      <section>
+        <h2 className="text-sm font-semibold">Demo sources</h2>
+        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+          {DEMO_SOURCES.map((d) => (
+            <li key={d.provider} className="px-4 py-3">
+              <p className="text-sm font-medium">{d.accountLabel}</p>
+              <p className="text-xs text-muted">{labels[d.provider] ?? d.provider} · built into the demo</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2 className="text-sm font-semibold">Import history</h2>
+        <div className="mt-3">
+          <SyncHistory rows={history} />
         </div>
       </section>
     </div>

@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS custom_templates (
   template_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS demo_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 /** Columns added after a table first shipped: CREATE TABLE IF NOT EXISTS won't add them to old databases. */

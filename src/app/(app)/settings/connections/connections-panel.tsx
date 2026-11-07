@@ -16,7 +16,7 @@ const field = "h-9 w-full rounded-lg border border-border bg-surface px-3 text-s
 export type ConnectorOption = { id: string; label: string; description: string; fields: CredentialField[] };
 export type ConnectionItem = { id: string; provider: string; accountLabel: string; status: string; lastError: string | null; lastSyncAt: string | null; createdAt: string };
 
-export function AddConnection({ connectors, demoValues = {} }: { connectors: ConnectorOption[]; demoValues?: Record<string, Record<string, string>> }) {
+export function AddConnection({ connectors }: { connectors: ConnectorOption[] }) {
   const [provider, setProvider] = useState(connectors[0]?.id ?? "");
   const [values, setValues] = useState<Record<string, string>>({});
   const [state, action, pending] = useActionState<ConnectionActionState, FormData>(async (prev, form) => {
@@ -26,7 +26,6 @@ export function AddConnection({ connectors, demoValues = {} }: { connectors: Con
   }, {});
   const [, startSubmit] = useTransition();
   const c = connectors.find((x) => x.id === provider);
-  const demo = demoValues[provider];
   return (
     // Submitted by hand rather than with `action=`, so React doesn't reset the fields (and the
     // source picker) behind our state after each attempt.
@@ -58,16 +57,6 @@ export function AddConnection({ connectors, demoValues = {} }: { connectors: Con
         </select>
         {c && <span className="mt-1 block text-xs text-muted">{c.description}</span>}
       </label>
-      {demo && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-background px-3 py-2 text-xs text-muted">
-          <span className="min-w-0 flex-1">
-            Demo mode: {c?.label} is simulated on this server with an invented company (<code>SAWWI_CONNECTOR_MOCK</code>). Nothing is sent to the real service.
-          </span>
-          <button type="button" onClick={() => setValues(demo)} className={`${buttonClass("secondary")} h-7 text-xs`}>
-            Fill demo values
-          </button>
-        </div>
-      )}
       {c?.fields.map((f) => (
         <label key={`${provider}-${f.key}`} className="block text-sm">
           <span className="font-medium">

@@ -76,6 +76,7 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
               runId={view.id}
               templateId={view.templateId}
               sources={sources}
+              noUploads={demo}
               onView={update}
               onError={setError}
               onRemap={(field, column) => startTransition(async () => apply(await setFieldColumn(view.id, slot.key, field, column)))}
@@ -141,6 +142,8 @@ function SlotCard(props: {
   runId: string;
   templateId: string;
   sources: ImportSource[];
+  /** The demo store (D-32): shared by visitors, so files come from its demo sources only. */
+  noUploads?: boolean;
   onView: (v: RunView) => void;
   onError: (e?: string) => void;
   onRemap: (field: string, column: string | null) => void;
@@ -206,7 +209,7 @@ function SlotCard(props: {
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        void upload([...e.dataTransfer.files]);
+        if (!props.noUploads) void upload([...e.dataTransfer.files]);
       }}
     >
       <div className="flex items-start gap-3 p-5">
@@ -236,13 +239,19 @@ function SlotCard(props: {
                 </div>
                 {slot.file.remembered && <Pill tone="ok">Mapping remembered</Pill>}
                 {missingRequired > 0 && <Pill tone="high">{missingRequired} required missing</Pill>}
-                <label className="inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground">
-                  {input}
-                  {uploading ? (slow ? "Reading scanned pages…" : "Reading…") : "Replace"}
-                </label>
+                {!props.noUploads && (
+                  <label className="inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground">
+                    {input}
+                    {uploading ? (slow ? "Reading scanned pages…" : "Reading…") : "Replace"}
+                  </label>
+                )}
               </div>
               {slot.file.pdf && <PdfDetails infos={slot.file.pdf} />}
             </>
+          ) : props.noUploads ? (
+            <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
+              Uploads are off in the live demo. Use <strong>Fill with demo data</strong> above, or “Import from a connection” below.
+            </p>
           ) : (
             <label
               className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-7 text-center transition ${
