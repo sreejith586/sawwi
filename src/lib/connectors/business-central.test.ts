@@ -7,7 +7,7 @@ import * as runStore from "@/lib/runs/store";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import { buildRunView } from "@/lib/runs/view";
 import { BC_API_HOST, BC_REPORTS, businessCentral, deliveryNoteFor, normaliseTenant, pickCompany, windowFilter } from "./business-central";
-import { DEMO_BC_CREDENTIALS, mockBusinessCentral } from "./mock/business-central";
+import { DEMO_BC_CREDENTIALS, DEMO_BC_STORE_CREDENTIALS, mockBusinessCentral } from "./mock/business-central";
 import { num } from "./format";
 import { slotFit } from "./slot-fit";
 import { addConnection, pullIntoRun } from "./service";
@@ -118,12 +118,21 @@ describe("Business Central reports", () => {
       sales_invoices: 6,
       sales_invoice_lines: 7,
       sales_credit_memos: 1,
+      web_sales_invoices: 1, // SI-3106 carries the customer's reference in External Document No.
       sales_order_lines: 5,
       sales_shipment_lines: 6,
       purchase_order_lines: 4,
       purchase_receipt_lines: 3,
       purchase_invoice_lines: 3,
     });
+  });
+
+  it("reads the web store company's posted invoices with the store order number and e-mail (D-52)", async () => {
+    const store = businessCentral.parseCredentials({ ...DEMO_BC_STORE_CREDENTIALS });
+    expect((await businessCentral.test(store, mockDeps())).accountLabel).toBe("Sawwi Demo Store LLC (Sandbox)");
+    const t = await businessCentral.pull(store, "web_sales_invoices", october, mockDeps(2));
+    expect(t.rows.map((r) => `${r[0]} ${r[1]}`)).toEqual(["PSI-W1001 000000101", "PSI-W1002 000000102", "PSI-W1004 000000104", "PSI-W1005 000000104", "PSI-W1006 000000106", "PSI-W1008 000000108"]); // draft PSI-W1003 left out
+    expect(t.rows[0]).toEqual(["PSI-W1001", "000000101", "2026-10-02", "2026-10-02", "WEB", "Khalid Nasser", "khalid.nasser@example.com", "AED", "471.43", "23.57", "495.00", "Paid"]);
   });
 
   it("finds each invoice line's delivery note from its order when that is unambiguous", async () => {

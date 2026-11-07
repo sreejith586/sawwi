@@ -292,3 +292,25 @@ describe("Excel export", () => {
     expect(all.getWorksheet("Exceptions")!.rowCount).toBe(1 + result.totals.exceptions);
   });
 });
+
+describe("text_mismatch (D-52)", () => {
+  it("flags a matched order whose customer e-mail differs, ignoring case, spaces and blanks", () => {
+    const r = run("web-erp-invoices", [
+      ds("web-erp-invoices", "store_invoices", [
+        { order_id: "000000101", invoice_date: "2026-10-01", customer_email: "Layla.Haddad@example.com ", invoice_amount: "100.00", vat_amount: "4.76" },
+        { order_id: "000000102", invoice_date: "2026-10-02", customer_email: "omar@example.com", invoice_amount: "50.00", vat_amount: "2.38" },
+        { order_id: "000000103", invoice_date: "2026-10-03", customer_email: "", invoice_amount: "20.00", vat_amount: "0.95" },
+      ]),
+      ds("web-erp-invoices", "erp_invoices", [
+        { erp_invoice_no: "PSI-1", order_ref: "101", posting_date: "2026-10-02", customer_email: "layla.haddad@example.com", invoice_amount: "100.00", vat_amount: "4.76" },
+        { erp_invoice_no: "PSI-2", order_ref: "000000102", posting_date: "2026-10-03", customer_email: "guest@example.com", invoice_amount: "50.00", vat_amount: "2.38" },
+        { erp_invoice_no: "PSI-3", order_ref: "000000103", posting_date: "2026-10-04", customer_email: "someone@example.com", invoice_amount: "20.00", vat_amount: "0.95" },
+      ]),
+    ]);
+    expect(keysOf(r, "customer_mismatch")).toEqual(["000000102"]);
+    const e = r.exceptions.find((x) => x.check === "customer_mismatch")!;
+    expect(e.note).toBe("omar@example.com vs guest@example.com");
+    expect(e.value).toBe(50);
+    expect(check(r, "not_synced").count).toBe(0); // leading zeros don't matter
+  });
+});

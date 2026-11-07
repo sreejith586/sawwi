@@ -525,6 +525,25 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       }
       return;
     }
+    case "text_mismatch": {
+      const link = t.links[rule.link];
+      const norm = (v: string | undefined) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+      for (const g of c.matches[rule.link]!.groups) {
+        const l = g.left.find((r) => norm(r.raw[rule.left]));
+        if (!l) continue;
+        const right = g.right.filter((r) => norm(r.raw[rule.right]) && norm(r.raw[rule.right]) !== norm(l.raw[rule.left]));
+        if (!right.length) continue;
+        c.push({
+          link: rule.link,
+          key: c.groupKey(link, g),
+          left: c.ref(link.left, [l]),
+          right: c.ref(link.right, right),
+          value: c.amountOfSide(rule.link, "left", l) ?? 0,
+          note: `${l.raw[rule.left]} vs ${right[0].raw[rule.right]}`,
+        });
+      }
+      return;
+    }
     case "vat_rate": {
       for (const r of c.datasets.get(rule.slot)!.rows) {
         const gross = r.num[rule.gross];

@@ -1,9 +1,11 @@
 import { BC_API_HOST, BC_LOGIN_HOST, BC_SCOPE } from "../business-central";
 import type { FetchLike } from "../types";
-import { DEMO_COMPANIES, DEMO_COMPANY_INFORMATION, DEMO_DATA } from "./business-central-data";
+import { DEMO_COMPANIES, DEMO_COMPANY, DEMO_COMPANY_INFORMATION, DEMO_DATA } from "./business-central-data";
+import { DEMO_STORE_COMPANY, DEMO_STORE_COMPANY_INFORMATION, DEMO_STORE_DATA } from "./business-central-store-data";
 
 // An in-process stand-in for Microsoft Entra sign-in and the Business Central API v2.0
-// (D-29). It answers the same URLs, with the same JSON shapes, for one invented tenant, so
+// (D-29). It answers the same URLs, with the same JSON shapes, for one invented tenant with a
+// trading company, a web store company (D-52) and an empty holding company, so
 // tests and local demos exercise the real connector code with no network and no real
 // credentials. Supported: client-credentials token, companies, companyInformation, and
 // document collections with `$filter=<date> ge X and <date> le Y`, `$expand=<lines>` and
@@ -18,6 +20,16 @@ export const DEMO_BC_CREDENTIALS = {
   company: "Sawwi Demo Trading LLC",
 } as const;
 
+/** The same tenant, signed in to the web store's company (D-52). */
+export const DEMO_BC_STORE_CREDENTIALS = { ...DEMO_BC_CREDENTIALS, company: "Sawwi Demo Store LLC" } as const;
+
+const COMPANIES = [...DEMO_COMPANIES, DEMO_STORE_COMPANY];
+const BOOKS: Record<string, { info: unknown[]; data: Record<string, Record<string, unknown>[]> }> = {
+  [DEMO_COMPANY.id]: { info: DEMO_COMPANY_INFORMATION, data: DEMO_DATA },
+  [DEMO_STORE_COMPANY.id]: { info: DEMO_STORE_COMPANY_INFORMATION, data: DEMO_STORE_DATA },
+};
+const EMPTY = { info: [], data: {} };
+
 const TOKEN = "mock-bc-access-token";
 const LINES: Record<string, string> = {
   salesInvoices: "salesInvoiceLines",
@@ -28,6 +40,8 @@ const LINES: Record<string, string> = {
   purchaseInvoices: "purchaseInvoiceLines",
   salesCreditMemos: "salesCreditMemoLines",
 };
+
+const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA)]);
 
 type Reply = { status: number; body: unknown; headers?: Record<string, string> };
 const reply = (r: Reply) => ({
@@ -74,18 +88,17 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     if (!m) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
     const [, tenant, environment, rest] = m.map(decodeURIComponent);
     if (tenant !== demo.tenantId || environment !== demo.environment) return reply(odataError(404, "BadRequest_NotFound", "Environment not found."));
-    if (rest === "companies") return reply({ status: 200, body: { value: DEMO_COMPANIES } });
+    if (rest === "companies") return reply({ status: 200, body: { value: COMPANIES } });
 
     const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)$/);
     if (!cm) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
     const [, companyId, entity] = cm;
-    if (!DEMO_COMPANIES.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
-    const isDemo = companyId === DEMO_COMPANIES[0].id;
-    if (entity === "companyInformation") return reply({ status: 200, body: { value: isDemo ? DEMO_COMPANY_INFORMATION : [] } });
-    const all = DEMO_DATA[entity];
-    if (!all) return reply(odataError(404, "BadRequest_NotFound", `Resource '${entity}' not found.`));
+    if (!COMPANIES.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
+    const books = BOOKS[companyId] ?? EMPTY;
+    if (entity === "companyInformation") return reply({ status: 200, body: { value: books.info } });
+    if (!ENTITIES.has(entity)) return reply(odataError(404, "BadRequest_NotFound", `Resource '${entity}' not found.`));
 
-    let rows = isDemo ? all : [];
+    let rows = books.data[entity] ?? [];
     const filter = u.searchParams.get("$filter");
     if (filter) {
       const f = filter.match(/^(\w+) ge (\d{4}-\d{2}-\d{2}) and (\w+) le (\d{4}-\d{2}-\d{2})$/);

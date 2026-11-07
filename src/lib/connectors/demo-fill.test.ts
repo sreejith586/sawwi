@@ -8,7 +8,7 @@ import { buildRunView } from "@/lib/runs/view";
 import { TEMPLATES } from "@/lib/templates/catalog";
 import { DEMO_ORG_KEY } from "@/lib/demo/demo";
 import { demoData } from "./demo";
-import { fillRunWithDemoData } from "./demo-fill";
+import { DEMO_WINDOW, fillRunWithDemoData } from "./demo-fill";
 import { availableConnectors } from "./registry";
 import { pullIntoRun } from "./service";
 import { importSources } from "./sources";
@@ -45,6 +45,11 @@ const EXPECTED: Record<string, string[]> = {
   "web-refunds-vs-returns": ["refund_no_return: 000000103 / OUD-50", "return_no_refund: 000000104 / ABY-BLK-M"],
   // 4410023302 is billed twice, so its charged weight also exceeds what was declared.
   "web-courier-freight": ["duplicate_awb: 4410023302", "unknown_awb: 4410029999", "weight_dispute: 4410023301", "weight_dispute: 4410023302"],
+  // Magento ↔ Business Central (the store company's books). 104 is posted twice, so its total and VAT differ too.
+  "web-erp-invoices": [
+    "customer_mismatch: 000000102", "duplicate_posting: 000000104 / 840.00", "not_synced: 000000103",
+    "total_mismatch: 000000104", "total_mismatch: 000000106", "vat_mismatch: 000000104", "vat_mismatch: 000000106", "vat_mismatch: 000000108",
+  ],
   "b2b-cash-application": ["overdue: SI-3102", "overdue: SI-3104", "overdue: SI-3105", "overdue: SI-3106", "short_paid: SI-3103", "unapplied_receipt: TT REF 88213 MARINA FM"],
   "b2b-order-delivery-invoice": ["invoiced_not_delivered: LED-40", "open_orders: SO-1043 / CBL-25", "qty_mismatch: SSH-2103 / AC-18K"],
   // Marketplace templates: one invented seller (MP-10xx orders, two October settlements).
@@ -98,8 +103,18 @@ describe("Fill with demo data", () => {
     const again = await fillRunWithDemoData(run, { countries: ["AE"] });
     expect(first.filled).toHaveLength(2);
     expect(again.filled).toEqual([]);
-    expect((await importSources(DEMO_ORG_KEY)).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:magento", "demo:demo-data"]);
+    expect((await importSources(DEMO_ORG_KEY)).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:business-central-store", "demo:magento", "demo:demo-data"]);
     expect((await runStore.getUsage(run.id)).calls).toBe(0); // no AI calls
+  });
+
+  it("keeps the two Business Central companies' reports apart (D-52)", async () => {
+    const sources = await importSources(DEMO_ORG_KEY);
+    const reports = (id: string) => sources.find((s) => s.connectionId === id)!.reports.map((r) => r.id);
+    expect(reports("demo:business-central-store")).toEqual(["web_sales_invoices"]);
+    expect(reports("demo:business-central")).not.toContain("web_sales_invoices");
+    expect(reports("demo:business-central")).toContain("sales_invoices");
+    const run = await runStore.createRun(DEMO_ORG_KEY, "b2b-cash-application");
+    await expect(pullIntoRun(run, "invoices", "demo:business-central-store", "sales_invoices", DEMO_WINDOW, { countries: ["AE"] })).rejects.toThrow(/Unknown report/);
   });
 
   it("is invisible and refused outside the demo store", async () => {

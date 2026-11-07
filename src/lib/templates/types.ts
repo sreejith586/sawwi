@@ -93,7 +93,9 @@ export type CheckRule =
   | { kind: "row_match"; slot: string; where: Where }
   | { kind: "pair_match"; link: number; leftWhere: Where; rightWhere: Where }
   | { kind: "date_outside"; link: number; date: string; from: string; to: string }
-  | { kind: "vat_rate"; slot: string; gross: string; vat: string };
+  | { kind: "vat_rate"; slot: string; gross: string; vat: string }
+  /** A text field differs between matched records, e.g. the customer's e-mail (case and spaces ignored; blanks skipped). */
+  | { kind: "text_mismatch"; link: number; left: string; right: string };
 
 export type Check = { id: string; label: string; description: string; rule?: CheckRule };
 

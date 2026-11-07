@@ -86,7 +86,7 @@ async function get<T>(creds: MagentoCredentials, path: string, deps: ConnectorDe
       const params = body?.parameters as Record<string, string> | undefined;
       const resource = params && !Array.isArray(params) ? params.resources : undefined;
       throw new ConnectorError(
-        `The store refused access${resource ? ` (${resource})` : ""}. Check the access token, that the integration is active with read access to Sales → Operations (Orders, Credit Memos, Shipments), and on Magento 2.4.4+ that “Allow OAuth Access Tokens to be used as standalone Bearer tokens” is Yes (Stores → Configuration → Services → OAuth).`,
+        `The store refused access${resource ? ` (${resource})` : ""}. Check the access token, that the integration is active with read access to Sales → Operations (Orders, Invoices, Credit Memos, Shipments), and on Magento 2.4.4+ that “Allow OAuth Access Tokens to be used as standalone Bearer tokens” is Yes (Stores → Configuration → Services → OAuth).`,
       );
     }
     if (res.status === 404) throw new ConnectorError("No Magento REST API answered at that address. Check the store URL.");
@@ -107,18 +107,24 @@ async function search(creds: MagentoCredentials, resource: string, w: PullWindow
   }
 }
 
-/** Credit memos and shipments only carry the order's internal ID; look up its order number. */
-async function orderNumbers(creds: MagentoCredentials, ids: number[], deps: ConnectorDeps): Promise<Map<number, string>> {
-  const map = new Map<number, string>();
+type OrderInfo = { number: string; email: string; name: string };
+
+/** Invoices, credit memos and shipments only carry the order's internal ID; look up its number and customer. */
+async function orderInfo(creds: MagentoCredentials, ids: number[], deps: ConnectorDeps): Promise<Map<number, OrderInfo>> {
+  const map = new Map<number, OrderInfo>();
   const unique = [...new Set(ids)];
   for (let i = 0; i < unique.length; i += PAGE_SIZE) {
     const chunk = unique.slice(i, i + PAGE_SIZE);
-    const q = searchQuery([[{ field: "entity_id", value: chunk.join(","), condition: "in" }]], { size: PAGE_SIZE, current: 1 }, "items[entity_id,increment_id],total_count");
+    const q = searchQuery([[{ field: "entity_id", value: chunk.join(","), condition: "in" }]], { size: PAGE_SIZE, current: 1 }, "items[entity_id,increment_id,customer_email,customer_firstname,customer_lastname],total_count");
     const r = await get<SearchResult>(creds, `orders?${q}`, deps);
-    for (const o of r.items ?? []) map.set(Number(o.entity_id), str(o.increment_id));
+    for (const o of r.items ?? []) {
+      map.set(Number(o.entity_id), { number: str(o.increment_id), email: str(o.customer_email), name: [str(o.customer_firstname), str(o.customer_lastname)].filter(Boolean).join(" ") });
+    }
   }
   return map;
 }
+
+const NO_ORDER: OrderInfo = { number: "", email: "", name: "" };
 
 /** "kgs" or "lbs" from the default store view; undefined if the integration can't read it. */
 async function weightUnit(creds: MagentoCredentials, deps: ConnectorDeps): Promise<string | undefined> {
@@ -133,12 +139,20 @@ async function weightUnit(creds: MagentoCredentials, deps: ConnectorDeps): Promi
 
 export const MAGENTO_ORDER_COLUMNS = ["Order ID", "Order date", "Order status", "Payment method", "Payment method title", "Order total", "Refunded amount", "Shipping charged", "Currency", "Subtotal", "Discount", "Tax", "Total paid", "Store"] as const;
 export const MAGENTO_REFUND_COLUMNS = ["Order ID", "Refund / credit memo ID", "Refund date", "SKU", "Product", "Quantity", "Refund amount", "Credit memo total", "Currency"] as const;
+export const MAGENTO_INVOICE_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Customer e-mail", "Customer", "Subtotal", "Shipping", "Discount", "VAT amount", "Invoice total (incl. VAT)", "Currency"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
 const REPORTS: Report[] = [
   { id: "orders", label: "Orders", description: "One row per order placed in the period: status, payment method, totals and refunds.", slots: ["orders"], columns: MAGENTO_ORDER_COLUMNS },
   { id: "credit_memo_lines", label: "Credit memo lines (refunds)", description: "Refunded items from credit memos created in the period, with the order they belong to.", slots: ["refunds"], columns: MAGENTO_REFUND_COLUMNS },
+  {
+    id: "invoices",
+    label: "Invoices",
+    description: "One row per invoice created in the period, with its order, customer e-mail, VAT and total.",
+    slots: ["web-erp-invoices/store_invoices"],
+    columns: MAGENTO_INVOICE_COLUMNS,
+  },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
 
@@ -148,6 +162,13 @@ export function orderRow(o: Doc): string[] {
     str(o.increment_id), isoTime(o.created_at), str(o.status), str(payment.method), str(payment.additional_information?.[0]),
     num(o.grand_total), num(o.total_refunded ?? 0), num(o.shipping_amount ?? 0), str(o.order_currency_code), num(o.subtotal), num(o.discount_amount ?? 0), num(o.tax_amount ?? 0), num(o.total_paid ?? 0),
     str(o.store_name).split("\n").pop() ?? "",
+  ];
+}
+
+export function invoiceRow(inv: Doc, order: OrderInfo): string[] {
+  return [
+    order.number, str(inv.increment_id), isoTime(inv.created_at), order.email, order.name,
+    num(inv.subtotal ?? 0), num(inv.shipping_amount ?? 0), num(inv.discount_amount ?? 0), num(inv.tax_amount ?? 0), num(inv.grand_total), str(inv.order_currency_code),
   ];
 }
 
@@ -176,14 +197,14 @@ export function shipmentRows(s: Doc, orderNo: string, unit: string | undefined):
 export const magento: Connector<MagentoCredentials> = {
   id: "magento",
   label: "Magento 2",
-  description: "Orders, refunds and shipments from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
+  description: "Orders, invoices, refunds and shipments from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
   fields: [
     { key: "baseUrl", label: "Store address", secret: false, placeholder: "https://shop.example.com" },
     {
       key: "accessToken",
       label: "Integration access token",
       secret: true,
-      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Credit Memos, Shipments) and Stores → Settings, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
+      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Invoices, Credit Memos, Shipments) and Stores → Settings, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
     },
   ],
   reports: REPORTS.map(({ id, label, description, slots }) => ({ id, label, description, slots })),
@@ -207,14 +228,18 @@ export const magento: Connector<MagentoCredentials> = {
     let rows: string[][];
     if (report === "orders") {
       rows = (await search(creds, "orders", window, deps)).map(orderRow);
+    } else if (report === "invoices") {
+      const invoices = await search(creds, "invoices", window, deps);
+      const orders = await orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps);
+      rows = invoices.map((i) => invoiceRow(i, orders.get(Number(i.order_id)) ?? NO_ORDER));
     } else if (report === "credit_memo_lines") {
       const memos = await search(creds, "creditmemos", window, deps);
-      const orders = await orderNumbers(creds, memos.map((m) => Number(m.order_id)), deps);
-      rows = memos.flatMap((m) => creditMemoRows(m, orders.get(Number(m.order_id)) ?? ""));
+      const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
+      rows = memos.flatMap((m) => creditMemoRows(m, orders.get(Number(m.order_id))?.number ?? ""));
     } else {
       const shipments = await search(creds, "shipments", window, deps);
-      const [orders, unit] = await Promise.all([orderNumbers(creds, shipments.map((s) => Number(s.order_id)), deps), weightUnit(creds, deps)]);
-      rows = shipments.flatMap((s) => shipmentRows(s, orders.get(Number(s.order_id)) ?? "", unit));
+      const [orders, unit] = await Promise.all([orderInfo(creds, shipments.map((s) => Number(s.order_id)), deps), weightUnit(creds, deps)]);
+      rows = shipments.flatMap((s) => shipmentRows(s, orders.get(Number(s.order_id))?.number ?? "", unit));
     }
     return { headers: [...spec.columns], rows };
   },

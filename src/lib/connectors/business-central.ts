@@ -203,6 +203,19 @@ export const BC_REPORTS: ReportSpec[] = [
     ],
   },
   {
+    id: "web_sales_invoices",
+    label: "Posted sales invoices for web orders",
+    description: "Posted sales invoices in the period that carry a web store order number (External Document No.), with the customer's e-mail, VAT and total.",
+    slots: ["web-erp-invoices/erp_invoices"],
+    entity: "salesInvoices",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    columns: ["Posted invoice no.", "Store order no. (external document no.)", "Posting date", "Invoice date", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Amount incl. VAT", "Status"],
+    rows: (d, { lcy }) => [
+      [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.invoiceDate), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
     id: "sales_order_lines",
     label: "Sales order lines (open orders)",
     description: "Lines of sales orders dated in the period that are still open. Business Central deletes an order once it is fully invoiced.",
@@ -306,7 +319,7 @@ async function shipmentIndex(s: Session, companyId: string, w: PullWindow): Prom
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
-  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents, read-only, for the B2B and purchasing reconciliations.",
+  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents, read-only, for the B2B, purchasing and web store reconciliations.",
   fields: [
     { key: "tenantId", label: "Tenant ID or domain", secret: false, placeholder: "contoso.onmicrosoft.com or 00000000-0000-…", help: "Microsoft Entra admin center → Overview → Tenant ID." },
     { key: "environment", label: "Environment", secret: false, placeholder: "Production", help: "As shown in the Business Central admin center, e.g. Production or Sandbox." },

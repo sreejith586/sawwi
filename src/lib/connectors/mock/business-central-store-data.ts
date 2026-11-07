@@ -1,0 +1,55 @@
+import { DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
+
+// A second made-up Business Central company: the books of the demo Magento store (D-52). A web
+// connector posts each Magento invoice as a posted sales invoice, with the Magento order number
+// in External Document No. Everything is invented. AED, 5% VAT, October 2026. Planted:
+//
+//  Magento invoices vs BC posted invoices (web-erp-invoices)
+//   - 000000102: posted to a guest customer, with another e-mail.
+//   - 000000103: never synced (only a draft exists, which a pull leaves out).
+//   - 000000104: posted twice.
+//   - 000000106: posted at 504.00, with shipping, against a Magento invoice of 484.00.
+//   - 000000108: posted with no VAT (total right, VAT 0).
+//
+// It is kept apart from "Sawwi Demo Trading LLC" so the B2B demo results don't change.
+
+type Doc = Record<string, unknown>;
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+export const DEMO_STORE_COMPANY = { id: "5a7d1e00-0000-4000-8000-0000000bc003", name: "SAWWI DEMO STORE", displayName: "Sawwi Demo Store LLC" };
+export const DEMO_STORE_COMPANY_INFORMATION = [{ id: DEMO_STORE_COMPANY.id, displayName: DEMO_STORE_COMPANY.displayName, currencyCode: "AED", country: "AE" }];
+
+let seq = 0;
+const guid = () => `5707e000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
+const orderOf = (inc: string) => DEMO_ORDERS.find((o) => o.increment_id === inc)!;
+const invoiceDateOf = (inc: string) => {
+  const o = orderOf(inc);
+  const inv = DEMO_INVOICES.find((i) => i.order_id === o.entity_id)!;
+  return String(inv.created_at).slice(0, 10);
+};
+const nextDay = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+function webInvoice(number: string, orderInc: string, over: { total?: number; tax?: number; email?: string; name?: string; status?: string } = {}): Doc {
+  const o = orderOf(orderInc);
+  const total = over.total ?? Number(o.grand_total);
+  const tax = over.tax ?? r2((total * 5) / 105);
+  const date = nextDay(invoiceDateOf(orderInc)); // the connector posts the day after
+  return {
+    id: guid(), number, externalDocumentNumber: orderInc, invoiceDate: date, postingDate: date, dueDate: date,
+    customerNumber: "WEB", customerName: over.name ?? `${o.customer_firstname} ${o.customer_lastname}`, email: over.email ?? o.customer_email,
+    currencyCode: "", orderNumber: "", totalAmountExcludingTax: r2(total - tax), totalTaxAmount: tax, totalAmountIncludingTax: total,
+    remainingAmount: 0, status: over.status ?? "Paid", salesInvoiceLines: [],
+  };
+}
+
+export const DEMO_STORE_DATA: Record<string, Doc[]> = {
+  salesInvoices: [
+    webInvoice("PSI-W1001", "000000101"),
+    webInvoice("PSI-W1002", "000000102", { email: "guest@example.com", name: "Web guest" }),
+    webInvoice("PSI-W1003", "000000103", { status: "Draft" }),
+    webInvoice("PSI-W1004", "000000104"),
+    webInvoice("PSI-W1005", "000000104"), // the same order posted again
+    webInvoice("PSI-W1006", "000000106", { total: 504 }),
+    webInvoice("PSI-W1008", "000000108", { tax: 0 }),
+  ],
+};

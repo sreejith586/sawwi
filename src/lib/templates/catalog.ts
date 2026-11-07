@@ -730,6 +730,59 @@ export const TEMPLATES: Template[] = [
     outputs: ["Refund leakage value", "Pending refunds", "Returns by reason"],
   },
 
+  {
+    id: "web-erp-invoices",
+    title: "Store invoices vs. ERP posted invoices",
+    summary: "Check every invoiced webstore order reached your ERP once, as a posted invoice with the same total, VAT and customer.",
+    group: "webstore",
+    frequency: "weekly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "store_invoices",
+        label: "Webstore invoices",
+        description: "Invoices your store created for paid or delivered orders in the period.",
+        examples: ["Magento 2 / Adobe Commerce invoices", "Shopify orders export (paid)", "WooCommerce orders"],
+        fields: [ORDER_ID, f("store_invoice_no", "Store invoice no.", "id"), f("invoice_date", "Invoice date", "date", true), f("customer_email", "Customer e-mail", "text"), f("invoice_amount", "Invoice total (incl. VAT)", "money", true), VAT, CURRENCY],
+      },
+      {
+        key: "erp_invoices",
+        label: "ERP posted sales invoices",
+        description: "Sales invoices posted in your ERP for web orders, with the store's order number as their external reference.",
+        examples: ["Business Central posted sales invoices", "Odoo customer invoices", "Zoho Books invoices"],
+        fields: [
+          f("erp_invoice_no", "Posted invoice no.", "id", true),
+          f("order_ref", "Store order no. (external document no.)", "id", true),
+          f("posting_date", "Posting date", "date", true),
+          f("customer", "Customer", "text"),
+          f("customer_email", "Customer e-mail", "text"),
+          f("invoice_amount", "Amount incl. VAT", "money", true),
+          VAT,
+          CURRENCY,
+        ],
+      },
+    ],
+    links: [
+      {
+        left: "store_invoices",
+        right: "erp_invoices",
+        keys: [{ left: "order_id", right: "order_ref", normalize: ["trim", "upper", "strip_leading_zeros"] }],
+        cardinality: "many_to_many",
+        amount: { left: "invoice_amount", right: "invoice_amount", tolerance: 0.05 },
+        dateWindowDays: 7,
+      },
+    ],
+    checks: [
+      { id: "not_synced", label: "Not posted in the ERP", description: "The store invoiced the order, but the ERP has no posted invoice for it: the sync failed or is stuck.", rule: { kind: "unmatched_left", link: 0 } },
+      { id: "duplicate_posting", label: "Posted twice", description: "The same order was posted more than once for the same amount, so revenue and VAT are overstated.", rule: { kind: "duplicate", link: 0, side: "right", by: ["order_ref", "invoice_amount"] } },
+      { id: "total_mismatch", label: "Total differs", description: "The ERP's invoice total differs from the store's.", rule: { kind: "compare", link: 0, direction: "either" } },
+      { id: "vat_mismatch", label: "VAT differs", description: "VAT posted in the ERP differs from the VAT on the store invoice.", rule: { kind: "compare", link: 0, direction: "either", left: "vat_amount", right: "vat_amount", tolerance: 0.05 } },
+      { id: "customer_mismatch", label: "Different customer", description: "The ERP invoice carries another customer e-mail than the store order, e.g. posted to a guest or the wrong account. Ignore it if you post every web order to one customer.", rule: { kind: "text_mismatch", link: 0, left: "customer_email", right: "customer_email" } },
+      { id: "posted_no_store_invoice", label: "Posted without a store invoice", description: "An ERP invoice whose order number has no store invoice in the period. Often timing at month end, or a manual posting." },
+    ],
+    outputs: ["Orders missing from the ERP", "Duplicate postings to reverse", "Total, VAT and customer differences"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",

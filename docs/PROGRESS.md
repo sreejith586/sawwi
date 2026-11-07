@@ -27,8 +27,16 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
+| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Store invoices vs. ERP posted invoices** (D-52, `feature/magento-bc-invoices`, PR 1 of the Magento ↔ Business Central stack).
+  - New template `web-erp-invoices`: every Magento invoice should be a posted Business Central invoice, once, with the same total, VAT and customer e-mail. Flags orders never synced, orders posted twice, total, VAT and customer differences; "posted without a store invoice" is listed for review.
+  - Magento connector: new `invoices` report (order number and customer e-mail looked up from the orders). Business Central connector: new `web_sales_invoices` report (posted invoices with a store order number in External Document No., with the sell-to e-mail).
+  - Engine: new `text_mismatch` rule (a text field differs between matched records).
+  - Demo: a second Business Central company, "Sawwi Demo Store LLC", holds the demo store's books and is its own demo source, so the B2B demo results are unchanged. The template fills in one click and finds its 8 planted exceptions.
+  - Public Magento 2 and Business Central pages list the new template, report and an FAQ. 5 new tests.
 
 - **Larger wordmark** (`feature/larger-wordmark`): "sawwiapp" next to the logo mark is 20px in headers (was 16px) and 18px in the footer (was 14px), at the user's request. The mark stays 28px and 24px.
 - **Light by default; theme switching only inside the app** (D-51, `feature/light-default-theme`).
@@ -171,7 +179,8 @@ _Updated in every commit. Newest first within each section._
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.
-4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30).
+4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30). Include Sales → Operations → Invoices for the new invoices report (D-52).
+   - With the design partner: confirm their Magento↔BC sync writes the Magento order number to External Document No. and the shopper's e-mail to Sell-to E-mail, or the web templates need a different key (D-52).
 5. Scheduled connector pulls, as a new job kind on the jobs table (D-26, D-27, D-42). Not chosen for Phase 8.
 
 ## Open questions
