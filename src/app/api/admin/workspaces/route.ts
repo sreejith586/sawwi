@@ -7,7 +7,7 @@ import { listOrgsForAdmin } from "@/lib/saas/store";
 export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session?.isSuperadmin) return Response.json({ error: "Not found." }, { status: 404 });
-  const rows = applyQuery(orgRows(listOrgsForAdmin()), queryFromParams(new URL(request.url).searchParams, ORG_FILTERS), [...ORG_SEARCH]);
+  const rows = applyQuery(orgRows(await listOrgsForAdmin()), queryFromParams(new URL(request.url).searchParams, ORG_FILTERS), [...ORG_SEARCH]);
   const bytes = await tableWorkbook({
     sheetName: "Workspaces",
     columns: [

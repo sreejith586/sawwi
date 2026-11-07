@@ -314,7 +314,7 @@ function ProductPreview() {
 
 async function Pricing() {
   await connection();
-  const { paywallEnabled, trialDays } = getSettings();
+  const { paywallEnabled, trialDays } = await getSettings();
   if (!paywallEnabled) {
     return (
       <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-border bg-surface p-8 text-center">

@@ -35,5 +35,5 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/f
     }
     throw error;
   }
-  return Response.json({ view: buildRunView(id) });
+  return Response.json({ view: await buildRunView(id) });
 }

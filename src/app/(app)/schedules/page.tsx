@@ -13,8 +13,8 @@ async function Schedules() {
   const session = await getCurrentSession();
   if (!session) return null;
   const orgKey = session.org.key;
-  const rows = scheduleRows(orgKey);
-  const due = dueSchedules(orgKey);
+  const rows = await scheduleRows(orgKey);
+  const due = await dueSchedules(orgKey);
   const canEdit = canRun(session.access);
 
   if (rows.length === 0) {

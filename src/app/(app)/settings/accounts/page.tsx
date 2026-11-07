@@ -13,10 +13,10 @@ async function Members() {
   const session = await getCurrentSession();
   if (!session) return null;
   const { org } = session;
-  const owner = orgOwner(org.id) ?? session.user;
+  const owner = await orgOwner(org.id) ?? session.user;
   const rows = memberRows(
     { name: owner.name, email: owner.email, roleLabel: org.profile ? labelOf(ROLES, org.profile.role) : "" },
-    listMembers(org.key),
+    await listMembers(org.key),
   );
   return <MembersPanel rows={rows} teams={ROLES.map((r) => ({ value: r.value, label: r.label }))} canManage={canManageTeam(session.access)} />;
 }

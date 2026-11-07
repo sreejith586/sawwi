@@ -128,22 +128,22 @@ describe("Magento data runs the webstore reconciliations", () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  const mapped = (runId: string, slot: string) => Object.fromEntries((buildRunView(runId)!.slots.find((s) => s.key === slot)!.file?.fields ?? []).map((x) => [x.key, x.column]));
+  const mapped = async (runId: string, slot: string) => Object.fromEntries(((await buildRunView(runId))!.slots.find((s) => s.key === slot)!.file?.fields ?? []).map((x) => [x.key, x.column]));
   async function connection() {
-    return store.listConnections("shop")[0] ?? (await addConnection("shop", "magento", { ...DEMO_MAGENTO_CREDENTIALS }, null, deps()));
+    return (await store.listConnections("shop"))[0] ?? (await addConnection("shop", "magento", { ...DEMO_MAGENTO_CREDENTIALS }, null, deps()));
   }
 
   it("stores the token encrypted and labels the connection with the store", async () => {
     const conn = await connection();
     expect(conn.accountLabel).toBe("Sawwi Demo Store (demo-store.sawwi-mock.example)");
-    expect(store.getConnectionSecret("shop", conn.id)).not.toContain(DEMO_MAGENTO_CREDENTIALS.accessToken);
+    expect(await store.getConnectionSecret("shop", conn.id)).not.toContain(DEMO_MAGENTO_CREDENTIALS.accessToken);
   });
 
   it("orders vs gateway: Magento orders map by name and reconcile against a card settlement file", async () => {
     const conn = await connection();
-    const run = runStore.createRun("shop", "web-orders-vs-gateway");
+    const run = await runStore.createRun("shop", "web-orders-vs-gateway");
     await pullIntoRun(run, "orders", conn.id, "orders", october, { countries: ["AE"] }, deps());
-    expect(mapped(run.id, "orders")).toMatchObject({
+    expect(await mapped(run.id, "orders")).toMatchObject({
       order_id: "Order ID", order_date: "Order date", order_status: "Order status", payment_method: "Payment method",
       order_total: "Order total", refunded_amount: "Refunded amount", shipping_amount: "Shipping charged", currency: "Currency",
     });
@@ -161,9 +161,9 @@ describe("Magento data runs the webstore reconciliations", () => {
       "000000199,ch_199,capture,2026-10-28,150.00,4.35,145.65,AED",
     ].join("\n");
     await ingestFiles(run, "gateway", [{ name: "card-settlement-october.csv", data: new TextEncoder().encode(gateway) }], { countries: ["AE"] });
-    expect(buildRunView(run.id)!.openQuestions).toEqual([]);
+    expect((await buildRunView(run.id))!.openQuestions).toEqual([]);
 
-    const result = runReconciliation(runStore.getRun(run.id)!, ["AE"]);
+    const result = await runReconciliation((await runStore.getRun(run.id))!, ["AE"]);
     expect(result.exceptions.map((e) => `${e.check}: ${e.key}`).sort()).toEqual([
       "amount_mismatch: 000000108",
       "paid_not_settled: 000000110",
@@ -173,12 +173,12 @@ describe("Magento data runs the webstore reconciliations", () => {
 
   it("refunds and shipments map onto the refunds and courier templates by name", async () => {
     const conn = await connection();
-    const refunds = runStore.createRun("shop", "web-refunds-vs-returns");
+    const refunds = await runStore.createRun("shop", "web-refunds-vs-returns");
     await pullIntoRun(refunds, "refunds", conn.id, "credit_memo_lines", october, { countries: ["AE"] }, deps());
-    expect(mapped(refunds.id, "refunds")).toMatchObject({ order_id: "Order ID", refund_id: "Refund / credit memo ID", refund_date: "Refund date", sku: "SKU", qty: "Quantity", refund_amount: "Refund amount" });
+    expect(await mapped(refunds.id, "refunds")).toMatchObject({ order_id: "Order ID", refund_id: "Refund / credit memo ID", refund_date: "Refund date", sku: "SKU", qty: "Quantity", refund_amount: "Refund amount" });
 
-    const freight = runStore.createRun("shop", "web-courier-freight");
+    const freight = await runStore.createRun("shop", "web-courier-freight");
     await pullIntoRun(freight, "shipments", conn.id, "shipment_tracks", october, { countries: ["AE"] }, deps());
-    expect(mapped(freight.id, "shipments")).toMatchObject({ awb: "AWB / tracking number", order_id: "Order ID", declared_weight_kg: "Declared weight (kg)", ship_date: "Ship date" });
+    expect(await mapped(freight.id, "shipments")).toMatchObject({ awb: "AWB / tracking number", order_id: "Order ID", declared_weight_kg: "Declared weight (kg)", ship_date: "Ship date" });
   });
 });

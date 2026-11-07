@@ -33,8 +33,8 @@ describe("daily reset timing", () => {
     expect(untilNextReset(at("2026-11-07T23:59:30Z"))).toBe("1 min");
   });
 
-  it("uses a key no real workspace can get", () => {
-    const real = saas.createOrg("Sawwi Demo", 14);
+  it("uses a key no real workspace can get", async () => {
+    const real = await saas.createOrg("Sawwi Demo", 14);
     expect(real.key).toBe("sawwi-demo");
     expect(isDemoOrg(real.key)).toBe(false);
     expect(isDemoOrg(DEMO_ORG_KEY)).toBe(true);
@@ -49,7 +49,7 @@ describe("demo workspace", () => {
     expect(a.org).toMatchObject({ key: DEMO_ORG_KEY, plan: "enterprise", status: "active" });
     expect(a.org.profile?.channels).toEqual(["marketplace", "webstore", "b2b"]);
     expect(a.user.email).toBe(DEMO_USER_EMAIL);
-    expect(saas.getMembership(a.org.id, a.user.id)?.access).toBe("editor");
+    expect((await saas.getMembership(a.org.id, a.user.id))?.access).toBe("editor");
   });
 
   it("never calls the AI, even with a key", () => {
@@ -64,25 +64,25 @@ describe("demo workspace", () => {
 
   it("wipes only the demo's data, once a day", async () => {
     const { org, user } = await ensureDemoWorkspace();
-    resetDemoIfDue(at("2026-11-07T00:00:05Z")); // start from a clean slate for this test
-    const demoRun = runStore.createRun(DEMO_ORG_KEY, "web-orders-vs-gateway");
+    await resetDemoIfDue(at("2026-11-07T00:00:05Z")); // start from a clean slate for this test
+    const demoRun = await runStore.createRun(DEMO_ORG_KEY, "web-orders-vs-gateway");
     await fillRunWithDemoData(demoRun, { countries: ["AE"] });
     const uploads = path.join(dir, "uploads", demoRun.id);
     mkdirSync(uploads, { recursive: true });
     writeFileSync(path.join(uploads, "x.csv"), "a,b\n");
-    const realRun = runStore.createRun("acme", "web-orders-vs-gateway");
+    const realRun = await runStore.createRun("acme", "web-orders-vs-gateway");
 
-    expect(resetDemoIfDue(at("2026-11-07T22:00:00Z"))).toBe(false); // same day: nothing happens
-    expect(runStore.getRun(demoRun.id)).toBeDefined();
+    expect(await resetDemoIfDue(at("2026-11-07T22:00:00Z"))).toBe(false); // same day: nothing happens
+    expect(await runStore.getRun(demoRun.id)).toBeDefined();
 
-    expect(resetDemoIfDue(at("2026-11-08T00:01:00Z"))).toBe(true); // first use after midnight UTC
-    expect(lastDemoReset()).toBe("2026-11-08T00:01:00.000Z");
-    expect(runStore.getRun(demoRun.id)).toBeUndefined();
-    expect(runStore.getRunFiles(demoRun.id)).toEqual([]);
+    expect(await resetDemoIfDue(at("2026-11-08T00:01:00Z"))).toBe(true); // first use after midnight UTC
+    expect(await lastDemoReset()).toBe("2026-11-08T00:01:00.000Z");
+    expect(await runStore.getRun(demoRun.id)).toBeUndefined();
+    expect(await runStore.getRunFiles(demoRun.id)).toEqual([]);
     expect(existsSync(uploads)).toBe(false);
-    expect(runStore.getRun(realRun.id)).toBeDefined(); // other workspaces untouched
+    expect(await runStore.getRun(realRun.id)).toBeDefined(); // other workspaces untouched
     // The workspace and its visitor survive, so open sessions keep working.
-    expect(saas.getOrgByKey(DEMO_ORG_KEY)?.id).toBe(org.id);
-    expect(saas.getMembership(org.id, user.id)?.access).toBe("editor");
+    expect((await saas.getOrgByKey(DEMO_ORG_KEY))?.id).toBe(org.id);
+    expect((await saas.getMembership(org.id, user.id))?.access).toBe("editor");
   });
 });

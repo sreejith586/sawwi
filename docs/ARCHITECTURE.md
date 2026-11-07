@@ -167,10 +167,10 @@ Track per-run tokens (input, cache read, cache write, output) from day one so ca
 
 ## 6. Stack
 
-_Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memory TS matching engine (D-5, D-6), exceljs and the Anthropic SDK. The original plan is below, kept for reference.
+_Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via `pg`, PGlite locally and in tests; D-37, D-38), an in-memory TS matching engine (D-5, D-6), exceljs and the Anthropic SDK. The original plan is below, kept for reference.
 
 - **Next.js 16 (this repo):** UI, auth, API routes / server actions
-- **Postgres** (via Drizzle): orgs, users, templates, mappings, answers, runs, exceptions (later; SQLite now)
+- **Postgres**: orgs, users, templates, mappings, answers, runs, exceptions (built in Phase 7 with raw SQL in store modules, no ORM; D-38)
 - **DuckDB** (Node bindings, server-side): the matching engine over uploaded CSV/XLSX/Parquet (replaced by the TS engine, D-5)
 - **Object storage** (S3/R2): uploaded files and generated reports (XLSX/PDF)
 - **Anthropic SDK:** Haiku 5.5 / Sonnet 5.5, prompt caching, Batch API
@@ -184,7 +184,14 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 - **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
 - **Card payments (Stripe):** `/checkout/[plan]` embeds Stripe Checkout (`ui_mode: embedded_page`, subscription mode) with card, Apple Pay / Google Pay and Link. Prices come from `STRIPE_PRICE_*`; one Stripe Customer per workspace. `/checkout/return` verifies the session belongs to the workspace and applies the plan at once; `/api/stripe/webhook` (signature-verified) keeps it in sync for renewals, failed payments, cancellations and portal changes. "Manage billing" opens Stripe's billing portal. Checkout is offered only while the paywall is on; Enterprise stays a request.
 - **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend), users and AI usage across workspaces, with Excel exports.
-- **Storage:** SQLite now (`src/lib/saas/store.ts` holds all SQL for this); port to Postgres with the rest.
+- **Storage:** Postgres (D-38). `src/lib/saas/store.ts` holds all SQL for this; tables are created in `src/lib/db.ts`.
+
+## 6b. Database (Phase 7, D-37, D-38)
+
+- **One dialect, two drivers.** `src/lib/db.ts` opens `pg` (a pooled connection to Neon, closed cleanly on Vercel via `attachDatabasePool`) when `DATABASE_URL` is set, and PGlite (Postgres compiled to WASM, in-process) otherwise: `.data/pglite` in development, a fresh in-memory database per test file under Vitest. On Vercel, a missing `DATABASE_URL` is an error rather than a silent local database.
+- **API.** `getDb()` returns `all`, `get`, `run` (→ `{ changes }`) and `tx(fn)`, all async. Store modules keep `?` placeholders; `toPositional` numbers them for Postgres. COUNT/SUM (int8, numeric) come back as JS numbers.
+- **Schema.** Numbered, append-only migrations in `db.ts`, recorded in `schema_migrations` and applied on first use under an advisory lock, so cold-starting instances don't race. Columns stay `TEXT` (ISO dates, JSON strings) as in the SQLite schema; JSON is read with `::jsonb` where SQL needs it.
+- **Guard rails.** The type-aware lint rules `no-floating-promises`, `no-misused-promises` and `await-thenable` fail on a missed `await`, since a Promise is always truthy.
 
 ## 7. Build phases
 

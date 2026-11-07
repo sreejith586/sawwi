@@ -11,10 +11,10 @@ export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session) return Response.json({ error: "Log in first." }, { status: 401 });
   const { org } = session;
-  const owner = orgOwner(org.id) ?? session.user;
+  const owner = await orgOwner(org.id) ?? session.user;
   const params = new URL(request.url).searchParams;
   const rows = applyQuery(
-    memberRows({ name: owner.name, email: owner.email, roleLabel: org.profile ? labelOf(ROLES, org.profile.role) : "" }, listMembers(org.key)),
+    memberRows({ name: owner.name, email: owner.email, roleLabel: org.profile ? labelOf(ROLES, org.profile.role) : "" }, await listMembers(org.key)),
     queryFromParams(params, MEMBER_FILTERS),
     [...MEMBER_SEARCH],
   );

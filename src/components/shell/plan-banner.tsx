@@ -8,7 +8,7 @@ export async function PlanBanner() {
   const session = await getCurrentSession();
   if (!session) return null;
   if (isDemoOrg(session.org.key)) return <DemoBanner resetIn={untilNextReset(new Date().getTime())} />;
-  const e = orgEntitlement(session.org);
+  const e = await orgEntitlement(session.org);
 
   if (e.ok && !(e.reason === "trial" && (e.daysLeft ?? 99) <= 5)) return null;
   const blocked = !e.ok;

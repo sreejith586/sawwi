@@ -16,8 +16,8 @@ export type DemoFillResult = { filled: { slot: string; source: string; rows: num
 
 export async function fillRunWithDemoData(run: Run, ctx: RunContext): Promise<DemoFillResult> {
   if (!isDemoOrg(run.orgKey)) throw new ConnectorError("Demo data is only available in the demo store.");
-  const sources = importSources(run.orgKey);
-  const view = buildRunView(run.id);
+  const sources = await importSources(run.orgKey);
+  const view = await buildRunView(run.id);
   if (!view) throw new ConnectorError("Run not found.");
 
   const result: DemoFillResult = { filled: [], missing: [] };

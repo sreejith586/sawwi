@@ -13,7 +13,7 @@ export async function usageExport(request: Request, orgKey: string | null, fileN
   const admin = orgKey === null;
   const view = parseView(params.get("view"), admin);
   const range = parseRange(params.get("range"));
-  const rows = applyQuery(groupUsage(usageEvents(orgKey, range), view), queryFromParams(params, usageFilters(view, admin)), [...USAGE_SEARCH]);
+  const rows = applyQuery(groupUsage(await usageEvents(orgKey, range), view), queryFromParams(params, usageFilters(view, admin)), [...USAGE_SEARCH]);
   const bytes = await tableWorkbook({ sheetName: SHEET_NAMES[view], columns: usageSheetColumns(view, admin), rows });
   return xlsxResponse(bytes, `${fileName}-${view}-${range === "all" ? "all-time" : `${range}d`}-prices-${PRICES_AS_OF}`);
 }

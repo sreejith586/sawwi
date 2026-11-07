@@ -17,56 +17,56 @@ const isPlan = (p: string): p is PlanId => PLANS.some((x) => x.id === p);
 
 export async function setPaywall(enabled: boolean) {
   await requireSuperadmin();
-  store.setSetting("paywallEnabled", enabled);
+  await store.setSetting("paywallEnabled", enabled);
   refresh();
 }
 
 export async function setSignupsOpen(open: boolean) {
   await requireSuperadmin();
-  store.setSetting("signupsOpen", open);
+  await store.setSetting("signupsOpen", open);
   refresh();
 }
 
 export async function setTrialDays(days: number) {
   await requireSuperadmin();
   if (!Number.isInteger(days) || days < 1 || days > 365) return;
-  store.setSetting("trialDays", days);
+  await store.setSetting("trialDays", days);
   refresh();
 }
 
 export async function setOrgPlan(orgId: string, plan: string) {
   await requireSuperadmin();
   if (!isPlan(plan)) return;
-  store.setOrgPlan(orgId, plan);
-  const open = store.openRequestForOrg(orgId);
-  if (open && open.plan === plan) store.setRequestStatus(open.id, "done");
+  await store.setOrgPlan(orgId, plan);
+  const open = await store.openRequestForOrg(orgId);
+  if (open && open.plan === plan) await store.setRequestStatus(open.id, "done");
   refresh();
 }
 
 export async function extendOrgTrial(orgId: string, days: number) {
   await requireSuperadmin();
   if (!Number.isInteger(days) || days < 1 || days > 365) return;
-  store.extendTrial(orgId, days);
+  await store.extendTrial(orgId, days);
   refresh();
 }
 
 export async function setOrgSuspended(orgId: string, suspended: boolean) {
   await requireSuperadmin();
-  store.setOrgStatus(orgId, suspended ? "suspended" : "active");
+  await store.setOrgStatus(orgId, suspended ? "suspended" : "active");
   refresh();
 }
 
 export async function approveRequest(requestId: string) {
   await requireSuperadmin();
-  const req = store.getRequest(requestId);
+  const req = await store.getRequest(requestId);
   if (!req || req.status !== "open") return;
-  store.setOrgPlan(req.orgId, req.plan);
-  store.setRequestStatus(req.id, "done");
+  await store.setOrgPlan(req.orgId, req.plan);
+  await store.setRequestStatus(req.id, "done");
   refresh();
 }
 
 export async function declineRequest(requestId: string) {
   await requireSuperadmin();
-  store.setRequestStatus(requestId, "declined");
+  await store.setRequestStatus(requestId, "declined");
   refresh();
 }

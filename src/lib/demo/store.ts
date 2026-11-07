@@ -6,42 +6,36 @@ import { dataDir, getDb } from "@/lib/db";
 // column loses the demo's runs' rows, and every table with an org_key column loses the demo's
 // rows, so tables added later are covered without a change here. Only the demo key is touched.
 
-export function getDemoState(key: string): string | undefined {
-  const r = getDb().prepare("SELECT value FROM demo_state WHERE key = ?").get(key) as { value: string } | undefined;
+export async function getDemoState(key: string): Promise<string | undefined> {
+  const r = await getDb().get<{ value: string }>("SELECT value FROM demo_state WHERE key = ?", key);
   return r?.value;
 }
 
-export function setDemoState(key: string, value: string) {
-  getDb().prepare("INSERT INTO demo_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
-}
-
-function columnsOf(table: string): Set<string> {
-  return new Set((getDb().prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[]).map((c) => c.name));
+export async function setDemoState(key: string, value: string) {
+  await getDb().run("INSERT INTO demo_state (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
 }
 
 /** Deletes everything filed under this org key, and its runs' uploaded files. Returns rows removed per table. */
-export function wipeOrgData(orgKey: string): Record<string, number> {
+export async function wipeOrgData(orgKey: string): Promise<Record<string, number>> {
   const db = getDb();
-  const runIds = (db.prepare("SELECT id FROM runs WHERE org_key = ?").all(orgKey) as { id: string }[]).map((r) => r.id);
-  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((t) => t.name);
+  const runIds = (await db.all<{ id: string }>("SELECT id FROM runs WHERE org_key = ?", orgKey)).map((r) => r.id);
+  const cols = await db.all<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name FROM information_schema.columns
+     WHERE table_schema = current_schema() AND column_name IN ('run_id', 'org_key') ORDER BY table_name`,
+  );
+  const withColumn = (c: string) => cols.filter((r) => r.column_name === c).map((r) => r.table_name);
   const removed: Record<string, number> = {};
-  db.exec("BEGIN");
-  try {
-    for (const t of tables) {
-      if (t === "runs" || !columnsOf(t).has("run_id")) continue;
-      const r = db.prepare(`DELETE FROM "${t}" WHERE run_id IN (SELECT id FROM runs WHERE org_key = ?)`).run(orgKey);
-      if (r.changes) removed[t] = Number(r.changes);
+  await db.tx(async (t) => {
+    for (const table of withColumn("run_id")) {
+      if (table === "runs") continue;
+      const r = await t.run(`DELETE FROM "${table}" WHERE run_id IN (SELECT id FROM runs WHERE org_key = ?)`, orgKey);
+      if (r.changes) removed[table] = r.changes;
     }
-    for (const t of tables) {
-      if (!columnsOf(t).has("org_key")) continue;
-      const r = db.prepare(`DELETE FROM "${t}" WHERE org_key = ?`).run(orgKey);
-      if (r.changes) removed[t] = Number(r.changes);
+    for (const table of withColumn("org_key")) {
+      const r = await t.run(`DELETE FROM "${table}" WHERE org_key = ?`, orgKey);
+      if (r.changes) removed[table] = r.changes;
     }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+  });
   for (const id of runIds) rmSync(path.join(dataDir(), "uploads", id), { recursive: true, force: true });
   return removed;
 }

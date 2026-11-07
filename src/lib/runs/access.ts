@@ -13,7 +13,7 @@ export function orgKeyFor(profile: Profile & { orgKey?: string }): string {
 export async function getOwnedRun(runId: string): Promise<{ run: Run; profile: Profile } | undefined> {
   const profile = await getProfile();
   if (!profile) return undefined;
-  const run = store.getRun(runId);
+  const run = await store.getRun(runId);
   if (!run || run.orgKey !== orgKeyFor(profile)) return undefined;
   return { run, profile };
 }

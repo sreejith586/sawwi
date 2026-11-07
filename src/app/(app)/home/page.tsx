@@ -33,7 +33,7 @@ export default function HomePage() {
 async function Home() {
   const profile = await getProfile();
   if (!profile) return null;
-  const runs = listRuns(orgKeyFor(profile));
+  const runs = await listRuns(orgKeyFor(profile));
 
   return (
     <div>
@@ -58,7 +58,7 @@ async function Home() {
 async function DueNow() {
   const session = await getCurrentSession();
   if (!session) return null;
-  const due = dueSchedules(session.org.key);
+  const due = await dueSchedules(session.org.key);
   if (due.length === 0) return null;
   return (
     <section className="mt-8">
@@ -115,7 +115,7 @@ function TemplateCard({ id }: { id: string }) {
   );
 }
 
-function Overview({ runs, profile }: { runs: RunSummary[]; profile: Profile }) {
+async function Overview({ runs, profile }: { runs: RunSummary[]; profile: Profile }) {
   // Exceptions only count from the latest reconciled run of each template, so re-runs don't double up.
   const latest = new Map<string, RunSummary>();
   for (const r of runs) if (r.exceptions !== undefined && !latest.has(r.templateId)) latest.set(r.templateId, r);
@@ -124,6 +124,8 @@ function Overview({ runs, profile }: { runs: RunSummary[]; profile: Profile }) {
   const currencies = new Set(open.map((r) => r.currency).filter(Boolean));
   const value = open.reduce((s, r) => s + (r.value ?? 0), 0);
   const inProgress = runs.filter((r) => r.status !== "done");
+  const recent = runs.slice(0, 6);
+  const titles = await Promise.all(recent.map(async (r) => (await templateFor(r.orgKey, r.templateId, r.id))?.title ?? r.templateId));
 
   const recommended = recommendTemplates(TEMPLATES, profile).recommended.filter((t) => !runs.some((r) => r.templateId === t.id));
 
@@ -150,13 +152,13 @@ function Overview({ runs, profile }: { runs: RunSummary[]; profile: Profile }) {
             </Link>
           </div>
           <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-            {runs.slice(0, 6).map((r) => {
+            {recent.map((r, i) => {
               const status = RUN_STATUS[r.status];
               return (
                 <li key={r.id}>
                   <Link href={`/runs/${r.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-muted/50">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{templateFor(r.orgKey, r.templateId, r.id)?.title ?? r.templateId}</p>
+                      <p className="truncate text-sm font-medium">{titles[i]}</p>
                       <p className="text-xs text-muted">
                         Started {day(r.createdAt)} · {r.files} file{r.files === 1 ? "" : "s"}
                       </p>

@@ -26,13 +26,15 @@ export type ScheduleRow = {
 
 export const SCHEDULE_STATUS: Record<ScheduleState["state"], string> = { due: "Due", started: "In progress", done: "Up to date", paused: "Paused" };
 
-export function scheduleRows(orgKey: string, now = Date.now()): ScheduleRow[] {
+export async function scheduleRows(orgKey: string, now = Date.now()): Promise<ScheduleRow[]> {
   const today = isoDay(now);
-  const runs = listScheduledRuns(orgKey);
-  return listSchedules(orgKey).map((s) => {
+  const runs = await listScheduledRuns(orgKey);
+  const schedules = await listSchedules(orgKey);
+  const templates = await Promise.all(schedules.map((s) => templateFor(orgKey, s.templateId)));
+  return schedules.map((s, i) => {
     const mine = runs.filter((r) => r.scheduleId === s.id);
     const st = scheduleState(s, mine, today);
-    const t = templateFor(orgKey, s.templateId);
+    const t = templates[i];
     return {
       id: s.id,
       templateId: s.templateId,
@@ -52,8 +54,8 @@ export function scheduleRows(orgKey: string, now = Date.now()): ScheduleRow[] {
 }
 
 /** Schedules that need someone to upload this period's files, most overdue first. */
-export function dueSchedules(orgKey: string, now = Date.now()): ScheduleRow[] {
-  return scheduleRows(orgKey, now)
+export async function dueSchedules(orgKey: string, now = Date.now()): Promise<ScheduleRow[]> {
+  return (await scheduleRows(orgKey, now))
     .filter((r) => r.state === "due" || r.state === "started")
     .sort((a, b) => a.when.localeCompare(b.when));
 }

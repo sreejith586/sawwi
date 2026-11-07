@@ -25,14 +25,14 @@ export async function sendChat(runId: string, intent: ChatIntent): Promise<RunAc
   if (!owned) return { error: "Run not found." };
   // Chat can spend AI tokens, so it follows the same plan and role gate as running a reco.
   const blocked = await runBlocker();
-  if (blocked) return { error: blocked.message, view: buildRunView(runId) };
+  if (blocked) return { error: blocked.message, view: await buildRunView(runId) };
   try {
     await runChat(owned.run, intent, owned.profile.company);
   } catch (error) {
-    if (error instanceof ChatInputError) return { error: error.message, view: buildRunView(runId) };
+    if (error instanceof ChatInputError) return { error: error.message, view: await buildRunView(runId) };
     throw error;
   }
-  return { view: buildRunView(runId) };
+  return { view: await buildRunView(runId) };
 }
 
 // ─── No template fits ───────────────────────────────────────────────────────
@@ -42,13 +42,13 @@ export async function startGenericRun(formData: FormData) {
   if (!profile) redirect("/onboarding");
   const blocked = await runBlocker();
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
-  const run = store.createRun(orgKeyFor(profile), GENERIC_TEMPLATE_ID);
-  store.setRunCheck(run.id, GENERIC_SETUP_KEY, {
+  const run = await store.createRun(orgKeyFor(profile), GENERIC_TEMPLATE_ID);
+  await store.setRunCheck(run.id, GENERIC_SETUP_KEY, {
     leftLabel: cleanLabel(formData.get("left")?.toString(), DEFAULT_SETUP.leftLabel),
     rightLabel: cleanLabel(formData.get("right")?.toString(), DEFAULT_SETUP.rightLabel),
     tolerance: parseTolerance(formData.get("tolerance")?.toString()),
   });
-  store.addMessage(
+  await store.addMessage(
     run.id,
     "sawwi",
     "A custom reconciliation: upload the two files and I'll ask which column is the matching key and which is the amount in each. Once it works, you can save it as a template.",
@@ -61,16 +61,16 @@ export async function saveAsTemplate(runId: string, title: string): Promise<RunA
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
   const blocked = await runBlocker();
-  if (blocked) return { error: blocked.message, view: buildRunView(runId) };
+  if (blocked) return { error: blocked.message, view: await buildRunView(runId) };
   const { run } = owned;
-  if (run.templateId !== GENERIC_TEMPLATE_ID) return { error: "Only custom reconciliations can be saved as templates.", view: buildRunView(runId) };
+  if (run.templateId !== GENERIC_TEMPLATE_ID) return { error: "Only custom reconciliations can be saved as templates.", view: await buildRunView(runId) };
   if (run.status !== "ready" && run.status !== "done") {
-    return { error: "Upload both files and answer the questions first, so the template knows your columns.", view: buildRunView(runId) };
+    return { error: "Upload both files and answer the questions first, so the template knows your columns.", view: await buildRunView(runId) };
   }
 
-  const template = saveRunAsTemplate(run, title);
-  store.addMessage(run.id, "sawwi", `Saved as "${template.title}". It's under Your templates in the gallery; next time, start it from there and I'll remember these columns.`);
-  return { view: buildRunView(runId), templateId: template.id };
+  const template = await saveRunAsTemplate(run, title);
+  await store.addMessage(run.id, "sawwi", `Saved as "${template.title}". It's under Your templates in the gallery; next time, start it from there and I'll remember these columns.`);
+  return { view: await buildRunView(runId), templateId: template.id };
 }
 
 export async function deleteTemplate(templateId: string) {
@@ -78,7 +78,7 @@ export async function deleteTemplate(templateId: string) {
   if (!profile || !isCustomId(templateId)) return;
   const blocked = await runBlocker();
   if (blocked) return;
-  store.deleteCustomTemplate(orgKeyFor(profile), templateId);
+  await store.deleteCustomTemplate(orgKeyFor(profile), templateId);
   redirect("/templates");
 }
 

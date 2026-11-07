@@ -15,11 +15,11 @@ export type ImportSource = {
 const reportsOf = (id: string) => connectorById(id)?.reports.map(({ id, label, slots }) => ({ id, label, slots })) ?? [];
 
 /** The demo store has only its built-in sources (D-32); real workspaces only their own connections. */
-export function importSources(orgKey: string): ImportSource[] {
+export async function importSources(orgKey: string): Promise<ImportSource[]> {
   if (isDemoOrg(orgKey)) {
     return DEMO_SOURCES.map((d) => ({ connectionId: demoConnectionId(d.provider), label: `${connectorById(d.provider)!.label}: ${d.accountLabel}`, provider: d.provider, status: "connected", reports: reportsOf(d.provider) }));
   }
-  return listConnections(orgKey).flatMap((c) => {
+  return (await listConnections(orgKey)).flatMap((c) => {
     const connector = availableConnectors().find((x) => x.id === c.provider);
     if (!connector) return [];
     return [{ connectionId: c.id, label: `${connector.label}: ${c.accountLabel}`, provider: c.provider, status: c.status, reports: connector.reports.map(({ id, label, slots }) => ({ id, label, slots })) }];

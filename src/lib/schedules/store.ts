@@ -32,44 +32,38 @@ const toSchedule = (r: Row): Schedule => ({
   createdAt: String(r.created_at),
 });
 
-export function createSchedule(s: Omit<Schedule, "id" | "paused" | "createdAt">): Schedule {
+export async function createSchedule(s: Omit<Schedule, "id" | "paused" | "createdAt">): Promise<Schedule> {
   const schedule: Schedule = { ...s, id: randomUUID(), paused: false, createdAt: new Date().toISOString() };
-  getDb()
-    .prepare("INSERT INTO schedules (id, org_key, template_id, cadence, anchor, starts_on, paused, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)")
-    .run(schedule.id, s.orgKey, s.templateId, s.cadence, s.anchor, s.startsOn, s.createdBy, schedule.createdAt);
+  await getDb().run("INSERT INTO schedules (id, org_key, template_id, cadence, anchor, starts_on, paused, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)", schedule.id, s.orgKey, s.templateId, s.cadence, s.anchor, s.startsOn, s.createdBy, schedule.createdAt);
   return schedule;
 }
 
 /** Scoped by workspace: a schedule id from another workspace returns nothing. */
-export function getSchedule(orgKey: string, id: string): Schedule | undefined {
-  const r = getDb().prepare("SELECT * FROM schedules WHERE id = ? AND org_key = ?").get(id, orgKey) as Row | undefined;
+export async function getSchedule(orgKey: string, id: string): Promise<Schedule | undefined> {
+  const r = (await getDb().get("SELECT * FROM schedules WHERE id = ? AND org_key = ?", id, orgKey)) as Row | undefined;
   return r ? toSchedule(r) : undefined;
 }
 
-export function listSchedules(orgKey: string): Schedule[] {
-  return (getDb().prepare("SELECT * FROM schedules WHERE org_key = ? ORDER BY created_at").all(orgKey) as Row[]).map(toSchedule);
+export async function listSchedules(orgKey: string): Promise<Schedule[]> {
+  return ((await getDb().all("SELECT * FROM schedules WHERE org_key = ? ORDER BY created_at", orgKey)) as Row[]).map(toSchedule);
 }
 
-export function setSchedulePaused(orgKey: string, id: string, paused: boolean) {
-  getDb().prepare("UPDATE schedules SET paused = ? WHERE id = ? AND org_key = ?").run(paused ? 1 : 0, id, orgKey);
+export async function setSchedulePaused(orgKey: string, id: string, paused: boolean) {
+  await getDb().run("UPDATE schedules SET paused = ? WHERE id = ? AND org_key = ?", paused ? 1 : 0, id, orgKey);
 }
 
 /** Deleting a schedule keeps its runs; they just stop pointing at a live schedule. */
-export function deleteSchedule(orgKey: string, id: string) {
-  getDb().prepare("DELETE FROM schedules WHERE id = ? AND org_key = ?").run(id, orgKey);
+export async function deleteSchedule(orgKey: string, id: string) {
+  await getDb().run("DELETE FROM schedules WHERE id = ? AND org_key = ?", id, orgKey);
 }
 
-export function linkRunToSchedule(runId: string, scheduleId: string, period: string) {
-  getDb().prepare("UPDATE runs SET schedule_id = ?, schedule_period = ? WHERE id = ?").run(scheduleId, period, runId);
+export async function linkRunToSchedule(runId: string, scheduleId: string, period: string) {
+  await getDb().run("UPDATE runs SET schedule_id = ?, schedule_period = ? WHERE id = ?", scheduleId, period, runId);
 }
 
 /** Runs started from the workspace's schedules, oldest first. */
-export function listScheduledRuns(orgKey: string): ScheduledRun[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT r.id, r.schedule_id, r.schedule_period, r.created_at, EXISTS (SELECT 1 FROM run_results rr WHERE rr.run_id = r.id) AS done
-       FROM runs r WHERE r.org_key = ? AND r.schedule_id IS NOT NULL ORDER BY r.created_at`,
-    )
-    .all(orgKey) as Row[];
+export async function listScheduledRuns(orgKey: string): Promise<ScheduledRun[]> {
+  const rows = (await getDb().all(`SELECT r.id, r.schedule_id, r.schedule_period, r.created_at, EXISTS (SELECT 1 FROM run_results rr WHERE rr.run_id = r.id) AS done
+       FROM runs r WHERE r.org_key = ? AND r.schedule_id IS NOT NULL ORDER BY r.created_at`, orgKey)) as Row[];
   return rows.map((r) => ({ id: String(r.id), scheduleId: String(r.schedule_id), period: String(r.schedule_period), done: Number(r.done) === 1, createdAt: String(r.created_at) }));
 }

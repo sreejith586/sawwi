@@ -18,10 +18,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/p
   const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
   try {
     const { rows } = await pullIntoRun(owned.run, str("slot"), str("connectionId"), str("report"), { from: str("from"), to: str("to") }, { countries: owned.profile.countries });
-    return Response.json({ view: buildRunView(id), rows });
+    return Response.json({ view: await buildRunView(id), rows });
   } catch (error) {
     if (error instanceof ConnectorError || error instanceof RunInputError) {
-      return Response.json({ error: error.message, view: buildRunView(id) }, { status: 400 });
+      return Response.json({ error: error.message, view: await buildRunView(id) }, { status: 400 });
     }
     throw error;
   }

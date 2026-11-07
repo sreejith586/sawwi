@@ -8,7 +8,7 @@ import { MAPPING_FILTERS, MAPPING_SEARCH, mappingRows } from "@/lib/tables/rows"
 export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/mapping">) {
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
-  const view = owned && buildRunView(id);
+  const view = owned && await buildRunView(id);
   const params = new URL(request.url).searchParams;
   const slot = view?.slots.find((s) => s.key === params.get("slot"));
   if (!view || !slot?.file) return Response.json({ error: "Mapping not found." }, { status: 404 });

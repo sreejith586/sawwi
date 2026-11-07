@@ -128,7 +128,7 @@ async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
 async function TemplateSchedule({ template }: { template: Template }) {
   const session = await getCurrentSession();
   if (!session) return null;
-  const existing = listSchedules(session.org.key).filter((s) => s.templateId === template.id);
+  const existing = (await listSchedules(session.org.key)).filter((s) => s.templateId === template.id);
   const canEdit = canRun(session.access);
   if (!canEdit && existing.length === 0) return null;
   return (

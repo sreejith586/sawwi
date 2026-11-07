@@ -21,26 +21,6 @@ export type Member = {
   invitedAt: string;
 };
 
-let ready = false;
-function db() {
-  const d = getDb();
-  if (!ready) {
-    d.exec(`CREATE TABLE IF NOT EXISTS members (
-      id TEXT PRIMARY KEY,
-      org_key TEXT NOT NULL,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      access TEXT NOT NULL,
-      team TEXT,
-      status TEXT NOT NULL,
-      invited_at TEXT NOT NULL,
-      UNIQUE (org_key, email)
-    )`);
-    ready = true;
-  }
-  return d;
-}
-
 type Row = Record<string, string | null>;
 const toMember = (r: Row): Member => ({
   id: String(r.id),
@@ -52,8 +32,8 @@ const toMember = (r: Row): Member => ({
   invitedAt: String(r.invited_at),
 });
 
-export function listMembers(orgKey: string): Member[] {
-  return (db().prepare("SELECT * FROM members WHERE org_key = ? ORDER BY invited_at").all(orgKey) as Row[]).map(toMember);
+export async function listMembers(orgKey: string): Promise<Member[]> {
+  return ((await getDb().all("SELECT * FROM members WHERE org_key = ? ORDER BY invited_at", orgKey)) as Row[]).map(toMember);
 }
 
 export type InviteInput = { name: unknown; email: unknown; access: unknown; team: unknown };
@@ -61,66 +41,64 @@ export type InviteErrors = Partial<Record<"name" | "email" | "access", string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function inviteMember(orgKey: string, input: InviteInput): { member?: Member; errors: InviteErrors } {
+export async function inviteMember(orgKey: string, input: InviteInput): Promise<{ member?: Member; errors: InviteErrors }> {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
   const errors: InviteErrors = {};
   if (!name) errors.name = "Enter their name.";
   if (!EMAIL.test(email)) errors.email = "Enter a valid email address.";
   if (!isAccess(input.access)) errors.access = "Pick an access level.";
-  if (!errors.email && db().prepare("SELECT 1 FROM members WHERE org_key = ? AND email = ?").get(orgKey, email)) {
+  if (!errors.email && (await getDb().get("SELECT 1 FROM members WHERE org_key = ? AND email = ?", orgKey, email))) {
     errors.email = "This person is already on the team.";
   }
   if (Object.keys(errors).length) return { errors };
 
   const team = ROLES.some((r) => r.value === input.team) ? (input.team as Role) : undefined;
   const member: Member = { id: randomUUID(), name, email, access: input.access as Access, team, status: "invited", invitedAt: new Date().toISOString() };
-  db()
-    .prepare("INSERT INTO members (id, org_key, name, email, access, team, status, invited_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(member.id, orgKey, member.name, member.email, member.access, member.team ?? null, member.status, member.invitedAt);
+  await getDb().run("INSERT INTO members (id, org_key, name, email, access, team, status, invited_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", member.id, orgKey, member.name, member.email, member.access, member.team ?? null, member.status, member.invitedAt);
   return { member, errors };
 }
 
-export function setMemberAccess(orgKey: string, id: string, access: Access) {
-  db().prepare("UPDATE members SET access = ? WHERE org_key = ? AND id = ?").run(access, orgKey, id);
+export async function setMemberAccess(orgKey: string, id: string, access: Access) {
+  await getDb().run("UPDATE members SET access = ? WHERE org_key = ? AND id = ?", access, orgKey, id);
 }
 
 /** Deactivating keeps the person on the roster (and in history) but blocks access once auth exists. */
-export function setMemberActive(orgKey: string, id: string, active: boolean) {
-  const m = db().prepare("SELECT status FROM members WHERE org_key = ? AND id = ?").get(orgKey, id) as Row | undefined;
+export async function setMemberActive(orgKey: string, id: string, active: boolean) {
+  const m = (await getDb().get("SELECT status FROM members WHERE org_key = ? AND id = ?", orgKey, id)) as Row | undefined;
   if (!m) return;
   // Reactivating someone who never accepted puts them back to "invited".
   const next = active ? "invited" : "deactivated";
-  db().prepare("UPDATE members SET status = ? WHERE org_key = ? AND id = ?").run(next, orgKey, id);
+  await getDb().run("UPDATE members SET status = ? WHERE org_key = ? AND id = ?", next, orgKey, id);
 }
 
-export function removeMember(orgKey: string, id: string) {
-  db().prepare("DELETE FROM members WHERE org_key = ? AND id = ?").run(orgKey, id);
+export async function removeMember(orgKey: string, id: string) {
+  await getDb().run("DELETE FROM members WHERE org_key = ? AND id = ?", orgKey, id);
 }
 
-export function countInvited(orgKey: string): number {
-  return Number((db().prepare("SELECT COUNT(*) AS n FROM members WHERE org_key = ? AND status = 'invited'").get(orgKey) as Row).n);
+export async function countInvited(orgKey: string): Promise<number> {
+  return Number(((await getDb().get("SELECT COUNT(*) AS n FROM members WHERE org_key = ? AND status = 'invited'", orgKey)) as Row).n);
 }
 
-export function findMemberByEmail(orgKey: string, email: string): Member | undefined {
-  const r = db().prepare("SELECT * FROM members WHERE org_key = ? AND email = ?").get(orgKey, email.trim().toLowerCase()) as Row | undefined;
+export async function findMemberByEmail(orgKey: string, email: string): Promise<Member | undefined> {
+  const r = (await getDb().get("SELECT * FROM members WHERE org_key = ? AND email = ?", orgKey, email.trim().toLowerCase())) as Row | undefined;
   return r ? toMember(r) : undefined;
 }
 
 /** Open invites for an email across every workspace, oldest first (used at sign-up). */
-export function invitesForEmail(email: string): (Member & { orgKey: string })[] {
-  return (db().prepare("SELECT * FROM members WHERE email = ? AND status = 'invited' ORDER BY invited_at").all(email.trim().toLowerCase()) as Row[]).map((r) => ({
+export async function invitesForEmail(email: string): Promise<(Member & { orgKey: string })[]> {
+  return ((await getDb().all("SELECT * FROM members WHERE email = ? AND status = 'invited' ORDER BY invited_at", email.trim().toLowerCase())) as Row[]).map((r) => ({
     ...toMember(r),
     orgKey: String(r.org_key),
   }));
 }
 
 /** An invite becomes "active" once the person signs up and joins. */
-export function markMemberJoined(orgKey: string, email: string) {
-  db().prepare("UPDATE members SET status = 'active' WHERE org_key = ? AND email = ?").run(orgKey, email.trim().toLowerCase());
+export async function markMemberJoined(orgKey: string, email: string) {
+  await getDb().run("UPDATE members SET status = 'active' WHERE org_key = ? AND email = ?", orgKey, email.trim().toLowerCase());
 }
 
-export function getMember(orgKey: string, id: string): Member | undefined {
-  const r = db().prepare("SELECT * FROM members WHERE org_key = ? AND id = ?").get(orgKey, id) as Row | undefined;
+export async function getMember(orgKey: string, id: string): Promise<Member | undefined> {
+  const r = (await getDb().get("SELECT * FROM members WHERE org_key = ? AND id = ?", orgKey, id)) as Row | undefined;
   return r ? toMember(r) : undefined;
 }

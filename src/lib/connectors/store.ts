@@ -30,37 +30,33 @@ const toConnection = (r: Row): Connection => ({
   createdAt: String(r.created_at),
 });
 
-export function insertConnection(c: { orgKey: string; provider: string; accountLabel: string; secretEnc: string; createdBy: string | null }): Connection {
+export async function insertConnection(c: { orgKey: string; provider: string; accountLabel: string; secretEnc: string; createdBy: string | null }): Promise<Connection> {
   const id = randomUUID();
-  getDb()
-    .prepare("INSERT INTO connections (id, org_key, provider, account_label, secret_enc, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, 'connected', ?, ?)")
-    .run(id, c.orgKey, c.provider, c.accountLabel, c.secretEnc, c.createdBy, new Date().toISOString());
-  return getConnection(c.orgKey, id)!;
+  await getDb().run("INSERT INTO connections (id, org_key, provider, account_label, secret_enc, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, 'connected', ?, ?)", id, c.orgKey, c.provider, c.accountLabel, c.secretEnc, c.createdBy, new Date().toISOString());
+  return (await getConnection(c.orgKey, id))!;
 }
 
-export function getConnection(orgKey: string, id: string): Connection | undefined {
-  const r = getDb().prepare("SELECT * FROM connections WHERE id = ? AND org_key = ?").get(id, orgKey) as Row | undefined;
+export async function getConnection(orgKey: string, id: string): Promise<Connection | undefined> {
+  const r = (await getDb().get("SELECT * FROM connections WHERE id = ? AND org_key = ?", id, orgKey)) as Row | undefined;
   return r ? toConnection(r) : undefined;
 }
 
-export function getConnectionSecret(orgKey: string, id: string): string | undefined {
-  const r = getDb().prepare("SELECT secret_enc FROM connections WHERE id = ? AND org_key = ?").get(id, orgKey) as Row | undefined;
+export async function getConnectionSecret(orgKey: string, id: string): Promise<string | undefined> {
+  const r = (await getDb().get("SELECT secret_enc FROM connections WHERE id = ? AND org_key = ?", id, orgKey)) as Row | undefined;
   return r ? String(r.secret_enc) : undefined;
 }
 
-export function listConnections(orgKey: string): Connection[] {
-  return (getDb().prepare("SELECT * FROM connections WHERE org_key = ? ORDER BY created_at").all(orgKey) as Row[]).map(toConnection);
+export async function listConnections(orgKey: string): Promise<Connection[]> {
+  return ((await getDb().all("SELECT * FROM connections WHERE org_key = ? ORDER BY created_at", orgKey)) as Row[]).map(toConnection);
 }
 
-export function setConnectionStatus(orgKey: string, id: string, status: ConnectionStatus, error: string | null, syncedAt?: string) {
-  getDb()
-    .prepare("UPDATE connections SET status = ?, last_error = ?, last_sync_at = COALESCE(?, last_sync_at) WHERE id = ? AND org_key = ?")
-    .run(status, error, syncedAt ?? null, id, orgKey);
+export async function setConnectionStatus(orgKey: string, id: string, status: ConnectionStatus, error: string | null, syncedAt?: string) {
+  await getDb().run("UPDATE connections SET status = ?, last_error = ?, last_sync_at = COALESCE(?, last_sync_at) WHERE id = ? AND org_key = ?", status, error, syncedAt ?? null, id, orgKey);
 }
 
 /** Deletes the connection and its secret. Sync history is kept for the audit trail. */
-export function deleteConnection(orgKey: string, id: string) {
-  getDb().prepare("DELETE FROM connections WHERE id = ? AND org_key = ?").run(id, orgKey);
+export async function deleteConnection(orgKey: string, id: string) {
+  await getDb().run("DELETE FROM connections WHERE id = ? AND org_key = ?", id, orgKey);
 }
 
 export type SyncRecord = {
@@ -77,17 +73,13 @@ export type SyncRecord = {
   createdAt: string;
 };
 
-export function recordSync(s: Omit<SyncRecord, "id" | "createdAt"> & { orgKey: string }) {
-  getDb()
-    .prepare(
-      `INSERT INTO connection_syncs (connection_id, org_key, report, window_from, window_to, run_id, slot_key, rows, status, error, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(s.connectionId, s.orgKey, s.report, s.from, s.to, s.runId, s.slotKey, s.rows, s.status, s.error, new Date().toISOString());
+export async function recordSync(s: Omit<SyncRecord, "id" | "createdAt"> & { orgKey: string }) {
+  (await getDb().run(`INSERT INTO connection_syncs (connection_id, org_key, report, window_from, window_to, run_id, slot_key, rows, status, error, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.connectionId, s.orgKey, s.report, s.from, s.to, s.runId, s.slotKey, s.rows, s.status, s.error, new Date().toISOString()));
 }
 
-export function listSyncs(orgKey: string, limit = 500): SyncRecord[] {
-  const rows = getDb().prepare("SELECT * FROM connection_syncs WHERE org_key = ? ORDER BY id DESC LIMIT ?").all(orgKey, limit) as Row[];
+export async function listSyncs(orgKey: string, limit = 500): Promise<SyncRecord[]> {
+  const rows = (await getDb().all("SELECT * FROM connection_syncs WHERE org_key = ? ORDER BY id DESC LIMIT ?", orgKey, limit)) as Row[];
   return rows.map((r) => ({
     id: Number(r.id),
     connectionId: String(r.connection_id),

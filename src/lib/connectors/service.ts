@@ -29,7 +29,7 @@ export async function addConnection(orgKey: string, provider: string, input: Rec
   if (!connector) throw new ConnectorError("Unknown source.");
   const credentials = connector.parseCredentials(input);
   const { accountLabel } = await connector.test(credentials, deps);
-  return store.insertConnection({ orgKey, provider, accountLabel, secretEnc: encryptSecret(credentials, aad(orgKey, provider)), createdBy });
+  return await store.insertConnection({ orgKey, provider, accountLabel, secretEnc: encryptSecret(credentials, aad(orgKey, provider)), createdBy });
 }
 
 export function validWindow(w: PullWindow): boolean {
@@ -51,8 +51,8 @@ export async function pullIntoRun(
   // The demo store's built-in sources (D-32) aren't saved connections and only work there.
   const demo = demoSourceFor(connectionId);
   if (demo && !isDemoOrg(run.orgKey)) throw new ConnectorError("That connection no longer exists.");
-  const connection = demo ? undefined : store.getConnection(run.orgKey, connectionId);
-  const sealed = demo ? undefined : store.getConnectionSecret(run.orgKey, connectionId);
+  const connection = demo ? undefined : await store.getConnection(run.orgKey, connectionId);
+  const sealed = demo ? undefined : await store.getConnectionSecret(run.orgKey, connectionId);
   const connector = connectorById(demo?.provider ?? connection?.provider ?? "");
   if (!connector || (!demo && (!connection || !sealed))) throw new ConnectorError("That connection no longer exists.");
   const provider = connector.id;
@@ -62,8 +62,8 @@ export async function pullIntoRun(
 
   const log = (rows: number, status: "ok" | "failed", error: string | null) =>
     store.recordSync({ orgKey: run.orgKey, connectionId, report, from: window.from, to: window.to, runId: run.id, slotKey, rows, status, error });
-  const fail = (error: unknown): never => {
-    log(0, "failed", error instanceof Error ? error.message : String(error));
+  const fail = async (error: unknown): Promise<never> => {
+    await log(0, "failed", error instanceof Error ? error.message : String(error));
     throw error;
   };
 
@@ -74,18 +74,18 @@ export async function pullIntoRun(
       : await connector.pull(decryptSecret(sealed!, aad(run.orgKey, provider)), report, window, deps);
   } catch (error) {
     // Auth, scope or provider problems: flag the connection so Settings shows it.
-    if (error instanceof ConnectorError && !demo) store.setConnectionStatus(run.orgKey, connectionId, "needs_attention", error.message);
+    if (error instanceof ConnectorError && !demo) await store.setConnectionStatus(run.orgKey, connectionId, "needs_attention", error.message);
     return fail(error);
   }
-  if (!demo) store.setConnectionStatus(run.orgKey, connectionId, "connected", null, new Date().toISOString());
-  if (table.rows.length === 0) fail(new ConnectorError(`No ${report} in ${accountLabel} between ${window.from} and ${window.to}.`));
+  if (!demo) await store.setConnectionStatus(run.orgKey, connectionId, "connected", null, new Date().toISOString());
+  if (table.rows.length === 0) await fail(new ConnectorError(`No ${report} in ${accountLabel} between ${window.from} and ${window.to}.`));
 
   const csv = Papa.unparse({ fields: table.headers, data: table.rows });
   try {
     await ingestFiles(run, slotKey, [{ name: `${provider}-${report}-${window.from}-to-${window.to}.csv`, data: new TextEncoder().encode(csv) }], ctx);
   } catch (error) {
-    fail(error);
+    await fail(error);
   }
-  log(table.rows.length, "ok", null);
+  await log(table.rows.length, "ok", null);
   return { rows: table.rows.length };
 }

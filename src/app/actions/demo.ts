@@ -12,7 +12,7 @@ import { startSession } from "@/lib/saas/session";
 export async function startDemo() {
   if (!demoEnabled()) redirect("/signup");
   const { org, user } = await ensureDemoWorkspace();
-  resetDemoIfDue();
+  await resetDemoIfDue();
   await startSession(user.id, org);
   redirect("/home");
 }

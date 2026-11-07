@@ -14,10 +14,10 @@ async function team() {
 }
 
 /** The signed-up account behind a roster entry, if that person has joined. */
-function joinedUser(org: Org, memberId: string) {
-  const member = getMember(org.key, memberId);
-  const user = member && store.findUserByEmail(member.email);
-  return member && user && store.getMembership(org.id, user.id) ? { member, user } : undefined;
+async function joinedUser(org: Org, memberId: string) {
+  const member = await getMember(org.key, memberId);
+  const user = member && await store.findUserByEmail(member.email);
+  return member && user && await store.getMembership(org.id, user.id) ? { member, user } : undefined;
 }
 
 export type InviteValues = { name: string; email: string; access: string; team: string };
@@ -27,7 +27,7 @@ export type InviteState = { errors: InviteErrors; values?: InviteValues; invited
 export async function invite(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const session = await getCurrentSession();
   if (!session || !canManageTeam(session.access)) return { errors: { email: "Only workspace owners and admins can invite people." } };
-  const seats = orgEntitlement(session.org, "invite");
+  const seats = await orgEntitlement(session.org, "invite");
   if (!seats.ok) return { errors: { email: seats.message } };
   const values: InviteValues = {
     name: String(formData.get("name") ?? ""),
@@ -35,7 +35,7 @@ export async function invite(_prev: InviteState, formData: FormData): Promise<In
     access: String(formData.get("access") ?? ""),
     team: String(formData.get("team") ?? ""),
   };
-  const { member, errors } = inviteMember(session.org.key, values);
+  const { member, errors } = await inviteMember(session.org.key, values);
   if (!member) return { errors, values };
   refresh();
   return { errors: {}, invited: member.email };
@@ -44,25 +44,25 @@ export async function invite(_prev: InviteState, formData: FormData): Promise<In
 export async function changeAccess(id: string, access: string) {
   if (!isAccess(access)) return;
   const org = await team();
-  setMemberAccess(org.key, id, access);
-  const joined = joinedUser(org, id);
-  if (joined) store.addMembership(org.id, joined.user.id, access);
+  await setMemberAccess(org.key, id, access);
+  const joined = await joinedUser(org, id);
+  if (joined) await store.addMembership(org.id, joined.user.id, access);
   refresh();
 }
 
 export async function setActive(id: string, active: boolean) {
   const org = await team();
-  setMemberActive(org.key, id, active);
+  await setMemberActive(org.key, id, active);
   // Someone who already joined goes straight back to "active", not "invited".
-  const joined = joinedUser(org, id);
-  if (active && joined) markMemberJoined(org.key, joined.member.email);
+  const joined = await joinedUser(org, id);
+  if (active && joined) await markMemberJoined(org.key, joined.member.email);
   refresh();
 }
 
 export async function remove(id: string) {
   const org = await team();
-  const joined = joinedUser(org, id);
-  if (joined) store.removeMembership(org.id, joined.user.id);
-  removeMember(org.key, id);
+  const joined = await joinedUser(org, id);
+  if (joined) await store.removeMembership(org.id, joined.user.id);
+  await removeMember(org.key, id);
   refresh();
 }

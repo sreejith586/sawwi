@@ -32,7 +32,7 @@ export async function saveProfile(_prev: SaveProfileState, formData: FormData): 
   });
   if (!profile) return { errors };
 
-  saveOrgProfile(session.org.id, profile);
+  await saveOrgProfile(session.org.id, profile);
   await markOnboarded();
   redirect("/home");
 }

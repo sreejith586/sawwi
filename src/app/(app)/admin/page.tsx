@@ -12,10 +12,10 @@ const day = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", 
 
 async function Overview() {
   await requireSuperadminPage();
-  const settings = getSettings();
-  const orgs = listOrgsForAdmin();
-  const users = listUsersForAdmin();
-  const requests = listOpenRequests();
+  const settings = await getSettings();
+  const orgs = await listOrgsForAdmin();
+  const users = await listUsersForAdmin();
+  const requests = await listOpenRequests();
   const rows = orgRows(orgs);
   const onTrial = rows.filter((o) => o.trialState === "Active").length;
   const trialEnded = rows.filter((o) => o.trialState === "Ended").length;

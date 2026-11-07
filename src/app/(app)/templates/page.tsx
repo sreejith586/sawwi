@@ -43,7 +43,7 @@ async function Gallery() {
         </Link>
       </p>
 
-      <CustomTemplates templates={listCustomTemplates(profile.orgKey)} />
+      <CustomTemplates templates={await listCustomTemplates(profile.orgKey)} />
 
       <TemplateGallery recommended={recommended} others={others} />
 

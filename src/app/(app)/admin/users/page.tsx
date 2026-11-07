@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Users · Admin" };
 
 async function Users() {
   await requireSuperadminPage();
-  return <UsersTable rows={userRows(listUsersForAdmin())} />;
+  return <UsersTable rows={userRows(await listUsersForAdmin())} />;
 }
 
 export default function AdminUsersPage() {

@@ -114,49 +114,49 @@ describe("connections feed the normal upload pipeline", () => {
   it("stores the token encrypted, pulls orders into a run slot and maps them by name", async () => {
     const conn = await addConnection("acme", "shopify", { shop: "desert-bloom", accessToken: creds.accessToken }, null, fakeShopify([{ status: 200, body: fixtures.shop }]).deps);
     expect(conn.accountLabel).toBe("Desert Bloom Trading (desert-bloom.myshopify.com)");
-    expect(store.getConnectionSecret("acme", conn.id)).not.toContain("shpat_");
-    expect(store.getConnection("other", conn.id)).toBeUndefined();
-    expect(JSON.stringify(store.listConnections("acme"))).not.toContain("shpat_");
+    expect(await store.getConnectionSecret("acme", conn.id)).not.toContain("shpat_");
+    expect(await store.getConnection("other", conn.id)).toBeUndefined();
+    expect(JSON.stringify(await store.listConnections("acme"))).not.toContain("shpat_");
 
-    const run = runStore.createRun("acme", "web-orders-vs-gateway");
+    const run = await runStore.createRun("acme", "web-orders-vs-gateway");
     const f = fakeShopify([
       { status: 200, body: fixtures.ordersPage1 },
       { status: 200, body: fixtures.ordersPage2 },
     ]);
     expect(await pullIntoRun(run, "orders", conn.id, "orders", window, { countries: ["AE"] }, f.deps)).toEqual({ rows: 4 });
 
-    const slot = buildRunView(run.id)!.slots.find((s) => s.key === "orders")!;
+    const slot = (await buildRunView(run.id))!.slots.find((s) => s.key === "orders")!;
     expect(slot.file?.name).toBe("shopify-orders-2026-10-01-to-2026-10-31.csv");
     expect(slot.file?.rowCount).toBe(4);
     const mapped = Object.fromEntries((slot.file?.fields ?? []).map((x) => [x.key, x.column]));
     expect(mapped).toMatchObject({ order_id: "Order", order_date: "Created at", order_total: "Total", refunded_amount: "Total refunded", payment_method: "Payment gateway", currency: "Currency" });
 
-    const [sync] = store.listSyncs("acme");
+    const [sync] = await store.listSyncs("acme");
     expect(sync).toMatchObject({ connectionId: conn.id, runId: run.id, slotKey: "orders", rows: 4, status: "ok" });
-    expect(store.getConnection("acme", conn.id)!.lastSyncAt).not.toBeNull();
+    expect((await store.getConnection("acme", conn.id))!.lastSyncAt).not.toBeNull();
   });
 
   it("records failures and flags the connection when the provider refuses", async () => {
-    const conn = store.listConnections("acme")[0];
-    const run = runStore.createRun("acme", "web-orders-vs-gateway");
+    const conn = (await store.listConnections("acme"))[0];
+    const run = await runStore.createRun("acme", "web-orders-vs-gateway");
     await expect(pullIntoRun(run, "orders", conn.id, "orders", window, { countries: ["AE"] }, fakeShopify([{ status: 401 }]).deps)).rejects.toThrow(ConnectorError);
-    expect(store.getConnection("acme", conn.id)).toMatchObject({ status: "needs_attention" });
-    expect(store.listSyncs("acme")[0]).toMatchObject({ status: "failed", rows: 0 });
+    expect(await store.getConnection("acme", conn.id)).toMatchObject({ status: "needs_attention" });
+    expect((await store.listSyncs("acme"))[0]).toMatchObject({ status: "failed", rows: 0 });
 
     // An empty period is reported but doesn't mark the connection as broken.
     const empty = { data: { orders: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } };
     await expect(pullIntoRun(run, "orders", conn.id, "orders", window, { countries: ["AE"] }, fakeShopify([{ status: 200, body: empty }]).deps)).rejects.toThrow(/No orders/);
-    expect(store.getConnection("acme", conn.id)).toMatchObject({ status: "connected" });
+    expect(await store.getConnection("acme", conn.id)).toMatchObject({ status: "connected" });
 
     await expect(pullIntoRun(run, "orders", "missing", "orders", window, { countries: ["AE"] })).rejects.toThrow(/no longer exists/);
     expect(validWindow({ from: "2026-10-31", to: "2026-10-01" })).toBe(false);
     expect(validWindow({ from: "2025-01-01", to: "2026-10-01" })).toBe(false);
 
     // Removing deletes the token; another workspace can't remove it; history stays.
-    store.deleteConnection("other", conn.id);
-    expect(store.getConnectionSecret("acme", conn.id)).toBeDefined();
-    store.deleteConnection("acme", conn.id);
-    expect(store.getConnectionSecret("acme", conn.id)).toBeUndefined();
-    expect(store.listSyncs("acme").length).toBeGreaterThan(0);
+    await store.deleteConnection("other", conn.id);
+    expect(await store.getConnectionSecret("acme", conn.id)).toBeDefined();
+    await store.deleteConnection("acme", conn.id);
+    expect(await store.getConnectionSecret("acme", conn.id)).toBeUndefined();
+    expect((await store.listSyncs("acme")).length).toBeGreaterThan(0);
   });
 });

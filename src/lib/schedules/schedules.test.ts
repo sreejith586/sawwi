@@ -62,7 +62,7 @@ describe("schedule state", () => {
     expect(scheduleState(r, [], "2026-11-05")).toEqual({ state: "done", dueOn: null, runId: null, nextOn: "2026-11-09" });
   });
 
-  it("is due with no run for the period, counting days late", () => {
+  it("is due with no run for the period, counting days late", async () => {
     expect(scheduleState(r, [], "2026-11-11")).toEqual({ state: "due", dueOn: "2026-11-09", daysLate: 2 });
     // A run for an earlier period doesn't cover this one.
     expect(scheduleState(r, [{ id: "a", period: "2026-11-02", done: true }], "2026-11-11").state).toBe("due");
@@ -86,35 +86,35 @@ describe("schedule store and rows", () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("scopes schedules to the workspace and tracks the period's run", () => {
+  it("scopes schedules to the workspace and tracks the period's run", async () => {
     const now = Date.parse("2026-11-11T09:00:00Z");
-    const s = store.createSchedule({ orgKey: "acme", templateId: "mkt-settlement-vs-sales", cadence: "weekly", anchor: 1, startsOn: "2026-11-02", createdBy: null });
-    store.createSchedule({ orgKey: "other", templateId: "mkt-settlement-vs-sales", cadence: "monthly", anchor: 1, startsOn: "2026-11-02", createdBy: null });
+    const s = await store.createSchedule({ orgKey: "acme", templateId: "mkt-settlement-vs-sales", cadence: "weekly", anchor: 1, startsOn: "2026-11-02", createdBy: null });
+    await store.createSchedule({ orgKey: "other", templateId: "mkt-settlement-vs-sales", cadence: "monthly", anchor: 1, startsOn: "2026-11-02", createdBy: null });
 
-    expect(store.getSchedule("other", s.id)).toBeUndefined();
-    expect(store.listSchedules("acme")).toHaveLength(1);
+    expect(await store.getSchedule("other", s.id)).toBeUndefined();
+    expect(await store.listSchedules("acme")).toHaveLength(1);
 
-    let [row] = scheduleRows("acme", now);
+    let [row] = await scheduleRows("acme", now);
     expect(row).toMatchObject({ status: "Due", when: "2026-11-09", daysLate: 2, runs: 0, cadence: "Every Monday" });
     expect(row.template).not.toBe("mkt-settlement-vs-sales");
-    expect(dueSchedules("acme", now)).toHaveLength(1);
+    expect(await dueSchedules("acme", now)).toHaveLength(1);
 
-    const run = createRun("acme", s.templateId);
-    store.linkRunToSchedule(run.id, s.id, "2026-11-09");
-    [row] = scheduleRows("acme", now);
+    const run = await createRun("acme", s.templateId);
+    await store.linkRunToSchedule(run.id, s.id, "2026-11-09");
+    [row] = await scheduleRows("acme", now);
     expect(row).toMatchObject({ status: "In progress", runId: run.id, runs: 1 });
 
-    saveResult(run.id, { totals: { exceptions: 0, value: 0 } } as never);
-    [row] = scheduleRows("acme", now);
+    await saveResult(run.id, { totals: { exceptions: 0, value: 0 } } as never);
+    [row] = await scheduleRows("acme", now);
     expect(row).toMatchObject({ status: "Up to date", when: "2026-11-16", runId: run.id });
-    expect(dueSchedules("acme", now)).toHaveLength(0);
+    expect(await dueSchedules("acme", now)).toHaveLength(0);
 
-    store.setSchedulePaused("other", s.id, true); // wrong workspace: no effect
-    expect(store.getSchedule("acme", s.id)!.paused).toBe(false);
-    store.setSchedulePaused("acme", s.id, true);
-    expect(scheduleRows("acme", now)[0].status).toBe("Paused");
+    await store.setSchedulePaused("other", s.id, true); // wrong workspace: no effect
+    expect((await store.getSchedule("acme", s.id))!.paused).toBe(false);
+    await store.setSchedulePaused("acme", s.id, true);
+    expect((await scheduleRows("acme", now))[0].status).toBe("Paused");
 
-    store.deleteSchedule("acme", s.id);
-    expect(store.listSchedules("acme")).toHaveLength(0);
+    await store.deleteSchedule("acme", s.id);
+    expect(await store.listSchedules("acme")).toHaveLength(0);
   });
 });

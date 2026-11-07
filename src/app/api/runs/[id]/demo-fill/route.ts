@@ -16,9 +16,9 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/runs/[id]/
   if (blocked) return Response.json({ error: blocked.message }, { status: 403 });
   try {
     const result = await fillRunWithDemoData(owned.run, { countries: owned.profile.countries });
-    return Response.json({ view: buildRunView(id), ...result });
+    return Response.json({ view: await buildRunView(id), ...result });
   } catch (error) {
-    if (error instanceof ConnectorError || error instanceof RunInputError) return Response.json({ error: error.message, view: buildRunView(id) }, { status: 400 });
+    if (error instanceof ConnectorError || error instanceof RunInputError) return Response.json({ error: error.message, view: await buildRunView(id) }, { status: 400 });
     throw error;
   }
 }

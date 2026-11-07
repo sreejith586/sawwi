@@ -71,4 +71,7 @@ pnpm build
     **Run reconciliation**. No account needed; uploads and AI calls are off there, and it resets every
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
 
-Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.
+Local data lives in `.data/`, which is git-ignored: the database (`.data/pglite`, an in-process
+Postgres, D-37) and uploaded files. Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon
+branch); tables are created on first use. The SQLite file from before Phase 7 (`.data/sawwi.db`) is
+no longer read: local data starts empty, so use the live demo or sign up again.

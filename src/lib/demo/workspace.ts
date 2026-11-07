@@ -29,24 +29,24 @@ const DEMO_PROFILE: Profile = {
 export type DemoWorkspace = { org: saas.Org; user: saas.User };
 
 export async function ensureDemoWorkspace(): Promise<DemoWorkspace> {
-  const org = saas.getOrgByKey(DEMO_ORG_KEY) ?? saas.createOrgWithKey(DEMO_ORG_KEY, DEMO_ORG_NAME, "enterprise", DEMO_PROFILE);
-  let user: saas.User | undefined = saas.findUserByEmail(DEMO_USER_EMAIL);
+  const org = await saas.getOrgByKey(DEMO_ORG_KEY) ?? await saas.createOrgWithKey(DEMO_ORG_KEY, DEMO_ORG_NAME, "enterprise", DEMO_PROFILE);
+  let user: saas.User | undefined = await saas.findUserByEmail(DEMO_USER_EMAIL);
   // Nobody can log in as the visitor: the password is random and never stored anywhere else.
-  user ??= saas.createUser(DEMO_USER_EMAIL, DEMO_USER_NAME, await hashPassword(randomBytes(32).toString("base64url")));
+  user ??= await saas.createUser(DEMO_USER_EMAIL, DEMO_USER_NAME, await hashPassword(randomBytes(32).toString("base64url")));
   // Editor: can run reconciliations, can't manage the team, plan or profile.
-  if (!saas.getMembership(org.id, user.id)) saas.addMembership(org.id, user.id, "editor");
-  return { org, user: saas.getUser(user.id)! };
+  if (!await saas.getMembership(org.id, user.id)) await saas.addMembership(org.id, user.id, "editor");
+  return { org, user: (await saas.getUser(user.id))! };
 }
 
 const RESET_KEY = "last_reset_at";
 
 /** Wipes the demo's runs, imports, schedules and saved mappings if it hasn't been reset since 00:00 UTC. */
-export function resetDemoIfDue(now = Date.now()): boolean {
-  const last = getDemoState(RESET_KEY);
+export async function resetDemoIfDue(now = Date.now()): Promise<boolean> {
+  const last = await getDemoState(RESET_KEY);
   if (!needsReset(last ? Date.parse(last) : undefined, now)) return false;
-  wipeOrgData(DEMO_ORG_KEY);
-  setDemoState(RESET_KEY, new Date(now).toISOString());
+  await wipeOrgData(DEMO_ORG_KEY);
+  await setDemoState(RESET_KEY, new Date(now).toISOString());
   return true;
 }
 
-export const lastDemoReset = (): string | undefined => getDemoState(RESET_KEY);
+export const lastDemoReset = (): Promise<string | undefined> => getDemoState(RESET_KEY);

@@ -49,26 +49,26 @@ const BREAKDOWN_ROWS = 50;
 
 type Ctx = { run: Run; template: Template; result: ReconResult & { createdAt: string } };
 
-function context(run: Run): Ctx {
-  const template = templateForRun(run);
-  const result = store.getResult(run.id);
+async function context(run: Run): Promise<Ctx> {
+  const template = await templateForRun(run);
+  const result = await store.getResult(run.id);
   if (!template || !result) throw new ChatInputError("Run the reconciliation first, then ask about the result.");
   return { run, template, result };
 }
 
 /** User turns carry a marker so the chat history excludes the file-setup conversation. */
-function ask({ run }: { run: Run }, text: string) {
-  store.addMessage(run.id, "user", text, null, { type: "question" });
+async function ask({ run }: { run: Run }, text: string) {
+  await store.addMessage(run.id, "user", text, null, { type: "question" });
 }
 
-function logFailure(run: Run, purpose: string, error: unknown) {
+async function logFailure(run: Run, purpose: string, error: unknown) {
   const usage = (error as { usage?: Parameters<typeof store.logUsage>[2] }).usage;
-  if (usage) store.logUsage(run.id, purpose, usage);
+  if (usage) await store.logUsage(run.id, purpose, usage);
   if (!(error instanceof LlmRefusal)) console.error(`LLM ${purpose} failed`, error);
 }
 
-export function dimensionsFor(run: Run, template: Template, checkId: string): Dimension[] {
-  return breakdownOptions(template, checkId, mappedFields(store.getRunFiles(run.id)));
+export async function dimensionsFor(run: Run, template: Template, checkId: string): Promise<Dimension[]> {
+  return breakdownOptions(template, checkId, mappedFields(await store.getRunFiles(run.id)));
 }
 
 // ─── Narrative ──────────────────────────────────────────────────────────────
@@ -82,10 +82,10 @@ const inflight = new Map<string, Promise<NarrativeView>>();
  * run never costs tokens; `generate: false` (e.g. read-only viewers) never calls the API.
  */
 export async function narrativeFor(run: Run, generate: boolean): Promise<NarrativeView | undefined> {
-  const template = templateForRun(run);
-  const result = store.getResult(run.id);
+  const template = await templateForRun(run);
+  const result = await store.getResult(run.id);
   if (!template || !result) return undefined;
-  const cached = store.getNarrative<Narrative>(run.id, result.createdAt);
+  const cached = await store.getNarrative<Narrative>(run.id, result.createdAt);
   if (cached) return { narrative: cached.body, source: cached.source === "ai" ? "ai" : "rules" };
   const rules: NarrativeView = { narrative: ruleNarrative(template, result), source: "rules" };
   if (!generate || !llmAvailable(run.orgKey) || result.totals.exceptions === 0) return rules;
@@ -96,11 +96,11 @@ export async function narrativeFor(run: Run, generate: boolean): Promise<Narrati
     (async () => {
       try {
         const { narrative, usage } = await writeNarrative(digestText(template, result));
-        store.logUsage(run.id, "narrative", usage);
-        store.saveNarrative(run.id, result.createdAt, "ai", narrative);
+        await store.logUsage(run.id, "narrative", usage);
+        await store.saveNarrative(run.id, result.createdAt, "ai", narrative);
         return { narrative, source: "ai" as const };
       } catch (error) {
-        logFailure(run, "narrative", error);
+        await logFailure(run, "narrative", error);
         return rules;
       } finally {
         inflight.delete(key);
@@ -113,13 +113,13 @@ export async function narrativeFor(run: Run, generate: boolean): Promise<Narrati
 // ─── Chat ───────────────────────────────────────────────────────────────────
 
 export async function chat(run: Run, intent: ChatIntent, company: string): Promise<void> {
-  if (intent.kind === "about") return aboutTurn(run, intent.topic);
-  const ctx = context(run);
+  if (intent.kind === "about") return await aboutTurn(run, intent.topic);
+  const ctx = await context(run);
   switch (intent.kind) {
     case "fix_first":
-      return fixFirstTurn(ctx);
+      return await fixFirstTurn(ctx);
     case "breakdown":
-      return breakdownTurn(ctx, intent.check, intent.by);
+      return await breakdownTurn(ctx, intent.check, intent.by);
     case "email":
       return emailTurn(ctx, intent.check, intent.audience, company);
     case "explain":
@@ -130,19 +130,19 @@ export async function chat(run: Run, intent: ChatIntent, company: string): Promi
 }
 
 /** A canned question from a fresh chat: answered from the template, no AI, no tokens. */
-function aboutTurn(run: Run, topic: AboutTopic) {
-  const template = templateForRun(run);
+async function aboutTurn(run: Run, topic: AboutTopic) {
+  const template = await templateForRun(run);
   if (!template) throw new ChatInputError("This run's template no longer exists.");
   if (!ABOUT_QUESTIONS.some((q) => q.topic === topic)) throw new ChatInputError("Pick one of the suggested questions.");
-  ask({ run }, aboutQuestion(topic));
-  store.addMessage(run.id, "sawwi", aboutAnswer(template, topic), null, { type: "answer", source: "rules" });
+  await ask({ run }, aboutQuestion(topic));
+  await store.addMessage(run.id, "sawwi", aboutAnswer(template, topic), null, { type: "answer", source: "rules" });
 }
 
-function fixFirstTurn({ run, template, result }: Ctx) {
-  ask({ run }, "What should I fix first?");
+async function fixFirstTurn({ run, template, result }: Ctx) {
+  await ask({ run }, "What should I fix first?");
   const items = fixFirst(template, result).slice(0, 5);
   if (items.length === 0) {
-    store.addMessage(run.id, "sawwi", "Nothing to fix: every check that ran came back clear.", null, { type: "answer", source: "rules" });
+    await store.addMessage(run.id, "sawwi", "Nothing to fix: every check that ran came back clear.", null, { type: "answer", source: "rules" });
     return;
   }
   const top = items[0];
@@ -150,15 +150,15 @@ function fixFirstTurn({ run, template, result }: Ctx) {
     top.value ? ` worth ${money(top.value, result.currency)}` : ""
   }. Ranked by money at risk and severity:`;
   const payload: ChatPayload = { type: "fix_first", source: "rules", items: items.map(({ checkLabel, severity, count, value, action }) => ({ checkLabel, severity, count, value, action })) };
-  store.addMessage(run.id, "sawwi", body, null, payload);
+  await store.addMessage(run.id, "sawwi", body, null, payload);
 }
 
-function breakdownTurn({ run, template, result }: Ctx, checkId: string, by: string) {
+async function breakdownTurn({ run, template, result }: Ctx, checkId: string, by: string) {
   const check = result.checks.find((c) => c.id === checkId);
-  const dim = check && dimensionsFor(run, template, checkId).find((d) => d.key === by);
+  const dim = check && (await dimensionsFor(run, template, checkId)).find((d) => d.key === by);
   if (!check || !dim) throw new ChatInputError("That breakdown isn't available for this check.");
-  ask({ run }, `Break down ${check.label.toLowerCase()} by ${dim.label.toLowerCase()}`);
-  const { rows, totalGroups } = breakdown(template, result, loadRunDatasets(run), checkId, by);
+  await ask({ run }, `Break down ${check.label.toLowerCase()} by ${dim.label.toLowerCase()}`);
+  const { rows, totalGroups } = breakdown(template, result, await loadRunDatasets(run), checkId, by);
   const payload: ChatPayload = {
     type: "breakdown",
     source: "rules",
@@ -170,7 +170,7 @@ function breakdownTurn({ run, template, result }: Ctx, checkId: string, by: stri
     rows: rows.slice(0, BREAKDOWN_ROWS),
     totalGroups,
   };
-  store.addMessage(run.id, "sawwi", describeBreakdown(rows, dim.label, result.currency), null, payload);
+  await store.addMessage(run.id, "sawwi", describeBreakdown(rows, dim.label, result.currency), null, payload);
 }
 
 async function emailTurn({ run, template, result }: Ctx, checkId: string, audienceKey: string | undefined, company: string) {
@@ -178,22 +178,22 @@ async function emailTurn({ run, template, result }: Ctx, checkId: string, audien
   if (!check) throw new ChatInputError("Pick a check with findings to write about.");
   const audience = audienceKey && AUDIENCE_LABELS[audienceKey] ? audienceKey : AUDIENCES[template.group].key;
   const label = AUDIENCE_LABELS[audience];
-  ask({ run }, `Draft an email to the ${label} about ${check.label.toLowerCase()}`);
+  await ask({ run }, `Draft an email to the ${label} about ${check.label.toLowerCase()}`);
 
   let email = ruleEmail(template, result, checkId, audience, company);
   let source: "ai" | "rules" = "rules";
   if (llmAvailable(run.orgKey)) {
     try {
       const out = await draftEmail({ digest: digestText(template, result), facts: emailFacts(template, result, checkId), audience: label, company });
-      store.logUsage(run.id, "email_draft", out.usage);
+      await store.logUsage(run.id, "email_draft", out.usage);
       email = { subject: out.subject, body: out.body };
       source = "ai";
     } catch (error) {
-      logFailure(run, "email_draft", error);
+      await logFailure(run, "email_draft", error);
     }
   }
   const more = check.count > 15 ? " Attach the Excel list from the Exceptions table (filter it to this check) for the full set." : "";
-  store.addMessage(run.id, "sawwi", `Here's a draft built from the ${Math.min(15, check.count)} largest items. Review it, then copy it into your email.${more}`, null, {
+  await store.addMessage(run.id, "sawwi", `Here's a draft built from the ${Math.min(15, check.count)} largest items. Review it, then copy it into your email.${more}`, null, {
     type: "email",
     source,
     audience: label,
@@ -205,33 +205,33 @@ async function explainTurn({ run, template, result }: Ctx, index: number) {
   const e = result.exceptions[index];
   if (!e) throw new ChatInputError("That exception is no longer in the report. Refresh and try again.");
   const checkLabel = result.checks.find((c) => c.id === e.check)?.label ?? e.check;
-  ask({ run }, `Explain ${e.key} (${checkLabel.toLowerCase()})`);
+  await ask({ run }, `Explain ${e.key} (${checkLabel.toLowerCase()})`);
 
   let text = ruleExplanation(template, result, index);
   let source: "ai" | "rules" = "rules";
   if (llmAvailable(run.orgKey)) {
-    const facts = exceptionFacts(template, result, index, loadRunDatasets(run));
+    const facts = exceptionFacts(template, result, index, await loadRunDatasets(run));
     try {
       const out = await explainException(digestText(template, result), facts!);
-      store.logUsage(run.id, "explain", out.usage);
+      await store.logUsage(run.id, "explain", out.usage);
       text = out.text;
       source = "ai";
     } catch (error) {
-      logFailure(run, "explain", error);
+      await logFailure(run, "explain", error);
     }
   }
-  store.addMessage(run.id, "sawwi", text, null, { type: "answer", source });
+  await store.addMessage(run.id, "sawwi", text, null, { type: "answer", source });
 }
 
 async function askTurn({ run, template, result }: Ctx, raw: string) {
   const question = raw.replace(/\s+/g, " ").trim().slice(0, MAX_QUESTION);
   if (!question) throw new ChatInputError("Type a question first.");
   // History is the follow-up conversation since this result, not the file-setup chatter before it.
-  const since = store.getMessages(run.id).filter((m) => m.payload);
-  ask({ run }, question);
+  const since = (await store.getMessages(run.id)).filter((m) => m.payload);
+  await ask({ run }, question);
 
   if (!llmAvailable(run.orgKey)) {
-    store.addMessage(
+    await store.addMessage(
       run.id,
       "sawwi",
       isDemoOrg(run.orgKey)
@@ -245,10 +245,10 @@ async function askTurn({ run, template, result }: Ctx, raw: string) {
   const history = since.slice(-HISTORY_TURNS).flatMap((m) => [{ role: m.role === "user" ? ("user" as const) : ("assistant" as const), text: m.body }]);
   try {
     const out = await answerQuestion(digestText(template, result), history, question);
-    store.logUsage(run.id, "chat", out.usage);
-    store.addMessage(run.id, "sawwi", out.text, null, { type: "answer", source: "ai" });
+    await store.logUsage(run.id, "chat", out.usage);
+    await store.addMessage(run.id, "sawwi", out.text, null, { type: "answer", source: "ai" });
   } catch (error) {
-    logFailure(run, "chat", error);
-    store.addMessage(run.id, "sawwi", "I couldn't answer that just now. Try again, or use one of the one-click actions.", null, { type: "answer", source: "rules" });
+    await logFailure(run, "chat", error);
+    await store.addMessage(run.id, "sawwi", "I couldn't answer that just now. Try again, or use one of the one-click actions.", null, { type: "answer", source: "rules" });
   }
 }

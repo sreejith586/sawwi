@@ -7,7 +7,7 @@ import { listUsersForAdmin } from "@/lib/saas/store";
 export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session?.isSuperadmin) return Response.json({ error: "Not found." }, { status: 404 });
-  const rows = applyQuery(userRows(listUsersForAdmin()), queryFromParams(new URL(request.url).searchParams, []), [...USER_SEARCH]);
+  const rows = applyQuery(userRows(await listUsersForAdmin()), queryFromParams(new URL(request.url).searchParams, []), [...USER_SEARCH]);
   const bytes = await tableWorkbook({
     sheetName: "Users",
     columns: [

@@ -37,6 +37,6 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
 export async function removeConnectionAction(id: string) {
   const session = await getCurrentSession();
   if (!session || !canManageTeam(session.access) || isDemoOrg(session.org.key)) return;
-  deleteConnection(session.org.key, id);
+  await deleteConnection(session.org.key, id);
   refresh();
 }

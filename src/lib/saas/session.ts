@@ -35,16 +35,16 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | undefi
   if (!token) return undefined;
   // Session checks compare against the clock and hit the database: request time only.
   await connection();
-  const s = store.readSession(token);
+  const s = await store.readSession(token);
   if (!s) return undefined;
-  const user = store.getUser(s.userId);
-  const org = store.getOrg(s.orgId);
-  const membership = store.getMembership(s.orgId, s.userId);
+  const user = await store.getUser(s.userId);
+  const org = await store.getOrg(s.orgId);
+  const membership = await store.getMembership(s.orgId, s.userId);
   if (!user || !org || !membership) return undefined;
   // The demo store resets on its first request after 00:00 UTC (D-32).
-  if (isDemoOrg(org.key)) resetDemoIfDue();
+  if (isDemoOrg(org.key)) await resetDemoIfDue();
   // A deactivated teammate keeps their login but loses this workspace.
-  if (membership.access !== "owner" && findMemberByEmail(org.key, user.email)?.status === "deactivated") return undefined;
+  if (membership.access !== "owner" && (await findMemberByEmail(org.key, user.email))?.status === "deactivated") return undefined;
   return { user, org, access: membership.access, isSuperadmin: isSuperadminEmail(user.email) };
 });
 
@@ -58,8 +58,8 @@ const cookieOptions = (expires?: Date) => ({
 
 /** Call from a server action after verifying credentials. */
 export async function startSession(userId: string, org: store.Org) {
-  const { token, expiresAt } = store.createSession(userId, org.id);
-  store.touchLogin(userId);
+  const { token, expiresAt } = await store.createSession(userId, org.id);
+  await store.touchLogin(userId);
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, cookieOptions(expiresAt));
   if (org.profile) jar.set(ONBOARDED_COOKIE, "1", cookieOptions(expiresAt));
@@ -69,7 +69,7 @@ export async function startSession(userId: string, org: store.Org) {
 export async function endSession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) store.deleteSession(token);
+  if (token) await store.deleteSession(token);
   jar.delete(SESSION_COOKIE);
   jar.delete(ONBOARDED_COOKIE);
 }
@@ -78,8 +78,8 @@ export async function markOnboarded() {
   (await cookies()).set(ONBOARDED_COOKIE, "1", cookieOptions(new Date(Date.now() + 30 * 86_400_000)));
 }
 
-export function orgEntitlement(org: store.Org, action: "run" | "invite" = "run"): Entitlement {
-  return entitlement(store.billingState(org), store.getSettings().paywallEnabled, action);
+export async function orgEntitlement(org: store.Org, action: "run" | "invite" = "run"): Promise<Entitlement> {
+  return entitlement(await store.billingState(org), (await store.getSettings()).paywallEnabled, action);
 }
 
 export const canManageTeam = (access: store.MembershipAccess) => access === "owner" || access === "admin";
@@ -92,6 +92,6 @@ export async function runBlocker(): Promise<RunBlock | undefined> {
   const session = await getCurrentSession();
   if (!session) return { reason: "signed_out", message: "Your session has ended. Log in again." };
   if (!canRun(session.access)) return { reason: "viewer", message: "Viewers can open reports but can't start reconciliations. Ask an admin for Editor access." };
-  const e = orgEntitlement(session.org, "run");
+  const e = await orgEntitlement(session.org, "run");
   return e.ok ? undefined : { reason: e.reason, message: e.message };
 }

@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Reconciliations" };
 async function History() {
   const profile = await getProfile();
   if (!profile) return null;
-  const rows = runRows(listRuns(orgKeyFor(profile)));
+  const rows = await runRows(await listRuns(orgKeyFor(profile)));
   if (rows.length === 0) {
     return (
       <div className="mt-8 rounded-xl border border-dashed border-border p-10 text-center">

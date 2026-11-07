@@ -317,3 +317,28 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Every store call and its callers become async, which is the largest single change of the phase.
   - Tests run against PGlite, which is real Postgres, so SQL tested locally is the SQL that runs in production.
   - Data residency for GCC customers (UAE, and KSA's PDPL) depends on the Vercel and Neon regions. It's an open question for the user before real customer data goes in.
+
+### D-38: Postgres everywhere: raw SQL kept, `?` placeholders numbered at runtime, PGlite for dev and tests
+- **Context:** D-37's second PR. `node:sqlite` is synchronous and file-based, which doesn't work on Vercel (no persistent disk). About 100 store functions and every caller had to become async.
+- **Decision:**
+  - `src/lib/db.ts` exposes a small async API (`all`, `get`, `run`, `tx`) over two drivers: `pg` with a pool when `DATABASE_URL` is set (Neon), PGlite otherwise. It is cached on `globalThis` so dev hot reloads never open a second PGlite on the same folder.
+  - The SQL stays raw, in the store modules. `?` placeholders are kept and numbered (`$1`, `$2`, …) at runtime, outside quoted text, so the SQL diff is small and readable. Only SQLite-only syntax changed:
+    - `json_extract` became `::jsonb #>>`;
+    - `GROUP_CONCAT` became `string_agg`;
+    - `PRAGMA` and `sqlite_master` became `information_schema` (in the demo wipe, which runs in one transaction);
+    - `AUTOINCREMENT` became an identity column;
+    - an ambiguous `uses + 1` is qualified.
+  - All tables, including the ones the SaaS store and team roster used to create lazily, now live in one numbered migration in `db.ts`, recorded in `schema_migrations`. Later schema changes are new migrations, never edits.
+  - Column types stay as they were (TEXT for dates and JSON, INTEGER flags). Changing them would touch every mapper for no user-visible gain. Revisit with real volumes.
+  - The callers were converted by a codemod plus hand fixes. Lists that looked up templates one at a time now look them up with `Promise.all`. `LayoutMemory` (PDF layout recipes) accepts async `find`/`save`.
+  - Type-aware lint rules (`no-floating-promises`, `no-misused-promises`, `await-thenable`) are on for `src/`, so a forgotten `await` fails CI.
+- **Rejected alternatives:**
+  - An ORM (Drizzle, as ARCHITECTURE §6 first planned): a rewrite of every query on top of the async change.
+  - Rewriting placeholders to `$n` by hand: noisy diffs, and easy to misnumber.
+  - Keeping SQLite for development: two dialects (D-37).
+  - Importing old local `.data/sawwi.db` data: it's development data only, and nothing is in production yet.
+- **Consequences:**
+  - Local data starts empty after this change (the old SQLite file is ignored).
+  - Tests run on real Postgres semantics. The suite also passed against a Postgres 17 container through the `pg` driver, apart from one test that assumes its own database per file.
+  - `pnpm lint` is slower, since it now type-checks.
+  - Tests time out after 30 s instead of 5 s: the first query in each file starts PGlite, which takes seconds on a busy runner.

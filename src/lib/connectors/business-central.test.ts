@@ -165,18 +165,18 @@ describe("Business Central data runs the B2B and purchasing reconciliations", ()
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   async function reconcileFrom(templateId: string, slots: Record<string, string>, reconcile = true) {
-    const conn = store.listConnections("acme")[0] ?? (await addConnection("acme", "business-central", { ...DEMO_BC_CREDENTIALS }, null, mockDeps()));
-    const run = runStore.createRun("acme", templateId);
+    const conn = (await store.listConnections("acme"))[0] ?? (await addConnection("acme", "business-central", { ...DEMO_BC_CREDENTIALS }, null, mockDeps()));
+    const run = await runStore.createRun("acme", templateId);
     for (const [slot, report] of Object.entries(slots)) await pullIntoRun(run, slot, conn.id, report, october, { countries: ["AE"] }, mockDeps());
-    const view = buildRunView(run.id)!;
-    return { view, result: reconcile ? runReconciliation(runStore.getRun(run.id)!, ["AE"]) : undefined! };
+    const view = (await buildRunView(run.id))!;
+    return { view, result: reconcile ? await runReconciliation((await runStore.getRun(run.id))!, ["AE"]) : undefined! };
   }
 
   it("stores the secret encrypted and labels the connection with the company", async () => {
     const conn = await addConnection("acme", "business-central", { ...DEMO_BC_CREDENTIALS }, null, mockDeps());
     expect(conn.accountLabel).toBe("Sawwi Demo Trading LLC (Sandbox)");
-    expect(store.getConnectionSecret("acme", conn.id)).not.toContain(DEMO_BC_CREDENTIALS.clientSecret);
-    expect(JSON.stringify(store.listConnections("acme"))).not.toContain(DEMO_BC_CREDENTIALS.clientSecret);
+    expect(await store.getConnectionSecret("acme", conn.id)).not.toContain(DEMO_BC_CREDENTIALS.clientSecret);
+    expect(JSON.stringify(await store.listConnections("acme"))).not.toContain(DEMO_BC_CREDENTIALS.clientSecret);
   });
 
   it("sales orders vs deliveries vs invoices: every field maps by name, no questions, planted exceptions found", async () => {

@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Usage · Admin" };
 async function Usage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   await requireSuperadminPage();
   const range = parseRange((await searchParams).range);
-  return <UsageDashboard admin range={range} basePath="/admin/usage" exportPath="/api/admin/usage" {...dashboardData(null, range)} />;
+  return <UsageDashboard admin range={range} basePath="/admin/usage" exportPath="/api/admin/usage" {...(await dashboardData(null, range))} />;
 }
 
 export default function AdminUsagePage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {

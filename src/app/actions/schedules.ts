@@ -21,14 +21,14 @@ export async function createScheduleAction(templateId: string, _prev: ScheduleAc
   if (blocked) return { error: blocked.message };
   const session = (await getCurrentSession())!;
   const orgKey = session.org.key;
-  if (templateId === GENERIC_TEMPLATE_ID || !templateFor(orgKey, templateId)) return { error: "That template can't be scheduled." };
+  if (templateId === GENERIC_TEMPLATE_ID || !await templateFor(orgKey, templateId)) return { error: "That template can't be scheduled." };
   const cadence = String(form.get("cadence") ?? "");
   const anchor = Number(form.get("anchor"));
   if (!validRule(cadence, anchor)) return { error: "Pick how often and on which day." };
-  if (store.listSchedules(orgKey).some((s) => s.templateId === templateId && s.cadence === cadence && s.anchor === anchor)) {
+  if ((await store.listSchedules(orgKey)).some((s) => s.templateId === templateId && s.cadence === cadence && s.anchor === anchor)) {
     return { error: "This template already has that schedule." };
   }
-  store.createSchedule({ orgKey, templateId, cadence, anchor, startsOn: isoDay(Date.now()), createdBy: session.user.id });
+  await store.createSchedule({ orgKey, templateId, cadence, anchor, startsOn: isoDay(Date.now()), createdBy: session.user.id });
   redirect("/schedules");
 }
 
@@ -40,17 +40,17 @@ export async function createScheduleAction(templateId: string, _prev: ScheduleAc
 export async function startScheduledRun(scheduleId: string) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  const schedule = store.getSchedule(session.org.key, scheduleId);
+  const schedule = await store.getSchedule(session.org.key, scheduleId);
   if (!schedule) redirect("/schedules");
   const today = isoDay(Date.now());
-  const state = scheduleState(schedule, store.listScheduledRuns(session.org.key).filter((r) => r.scheduleId === schedule.id), today);
+  const state = scheduleState(schedule, (await store.listScheduledRuns(session.org.key)).filter((r) => r.scheduleId === schedule.id), today);
   if (state.state === "started") redirect(`/runs/${state.runId}`);
   const period = currentDue(schedule, today);
   if (state.state !== "due" || !period) redirect("/schedules");
   const blocked = await runBlocker();
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
-  const run = createRun(session.org.key, schedule.templateId);
-  store.linkRunToSchedule(run.id, schedule.id, period);
+  const run = await createRun(session.org.key, schedule.templateId);
+  await store.linkRunToSchedule(run.id, schedule.id, period);
   redirect(`/runs/${run.id}`);
 }
 
@@ -62,13 +62,13 @@ async function editor(): Promise<string | undefined> {
 export async function setSchedulePaused(scheduleId: string, paused: boolean) {
   const orgKey = await editor();
   if (!orgKey) return;
-  store.setSchedulePaused(orgKey, scheduleId, paused);
+  await store.setSchedulePaused(orgKey, scheduleId, paused);
   refresh();
 }
 
 export async function deleteScheduleAction(scheduleId: string) {
   const orgKey = await editor();
   if (!orgKey) return;
-  store.deleteSchedule(orgKey, scheduleId);
+  await store.deleteSchedule(orgKey, scheduleId);
   refresh();
 }
