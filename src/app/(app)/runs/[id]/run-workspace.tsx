@@ -13,7 +13,7 @@ import { Pill } from "@/components/data-table";
 import { useChatPanelSlot } from "@/components/shell/chat-panel";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
-import { setChatAttention, setChatOpen } from "@/lib/chat-panel";
+import { chatCanDock, restoreChatOpen, setChatAttention, setChatOpen } from "@/lib/chat-panel";
 import type { ImportSource } from "@/lib/connectors/sources";
 import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
@@ -44,18 +44,27 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
   // something opens it, so the answer is in view.
   const chatSlot = useChatPanelSlot();
   const ask = (intent: ChatIntent) => {
-    setChatOpen(true);
+    setChatOpen(true, false);
     startChat(async () => apply(await sendChat(view.id, intent)));
   };
 
-  // A setup question needs an answer: open the panel on wide screens, and flag the chat button
-  // (a dot) whenever the panel is closed. Leaving the run clears the flag.
+  // Run pages open the chat by default when it can dock beside the page (D-34). That isn't saved
+  // as the user's choice: leaving the run puts the panel back the way they had it.
+  useEffect(() => {
+    if (chatCanDock()) setChatOpen(true, false);
+    return () => {
+      restoreChatOpen();
+      setChatAttention(false);
+    };
+  }, []);
+
+  // A setup question needs an answer: open the panel where it can dock, and flag the chat button
+  // (a dot) whenever the panel is closed, e.g. on a phone.
   const questionId = view.openQuestions[0]?.id;
   useEffect(() => {
-    if (questionId && window.matchMedia("(min-width: 64rem)").matches) setChatOpen(true);
+    if (questionId && chatCanDock()) setChatOpen(true, false);
     setChatAttention(Boolean(questionId));
   }, [questionId]);
-  useEffect(() => () => setChatAttention(false), []);
 
   const status = RUN_STATUS[view.status];
   const uploaded = view.slots.filter((s) => s.file).length;
@@ -75,7 +84,7 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
         {open > 0 && (
           <>
             {" · "}
-            <button type="button" onClick={() => setChatOpen(true)} className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
+            <button type="button" onClick={() => setChatOpen(true, false)} className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
               Answer in the chat
             </button>
           </>

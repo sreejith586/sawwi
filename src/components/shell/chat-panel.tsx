@@ -12,16 +12,25 @@ import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, currentChatWidth, isChatOpen, resetChat
 
 export const CHAT_SLOT_ID = "chat-panel-slot";
 
-const noSubscribe = () => () => {};
+// The slot element, announced by the panel when it mounts. Pages subscribe, so whichever of
+// the two renders first, the page's chat lands in the panel as soon as both are there.
+let slotElement: HTMLElement | null = null;
+const slotListeners = new Set<() => void>();
+function registerSlot(el: HTMLElement | null) {
+  if (el === slotElement) return;
+  slotElement = el;
+  for (const l of slotListeners) l();
+}
+const subscribeSlot = (cb: () => void) => {
+  slotListeners.add(cb);
+  return () => slotListeners.delete(cb);
+};
 
-/**
- * The element a page portals its chat into. The panel is part of the app layout, so it is in the
- * page already; null on the server, so the portal mounts right after hydration.
- */
+/** The element a page portals its chat into; null on the server and until the panel mounts. */
 export function useChatPanelSlot(): HTMLElement | null {
   return useSyncExternalStore(
-    noSubscribe,
-    () => document.getElementById(CHAT_SLOT_ID),
+    subscribeSlot,
+    () => slotElement,
     () => null,
   );
 }
@@ -120,7 +129,7 @@ export function ChatPanel() {
         </div>
 
         {/* A page's own chat (a reconciliation's) is portalled in here; otherwise the general panel shows. */}
-        <div id={CHAT_SLOT_ID} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
+        <div id={CHAT_SLOT_ID} ref={registerSlot} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
         <div className="app-chat-fallback flex min-h-0 flex-1 flex-col">
           <div className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto p-4">
             <div className="rounded-xl bg-surface-muted px-3.5 py-3 text-sm">

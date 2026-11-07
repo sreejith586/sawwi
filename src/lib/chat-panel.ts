@@ -15,7 +15,14 @@ export const CHAT_EVENT = "sawwi-chat-panel";
 
 type Saved = { open?: boolean; width?: number };
 
-export const CHAT_PANEL_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem("${CHAT_STORAGE_KEY}")||"{}");var r=document.documentElement;if(s.open)r.dataset.chat="open";if(typeof s.width==="number")r.style.setProperty("--chat-width",Math.max(${CHAT_MIN_WIDTH},Math.min(${CHAT_MAX_WIDTH},s.width))+"px")}catch(e){}})()`;
+/** From this width the panel docks beside the page; below it, it is a drawer over the page. */
+export const CHAT_DOCK_QUERY = "(min-width: 64rem)";
+/** A reconciliation's page: the panel opens there by default when it can dock (D-34). */
+export const RUN_PATH = /^\/runs\/[^/]+/;
+
+// Open if the user left it open, or on a run page when it can dock (not saved: leaving the run
+// restores the user's own choice).
+export const CHAT_PANEL_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem("${CHAT_STORAGE_KEY}")||"{}");var r=document.documentElement;if(s.open||(${RUN_PATH}.test(location.pathname)&&matchMedia("${CHAT_DOCK_QUERY}").matches))r.dataset.chat="open";if(typeof s.width==="number")r.style.setProperty("--chat-width",Math.max(${CHAT_MIN_WIDTH},Math.min(${CHAT_MAX_WIDTH},s.width))+"px")}catch(e){}})()`;
 
 /** Keeps a width inside the limits for this window. */
 export function clampChatWidth(width: number, viewport: number): number {
@@ -43,14 +50,23 @@ export function isChatOpen(): boolean {
   return document.documentElement.dataset.chat === "open";
 }
 
-export function setChatOpen(open: boolean) {
+/** Opens or closes the panel. The user's own toggles are saved; a page opening it by default is not. */
+export function setChatOpen(open: boolean, persist = true) {
   const root = document.documentElement;
+  if (persist) save({ open });
   if (open === isChatOpen()) return;
   if (open) root.dataset.chat = "open";
   else delete root.dataset.chat;
-  save({ open });
   window.dispatchEvent(new Event(CHAT_EVENT));
 }
+
+/** Back to the user's saved choice, e.g. when leaving a page that opened the panel by default. */
+export function restoreChatOpen() {
+  setChatOpen(Boolean(read().open), false);
+}
+
+/** Whether the panel docks beside the page at this window width. */
+export const chatCanDock = () => window.matchMedia(CHAT_DOCK_QUERY).matches;
 
 export const toggleChatPanel = () => setChatOpen(!isChatOpen());
 
