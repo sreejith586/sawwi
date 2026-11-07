@@ -95,6 +95,18 @@ describe("Blob specifics", () => {
     expect(calls.find((c) => c.op === "get")?.args[1]).toMatchObject({ access: "private", useCache: false });
   });
 
+  it("signs in through the connected store (OIDC) when there is no read-write token", async () => {
+    env.BLOB_STORE_ID = "store_test";
+    try {
+      await putFile("runs/r/s.csv", "a\n");
+      const opts = calls.find((c) => c.op === "put")?.args[1] as Record<string, unknown>;
+      expect(opts).toMatchObject({ access: "private", storeId: "store_test" });
+      expect(opts.token).toBeUndefined();
+    } finally {
+      delete env.BLOB_STORE_ID;
+    }
+  });
+
   it("takes the token under the integration's SAWWI prefix too", async () => {
     env.SAWWI_BLOB_READ_WRITE_TOKEN = "prefixed-token";
     try {
@@ -107,7 +119,7 @@ describe("Blob specifics", () => {
 
   it("won't fall back to a disk that disappears on Vercel", async () => {
     env.VERCEL = "1";
-    await expect(putFile("runs/r/s.csv", "a\n")).rejects.toThrow(/BLOB_READ_WRITE_TOKEN/);
+    await expect(putFile("runs/r/s.csv", "a\n")).rejects.toThrow(/No Blob store is connected/);
     // Deleting nothing needs no store: the demo reset with no runs mustn't fail (seen on a preview).
     await expect(deletePrefixes([])).resolves.toBeUndefined();
     await expect(deleteFiles([])).resolves.toBeUndefined();

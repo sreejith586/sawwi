@@ -33,7 +33,7 @@ _Updated in every commit. Newest first within each section._
   - The demo reset deletes its runs' files.
   - 9 new tests use a mocked Blob SDK, and the local path was checked in the browser.
   - **Fix:** uploads, setup answers and column remaps now check role, plan and trial (`runBlocker()`), so Viewers can no longer change a run.
-  - **Needs:** a private Blob store connected to the Vercel project, then a live upload test on a preview.
+  - **Needs:** a live upload test on a preview. The Blob store is connected, through OIDC (`BLOB_STORE_ID`), with no long-lived token.
 - **Postgres everywhere** (D-38, branch `phase-7-postgres`, in review).
   - `node:sqlite` is gone. Production will use Neon through `pg` (`DATABASE_URL`). Locally and in tests, Sawwi runs PGlite, an in-process Postgres, so no install is needed.
   - Every store function is now async, and so are its callers. Tables are created by numbered migrations in `src/lib/db.ts`.

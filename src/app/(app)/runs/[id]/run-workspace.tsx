@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { upload as uploadToBlob } from "@vercel/blob/client";
+import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { saveAsTemplate, sendChat } from "@/app/actions/insights";

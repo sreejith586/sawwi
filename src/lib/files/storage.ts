@@ -2,9 +2,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dataDir } from "@/lib/db";
 
-// Where files live (D-37, D-39): a private Vercel Blob store when its token is set (Vercel adds
-// BLOB_READ_WRITE_TOKEN, or SAWWI_BLOB_READ_WRITE_TOKEN with the "SAWWI" prefix, when a Blob store
-// is connected to the project), a folder under .data otherwise.
+// Where files live (D-37, D-39): a private Vercel Blob store when one is connected, a folder under
+// .data otherwise. A connected store shows up as BLOB_STORE_ID: the SDK then signs in with the
+// deployment's short-lived Vercel OIDC token, with no long-lived secret. A read-write token
+// (BLOB_READ_WRITE_TOKEN, or SAWWI_-prefixed) works too, e.g. for scripts outside Vercel.
 // Keys are built by the server from run ids and template slot keys, never from user input alone.
 
 /** Keys for a run's files. `incoming/` holds raw browser uploads until they're parsed. */
@@ -14,8 +15,18 @@ export const fileKeys = {
   runPrefixes: (runId: string) => [`runs/${runId}/`, `incoming/${runId}/`],
 };
 
-export const blobToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.SAWWI_BLOB_READ_WRITE_TOKEN || undefined;
-export const blobEnabled = () => Boolean(blobToken());
+const rwToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.SAWWI_BLOB_READ_WRITE_TOKEN || undefined;
+const storeId = () => process.env.BLOB_STORE_ID || process.env.SAWWI_BLOB_STORE_ID || undefined;
+
+export const blobEnabled = () => Boolean(rwToken() || storeId());
+
+/** Credentials for every Blob call: the read-write token if there is one, else the store (OIDC). */
+export const blobAuth = (): { token?: string; storeId?: string } => {
+  const token = rwToken();
+  if (token) return { token };
+  const id = storeId();
+  return id ? { storeId: id } : {};
+};
 
 function assertKey(key: string) {
   // A prefix ends with "/"; nothing else may be empty, "." or "..".
@@ -32,7 +43,7 @@ function onDisk(key: string) {
 
 function requireStore() {
   // A deploy without Blob would write to a disk that disappears: refuse, like the database does.
-  if (process.env.VERCEL && !blobEnabled()) throw new Error("BLOB_READ_WRITE_TOKEN (or SAWWI_BLOB_READ_WRITE_TOKEN) is not set. Connect a private Blob store to this Vercel project (docs/DEPLOY.md).");
+  if (process.env.VERCEL && !blobEnabled()) throw new Error("No Blob store is connected (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN). Connect a private Blob store to this Vercel project (docs/DEPLOY.md).");
 }
 
 export async function putFile(key: string, body: string | Uint8Array, contentType = "text/csv") {
@@ -40,7 +51,7 @@ export async function putFile(key: string, body: string | Uint8Array, contentTyp
   assertKey(key);
   if (blobEnabled()) {
     const { put } = await import("@vercel/blob");
-    await put(key, typeof body === "string" ? body : Buffer.from(body), { access: "private", contentType, addRandomSuffix: false, allowOverwrite: true, token: blobToken() });
+    await put(key, typeof body === "string" ? body : Buffer.from(body), { access: "private", contentType, addRandomSuffix: false, allowOverwrite: true, ...blobAuth() });
     return;
   }
   const file = onDisk(key);
@@ -55,7 +66,7 @@ export async function readStoredFile(key: string): Promise<Uint8Array | undefine
   if (blobEnabled()) {
     const { get } = await import("@vercel/blob");
     // useCache: false, so a replaced file is never read stale.
-    const r = await get(key, { access: "private", useCache: false, token: blobToken() });
+    const r = await get(key, { access: "private", useCache: false, ...blobAuth() });
     if (!r || r.statusCode !== 200) return undefined;
     return new Uint8Array(await new Response(r.stream).arrayBuffer());
   }
@@ -80,7 +91,7 @@ export async function fileSize(key: string): Promise<number | undefined> {
   if (blobEnabled()) {
     const { head, BlobNotFoundError } = await import("@vercel/blob");
     try {
-      return (await head(key, { token: blobToken() })).size;
+      return (await head(key, blobAuth())).size;
     } catch (error) {
       if (error instanceof BlobNotFoundError) return undefined;
       throw error;
@@ -95,7 +106,7 @@ export async function deleteFiles(keys: string[]) {
   keys.forEach(assertKey);
   if (blobEnabled()) {
     const { del } = await import("@vercel/blob");
-    await del(keys, { token: blobToken() });
+    await del(keys, blobAuth());
     return;
   }
   await Promise.all(keys.map((k) => rm(onDisk(k), { force: true })));
@@ -111,8 +122,8 @@ export async function deletePrefixes(prefixes: string[]) {
     for (const prefix of prefixes) {
       let cursor: string | undefined;
       do {
-        const page = await list({ prefix, cursor, limit: 1000, token: blobToken() });
-        if (page.blobs.length) await del(page.blobs.map((b) => b.url), { token: blobToken() });
+        const page = await list({ prefix, cursor, limit: 1000, ...blobAuth() });
+        if (page.blobs.length) await del(page.blobs.map((b) => b.url), blobAuth());
         cursor = page.hasMore ? page.cursor : undefined;
       } while (cursor);
     }
