@@ -310,8 +310,16 @@ function pgDriver(pool: Pool, client?: PoolClient): Driver {
   };
 }
 
+/**
+ * The Neon connection string. Vercel's Neon integration names it DATABASE_URL, or
+ * SAWWI_DATABASE_URL when the integration was given the "SAWWI" variable prefix (as in production).
+ */
+export function databaseUrl(): string | undefined {
+  return process.env.DATABASE_URL || process.env.SAWWI_DATABASE_URL || undefined;
+}
+
 async function open(): Promise<Driver> {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (url) {
     const { default: pg } = await import("pg");
     pg.types.setTypeParser(INT8, Number);
@@ -325,7 +333,7 @@ async function open(): Promise<Driver> {
     return pgDriver(pool);
   }
   // A deploy without DATABASE_URL would keep its data on a disk that disappears: refuse.
-  if (process.env.VERCEL) throw new Error("DATABASE_URL is not set. Add the Neon database to this Vercel project (docs/DEPLOY.md).");
+  if (process.env.VERCEL) throw new Error("DATABASE_URL (or SAWWI_DATABASE_URL) is not set. Add the Neon database to this Vercel project (docs/DEPLOY.md).");
   const { PGlite } = await import("@electric-sql/pglite");
   const parsers = { [INT8]: Number, [NUMERIC]: Number };
   // Tests get a fresh in-memory database per test file; development keeps one under .data/.

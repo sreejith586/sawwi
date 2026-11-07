@@ -332,6 +332,7 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Column types stay as they were (TEXT for dates and JSON, INTEGER flags). Changing them would touch every mapper for no user-visible gain. Revisit with real volumes.
   - The callers were converted by a codemod plus hand fixes. Lists that looked up templates one at a time now look them up with `Promise.all`. `LayoutMemory` (PDF layout recipes) accepts async `find`/`save`.
   - Type-aware lint rules (`no-floating-promises`, `no-misused-promises`, `await-thenable`) are on for `src/`, so a forgotten `await` fails CI.
+  - The connection string is read from `DATABASE_URL`, or from `SAWWI_DATABASE_URL`. The second is the name Vercel's Neon integration gives it when, as in production, the integration was set up with the "SAWWI" prefix.
 - **Rejected alternatives:**
   - An ORM (Drizzle, as ARCHITECTURE §6 first planned): a rewrite of every query on top of the async change.
   - Rewriting placeholders to `$n` by hand: noisy diffs, and easy to misnumber.

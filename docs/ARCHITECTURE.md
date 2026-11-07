@@ -188,7 +188,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via
 
 ## 6b. Database (Phase 7, D-37, D-38)
 
-- **One dialect, two drivers.** `src/lib/db.ts` opens `pg` (a pooled connection to Neon, closed cleanly on Vercel via `attachDatabasePool`) when `DATABASE_URL` is set, and PGlite (Postgres compiled to WASM, in-process) otherwise: `.data/pglite` in development, a fresh in-memory database per test file under Vitest. On Vercel, a missing `DATABASE_URL` is an error rather than a silent local database.
+- **One dialect, two drivers.** `src/lib/db.ts` opens `pg` (a pooled connection to Neon, closed cleanly on Vercel via `attachDatabasePool`) when `DATABASE_URL` is set (or `SAWWI_DATABASE_URL`, its name under the Vercel integration's "SAWWI" prefix), and PGlite (Postgres compiled to WASM, in-process) otherwise: `.data/pglite` in development, a fresh in-memory database per test file under Vitest. On Vercel, a missing `DATABASE_URL` is an error rather than a silent local database.
 - **API.** `getDb()` returns `all`, `get`, `run` (→ `{ changes }`) and `tx(fn)`, all async. Store modules keep `?` placeholders; `toPositional` numbers them for Postgres. COUNT/SUM (int8, numeric) come back as JS numbers.
 - **Schema.** Numbered, append-only migrations in `db.ts`, recorded in `schema_migrations` and applied on first use under an advisory lock, so cold-starting instances don't race. Columns stay `TEXT` (ISO dates, JSON strings) as in the SQLite schema; JSON is read with `::jsonb` where SQL needs it.
 - **Guard rails.** The type-aware lint rules `no-floating-promises`, `no-misused-promises` and `await-thenable` fail on a missed `await`, since a Promise is always truthy.

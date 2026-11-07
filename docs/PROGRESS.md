@@ -33,6 +33,7 @@ _Updated in every commit. Newest first within each section._
   - All 203 tests pass, plus 4 new database-layer tests. The suite also ran against a real Postgres 17 through `pg`.
   - Checked in the browser: the live demo, a demo-data fill, a reconciliation, and the runs, usage and connections pages.
   - Local data from before this change (`.data/sawwi.db`) is no longer read.
+  - Neon is connected to the Vercel project with the "SAWWI" prefix, so `SAWWI_DATABASE_URL` is read as well as `DATABASE_URL`.
 - **Phase 7 scope: go live on Vercel + Neon** (D-37, branch `phase-7-scope`, in review). Six PRs, in order:
   1. this scope;
   2. Postgres everywhere (Neon in production, PGlite in dev and tests, async stores);
