@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import Papa from "papaparse";
 import { extractPdf, PdfInputError, type PdfFileInfo, type PdfOptions } from "@/lib/pdf";
+import { MAX_FILES_PER_SLOT, SUPPORTED_EXTENSIONS } from "./upload-paths";
 
 export type ParsedTable = {
   headers: string[];
@@ -9,10 +10,8 @@ export type ParsedTable = {
   pdf?: PdfFileInfo[];
 };
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-export const SUPPORTED_EXTENSIONS = [".csv", ".tsv", ".txt", ".xlsx", ".pdf"];
-/** Several files can go into one slot (e.g. a month of supplier invoices). */
-export const MAX_FILES_PER_SLOT = 50;
+// Several files can go into one slot (e.g. a month of supplier invoices). The limits are shared with the browser.
+export { MAX_FILES_PER_SLOT, MAX_UPLOAD_BYTES, SUPPORTED_EXTENSIONS } from "./upload-paths";
 export const SOURCE_FILE_COLUMN = "Source file";
 
 export class UnsupportedFileError extends Error {}

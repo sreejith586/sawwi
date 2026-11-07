@@ -343,3 +343,29 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Tests run on real Postgres semantics. The suite also passed against a Postgres 17 container through the `pg` driver, apart from one test that assumes its own database per file.
   - `pnpm lint` is slower, since it now type-checks.
   - Tests time out after 30 s instead of 5 s: the first query in each file starts PGlite, which takes seconds on a busy runner.
+
+### D-39: Files in a private Vercel Blob store; large uploads go from the browser straight to Blob
+- **Context:** D-37's third PR. Normalized tables were written to `.data/uploads` on local disk, which doesn't survive on Vercel. Vercel also caps a function's request body at 4.5 MB, while Sawwi accepts uploads up to 25 MB.
+- **Decision:**
+  - A small file store (`src/lib/files/storage.ts`: put, read, size, delete, delete by prefix) over a **private** Vercel Blob store when its token is set, and `.data/files/` otherwise.
+    - A connected store shows up as `BLOB_STORE_ID`, and the SDK signs in with the deployment's short-lived Vercel OIDC token, so no long-lived Blob secret exists. A read-write token (`BLOB_READ_WRITE_TOKEN`, or `SAWWI_`-prefixed) works too.
+    - On Vercel without a token it refuses to run, like the database.
+    - Keys are built on the server and checked, so they can't climb out of the store's folder.
+  - What's kept is unchanged: each slot's **normalized CSV** (`runs/<run>/<slot>.csv`), not the original upload. `run_files.stored_path` now holds that key.
+  - **Uploads with Blob on:**
+    1. The browser uploads each file to `incoming/<run>/<slot>/` through a **presigned URL** from `/api/runs/[id]/uploads`. That route uses `issueSignedToken`, which works with OIDC, unlike the older client-token flow, which needs a read-write token. It signs only for the run's own workspace, never in the demo store, and only for one `put` on one path in that folder, limited to the upload file types, 25 MB and 10 minutes.
+    2. The browser posts the resulting paths to the existing files route. It accepts only paths in that run's slot folder, re-checks the 25 MB total, reads and parses the files, and always deletes the raw copies.
+
+    Locally, without Blob, the browser still posts multipart form data.
+  - The browser checks the file type and the 25 MB total before uploading, with the server's own wording, so a refused token never shows up as a vague network error.
+  - The upload limits live in `upload-paths.ts`, shared by the browser and the server.
+  - **Fixed along the way:** uploading a file, answering a setup question and remapping a column now go through `runBlocker()`, like pulls, demo fill and reconciling already did. Before, a Viewer (or a suspended workspace, or one whose trial had ended) could upload files into a run, answer its questions and change its mappings, though Viewers are meant to read reports only.
+- **Rejected alternatives:**
+  - Public blobs: they're reachable by anyone with the URL, and these are financial files.
+  - Streaming uploads through a function: the 4.5 MB cap.
+  - Keeping the original files: nothing reads them after parsing, and keeping them would double the stored customer data.
+  - Using the upload-completed webhook: it can't reach localhost or previews reliably. The browser's second request is simpler and goes through the same session checks.
+- **Consequences:**
+  - A raw upload abandoned between the two requests (the tab closed) stays in `incoming/` until the jobs runner (PR 6) cleans the folder.
+  - The direct-upload path needs a real Blob store to run, so it is tested with a mocked SDK, and checked on a preview deploy.
+  - **Found on the first preview deploy:** the connected store came with `BLOB_STORE_ID` (OIDC) and no read-write token, so Blob stayed off and the demo reset failed. Blob is now on with either credential, and deleting an empty list needs no store.

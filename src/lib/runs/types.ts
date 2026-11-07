@@ -20,6 +20,7 @@ export type Run = { id: string; orgKey: string; templateId: string; status: RunS
 export type RunFile = {
   slotKey: string;
   fileName: string;
+  /** Key of the slot's normalized CSV in the file store (src/lib/files/storage.ts), e.g. runs/<id>/<slot>.csv. */
   storedPath: string;
   profile: FileProfile;
   mapping: SlotMapping;

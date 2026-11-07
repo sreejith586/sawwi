@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import Papa from "papaparse";
 import { parseNumber, type DateFormat } from "@/lib/files/profile";
 import type { RunFile } from "@/lib/runs/types";
@@ -46,8 +45,9 @@ export function parseDate(raw: string, format: DateFormat | "DMY" | "MDY" | unde
   return undefined;
 }
 
-export function loadDataset(file: RunFile, slot: SourceSlot): Dataset {
-  const parsed = Papa.parse<Record<string, string>>(readFileSync(file.storedPath, "utf8"), { header: true, skipEmptyLines: "greedy" });
+/** `csv` is the slot's stored, normalized table (see src/lib/files/storage.ts). */
+export function loadDataset(file: RunFile, slot: SourceSlot, csv: string): Dataset {
+  const parsed = Papa.parse<Record<string, string>>(csv, { header: true, skipEmptyLines: "greedy" });
   const mapped = slot.fields
     .map((f) => ({ field: f, column: file.mapping.fields[f.key]?.column ?? null }))
     .filter((m): m is { field: (typeof slot.fields)[number]; column: string } => m.column !== null);

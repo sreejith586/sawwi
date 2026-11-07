@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import Papa from "papaparse";
 import { parseNumber } from "@/lib/files/profile";
+import { readText } from "@/lib/files/storage";
 import { tableWorkbook, xlsxResponse } from "@/lib/excel/sheet";
 import { applyQuery, queryFromParams } from "@/lib/recon/table";
 import { getOwnedRun } from "@/lib/runs/access";
@@ -21,7 +21,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/fi
   const file = (await getRunFiles(id)).find((f) => f.slotKey === slot);
   if (!file) return Response.json({ error: "No file uploaded for this slot." }, { status: 404 });
 
-  const parsed = Papa.parse<string[]>(readFileSync(file.storedPath, "utf8"), { skipEmptyLines: "greedy" });
+  const parsed = Papa.parse<string[]>(await readText(file.storedPath), { skipEmptyLines: "greedy" });
   const [headers = [], ...body] = parsed.data;
   const kinds = headers.map((h) => file.profile.columns.find((c) => c.name === h)?.kind ?? "text");
   const toRow = (r: string[], i: number): PreviewRow => {
