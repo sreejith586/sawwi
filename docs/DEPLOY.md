@@ -29,6 +29,8 @@ a person, never by an agent or committed to the repo.
 | `APP_URL` | `https://sawwiapp.ai` | unset | Pins links and Stripe return URLs. |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_WEBHOOK_SECRET` | Live keys, Sensitive | Test-mode keys | Card checkout. Only shown while the paywall is on. |
 | `SAWWI_DEMO` | unset (demo on) | unset | `off` hides the public demo store. |
+| `RESEND_API_KEY` | Sensitive | Sensitive (same key is fine) | Sends email through Resend (D-45). Without it, emails are only logged. |
+| `EMAIL_FROM` | optional, default `Sawwi <sawwi@sawwiapp.ai>` | same | The sender. Must be on the domain verified in Resend. |
 | `CRON_SECRET` | Secret | Secret (a different one) | Protects `/api/cron/tick`; Vercel Cron sends it as a bearer token. `openssl rand -base64 32`. Without it, background jobs are off (D-42). |
 
 After changing a variable, **redeploy**: running deployments keep the values they were built with.
@@ -46,6 +48,38 @@ destination:
 - **Endpoint URL:** `https://sawwiapp.ai/api/stripe/webhook`. Use the primary domain: a redirecting
   domain answers 308, which Stripe treats as a failed delivery.
 - Copy the signing secret (`whsec_…`) into `STRIPE_WEBHOOK_SECRET` and redeploy.
+
+### Email (Resend)
+
+Emails are reminders when a schedule comes due, "ready to review" notices and password resets
+(D-45, D-46). Without Resend, "Forgot your password?" answers as usual but no email arrives. The user does these steps; an agent never creates the account or handles the key.
+
+1. **Account:** sign up at resend.com. Check the plan's daily and monthly sending limits against your team's size.
+2. **Domain:** Resend → Domains → Add domain → `sawwiapp.ai`, region **eu-west-1 (Ireland)**, the
+   closest to Frankfurt. Resend then shows the DNS records to add where `sawwiapp.ai`'s DNS is
+   hosted (Vercel → Domains if the nameservers are Vercel's):
+   - **DKIM:** a `TXT` record at `resend._domainkey` with the key Resend shows;
+   - **SPF:** an `MX` record and a `TXT` record (`v=spf1 include:amazonses.com ~all`) at the `send`
+     subdomain, so they don't clash with any mail already on the root domain;
+   - **DMARC** (recommended): a `TXT` record at `_dmarc` such as `v=DMARC1; p=none;`. Tighten to
+     `p=quarantine` once mail is flowing.
+   Copy the values from Resend's page, not from here: they're specific to the account. Then press
+   **Verify** and wait for "Verified" (minutes to a few hours).
+3. **Key:** Resend → API Keys → Create, permission **Sending access**, domain `sawwiapp.ai`.
+4. **Vercel:** set `RESEND_API_KEY` (Sensitive) and `EMAIL_FROM=Sawwi <sawwi@sawwiapp.ai>`
+   for Production (and Preview if you want previews to send), then **redeploy**.
+5. **Test send** from your own machine, with the key in your shell only (never in a file):
+   `RESEND_API_KEY=re_... pnpm dlx tsx scripts/send-test-email.ts you@example.com` sends one
+   reminder and one "ready to review" with made-up data. A `403` means the domain isn't verified yet.
+6. **Check:** Settings → Email no longer says email is off. Run a reconciliation in a workspace with a
+   teammate: they get "Ready to review". Admin → Background jobs shows the `send_email` job as done;
+   Resend → Emails shows the delivery.
+
+**Receiving** (optional, turned on by the user on 2026-11-07): Resend's inbound mail adds an `MX`
+record and keeps replies to the sender address in Resend. Sawwi doesn't read inbound mail; it's
+for a person to look at.
+
+Reminders go out from the hourly `schedule_reminders` job, so they need `CRON_SECRET` too (D-42).
 
 ## Shipping a change
 
