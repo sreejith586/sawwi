@@ -38,7 +38,8 @@ export function Chat({
   const followUps = Boolean(view.report && view.insights && !current);
 
   return (
-    <aside className="flex max-h-[calc(100vh-8rem)] min-h-96 flex-col overflow-hidden rounded-xl border border-border bg-surface lg:sticky lg:top-6">
+    // Fills the right-hand chat panel (components/shell/chat-panel.tsx), which the run page portals it into.
+    <section aria-label="Reconciliation chat" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
         <span className="grid size-7 place-items-center rounded-full bg-accent text-xs font-bold text-accent-foreground">S</span>
         <div className="min-w-0 flex-1 leading-tight">
@@ -88,7 +89,7 @@ export function Chat({
           {view.usage.outputTokens.toLocaleString()}
         </div>
       )}
-    </aside>
+    </section>
   );
 }
 

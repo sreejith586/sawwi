@@ -13,18 +13,24 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors and demo data fill (D-31, #11) merged; public demo store (D-32) in review |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors and demo data fill (D-31, #11) merged; public demo store (D-32, #12) merged |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Public demo store with marketplace demo data, daily reset (D-32) | `phase-6-marketplace-demo-data` | (this PR) | Phase 6 session |
+| Chat in a resizable right sidebar (D-33) | `ui-chat-sidebar-resizable` | (this PR) | Chat sidebar session (fork) |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Public demo store** (D-32, branch `phase-6-marketplace-demo-data`, in review). "Try the live demo" on the landing and login pages opens one shared workspace with invented data, no account needed. Demo data now exists only there: the developer switch `SAWWI_CONNECTOR_MOCK` is gone. **Marketplace demo data** was added: one invented seller, so all 8 marketplace templates fill and find their planted exceptions, 16 templates in total. In the demo, uploads are off, connections are read-only and no AI is called. It **resets every day at 00:00 UTC** on the first request after midnight, wiping only the demo's data. 17 new tests.
+- **Chat in a resizable right sidebar** (D-33, branch `ui-chat-sidebar-resizable`, in review).
+  - "Ask Sawwi" is now a right-hand panel that mirrors the left nav: docked from 64rem, a drawer on narrow screens.
+  - Drag its left border to resize it (300 to 720 px). Double-click resets the width, and arrow keys work too. The width and whether it's open are remembered.
+  - On a reconciliation, that run's chat lives in the panel and the page uses the full width.
+  - A waiting question opens the panel, or puts a dot on the chat button.
+  - 3 new tests.
+- **Public demo store** (D-32, #12, merged). "Try the live demo" on the landing and login pages opens one shared workspace with invented data, no account needed. Demo data now exists only there: the developer switch `SAWWI_CONNECTOR_MOCK` is gone. **Marketplace demo data** was added: one invented seller, so all 8 marketplace templates fill and find their planted exceptions, 16 templates in total. In the demo, uploads are off, connections are read-only and no AI is called. It **resets every day at 00:00 UTC** on the first request after midnight, wiping only the demo's data. 17 new tests.
 - **Demo data fill** (D-31, #11, merged). In demo mode (`SAWWI_CONNECTOR_MOCK`), a run page offers **Fill with demo data**. It connects the mocked Business Central and Magento sources plus a new credential-free "Demo data" source (made-up gateway, Tabby, courier, warehouse and bank files), then imports every empty slot for October 2026. Eight templates fill completely and find their planted exceptions: orders vs gateway, BNPL, COD, refunds vs returns, courier freight, cash application, order → delivery → invoice and the three-way match. None of it is available in production. 11 new tests.
 - **Magento 2 connector** (D-30, #10, merged). Magento 2 / Adobe Commerce REST with an integration token. Three reports, all mapping by name:
   - orders, for orders vs gateway, COD and BNPL;
