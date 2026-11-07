@@ -3,6 +3,7 @@ import { ChatPanel } from "@/components/shell/chat-panel";
 import { ActiveNavItems, NavItems, Sidebar } from "@/components/shell/sidebar";
 import { SettingsMenu, SettingsMenuSkeleton } from "@/components/shell/settings-menu";
 import { PlanBanner } from "@/components/shell/plan-banner";
+import { ThemeScope } from "@/components/shell/theme-scope";
 import { TopBar } from "@/components/shell/top-bar";
 import { labelOf, ROLES } from "@/lib/profile/options";
 import { getCurrentSession } from "@/lib/saas/session";
@@ -37,6 +38,8 @@ async function AccountMenu() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh">
+      {/* First, so the user's theme is set before the sidebar paints. */}
+      <ThemeScope />
       <Sidebar
         nav={
           <Suspense fallback={<NavItems />}>

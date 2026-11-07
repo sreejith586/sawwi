@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Logo } from "@/components/marketing/header";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 // Checkout is a focused page: no sidebar, just the logo, a way back, and the theme switch.
 export default function CheckoutLayout({ children }: { children: React.ReactNode }) {
@@ -12,7 +11,6 @@ export default function CheckoutLayout({ children }: { children: React.ReactNode
           <Link href="/settings/billing" className="ml-auto text-sm text-muted hover:text-foreground">
             ← Back to billing
           </Link>
-          <ThemeToggle />
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">{children}</main>

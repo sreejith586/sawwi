@@ -535,3 +535,15 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Rejected alternatives:**
   - Requiring a workspace-scoped key with no code change: it works, but an unscoped key is what was set up, and the header keeps both kinds working.
 - **Consequences:** production was fixed first by the user swapping in a workspace-scoped key (2026-11-07); this change keeps an unscoped key working too. `llmAvailable()` still only checks that a key exists, so a misconfigured key shows up as "LLM … failed" errors in the Vercel logs, not in the UI.
+
+### D-51: Light by default; the theme switch and the user's theme live in the app only
+- **Context:** the user asked for light as the default, and for the theme switch to be removed from the homepage and every page without a sidebar, so the theme is switched inside the app only. Until now, with nothing saved the site followed the OS ("System"), and a Light/System/Dark switch sat in the marketing header, log-in, checkout and onboarding.
+- **Decision:**
+  - **Default:** nothing saved means light. "System" is now saved explicitly (`sawwi-theme` = `system`), and choosing Light clears the saved value. Visitors who never picked a theme, and were following a dark OS, now see light.
+  - **Where it applies:** only the signed-in app (the sidebar layout). Pages without the sidebar are always light: the landing page, public reconciliation pages, log in and sign up, password reset, checkout and onboarding. Otherwise someone who picked dark in the app would land on a dark homepage with no switch to change it.
+  - **Where it's switched:** Settings and the account menu, both inside the app. The switch is gone from the marketing header and the auth, checkout and onboarding layouts.
+  - **How:** the theme script moved from the root layout into `components/shell/theme-scope.tsx`, rendered first in `(app)/layout.tsx`. On a full load it sets `data-theme-scope="app"`, `data-theme-pref` and `data-theme` before the app paints. On a client navigation into the app a layout effect does the same, and leaving the app removes `data-theme`, so the CSS falls back to light. The "System" and other-tab listeners do nothing outside the app scope.
+- **Rejected alternatives:**
+  - Applying the saved theme on every page while showing the switch only in the app: a dark pick would follow the user to public pages that have no way to change it back.
+  - Keeping "System" as the default: the user asked for light.
+- **Consequences:** a dark theme no longer shows on public or auth pages, even for signed-in users who picked it. New pages inside `(app)` get the theme automatically; pages outside it are light.

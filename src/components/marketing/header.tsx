@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonClass } from "@/components/ui";
 import { getCurrentSession } from "@/lib/saas/session";
 import { LogoLockup } from "@/components/brand/logo";
@@ -54,9 +53,6 @@ export function MarketingHeader() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden sm:block">
-            <ThemeToggle />
-          </div>
           <Suspense fallback={<SignedOut />}>
             <AuthActions />
           </Suspense>

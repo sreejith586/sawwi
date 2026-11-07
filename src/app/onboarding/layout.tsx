@@ -1,7 +1,6 @@
-import { ThemeToggle } from "@/components/theme-toggle";
 import { LogoLockup } from "@/components/brand/logo";
 
-// First-run setup stays focused: no sidebar, just the logo and the theme switch.
+// First-run setup stays focused: no sidebar, just the logo. Always light (D-51).
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -9,9 +8,6 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
         <span className="flex items-center">
           <LogoLockup />
         </span>
-        <div className="ml-auto">
-          <ThemeToggle />
-        </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
     </div>
