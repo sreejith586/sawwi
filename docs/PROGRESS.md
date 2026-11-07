@@ -29,9 +29,16 @@ _Updated in every commit. Newest first within each section._
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 | Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
 | 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
-| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | this PR | Magento↔BC session |
+| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | PR 3 | Magento↔BC session |
+| 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Store prices vs. ERP prices** (D-55, `feature/magento-bc-prices`, PR 4 of the stack, based on PR 3).
+  - New template `web-erp-prices`: each Magento SKU's price against Business Central's unit price, plus special prices past their end date and special prices above the regular price.
+  - Magento connector: new `product_prices` report (simple, virtual and downloadable products, special price and dates). Business Central: the `items` report from PR 3. Price list lines aren't in Business Central's standard API, so they aren't read (D-55).
+  - Engine: `date_outside` may leave out `from`.
+  - Demo: the template fills in one click and finds its 4 planted exceptions. 1 new test.
 
 - **Store stock vs. ERP inventory** (D-54, `feature/magento-bc-stock`, PR 3 of the stack, based on PR 2).
   - New template `web-erp-stock`: Magento's sellable quantity per SKU (summed over in-stock sources) against Business Central's item inventory. Flags overselling, stock hidden from the store, and SKUs Business Central doesn't know.
@@ -199,6 +206,8 @@ _Updated in every commit. Newest first within each section._
 5. Scheduled connector pulls, as a new job kind on the jobs table (D-26, D-27, D-42). Not chosen for Phase 8.
 
 ## Open questions
+
+- **Business Central price lists:** the price template compares Magento with BC's item unit price. Checking promotions against BC price list lines needs a small custom API page (AL extension) in the tenant, since API v2.0 has none (D-55). Does the design partner want that?
 
 - **Demo store:** shared by all visitors (they can see each other's runs until the daily reset), with uploads and AI off. Do you want a private sandbox per visitor, or a small AI quota in the demo, instead?
 - **Data residency:** the database and functions are in Frankfurt (D-41). Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in.

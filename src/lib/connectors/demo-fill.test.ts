@@ -56,6 +56,7 @@ const EXPECTED: Record<string, string[]> = {
     "vat_mismatch: 000000103", "vat_mismatch: 000000108",
   ],
   "web-erp-stock": ["hidden_stock: SND-42", "not_in_erp: OUD-100", "overselling: OUD-50"],
+  "web-erp-prices": ["not_in_erp: OUD-100", "special_expired: ABY-BLK-M", "special_not_lower: MAT-01", "wrong_price: SND-42"],
   "b2b-cash-application": ["overdue: SI-3102", "overdue: SI-3104", "overdue: SI-3105", "overdue: SI-3106", "short_paid: SI-3103", "unapplied_receipt: TT REF 88213 MARINA FM"],
   "b2b-order-delivery-invoice": ["invoiced_not_delivered: LED-40", "open_orders: SO-1043 / CBL-25", "qty_mismatch: SSH-2103 / AC-18K"],
   // Marketplace templates: one invented seller (MP-10xx orders, two October settlements).

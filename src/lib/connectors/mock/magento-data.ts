@@ -138,3 +138,27 @@ export const DEMO_SOURCE_ITEMS: Doc[] = [
   { sku: "SND-42", source_code: "default", quantity: 15, status: 1 },
   { sku: "SND-42", source_code: "shj", quantity: 5, status: 0 },
 ];
+
+// Catalogue prices (VAT included, as in Business Central's items). Planted against the store
+// company's unit prices (web-erp-prices, D-55):
+//  - ABY-BLK-M: a special price that ended on 15 October and is still set.
+//  - SND-42: 189.00 in the store, 199.00 in Business Central.
+//  - MAT-01: a special price above the regular price.
+//  - OUD-100: priced in the store, not an item in Business Central.
+//  - ABY-BLK: a configurable parent, which a pull leaves out (its children carry the price).
+const special = (price: number, from?: string, to?: string) => [
+  { attribute_code: "special_price", value: String(price) },
+  ...(from ? [{ attribute_code: "special_from_date", value: `${from} 00:00:00` }] : []),
+  ...(to ? [{ attribute_code: "special_to_date", value: `${to} 00:00:00` }] : []),
+];
+const product = (id: number, sku: string, name: string, price: number | undefined, custom: { attribute_code: string; value: string }[] = [], type_id = "simple"): Doc => ({
+  id, sku, name, type_id, status: 1, visibility: 4, ...(price !== undefined && { price }), custom_attributes: [{ attribute_code: "url_key", value: sku.toLowerCase() }, ...custom],
+});
+export const DEMO_PRODUCTS: Doc[] = [
+  product(1, "ABY-BLK", "Classic black abaya", undefined, [], "configurable"),
+  product(2, "ABY-BLK-M", PRODUCTS["ABY-BLK-M"].name, 420, special(380, "2026-09-01", "2026-10-15")),
+  product(3, "OUD-50", PRODUCTS["OUD-50"].name, 285, special(260, "2026-10-20", "2026-11-30")),
+  product(4, "SND-42", PRODUCTS["SND-42"].name, 189),
+  product(5, "MAT-01", PRODUCTS["MAT-01"].name, 75, special(80)),
+  product(6, "OUD-100", "Oud perfume 100 ml", 450),
+];

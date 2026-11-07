@@ -523,7 +523,7 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
         const recs = c.merged(rule.link, g);
         const pick = (f: string) => [...recs.values()].map((r) => r.date[f]).find(Boolean);
         const d = pick(rule.date);
-        const from = pick(rule.from);
+        const from = rule.from ? pick(rule.from) : undefined;
         const to = pick(rule.to);
         if (!d || !((from && d < from) || (to && d > to))) continue;
         c.push({ link: rule.link, key: c.groupKey(link, g), left: c.ref(link.left, g.left), right: c.ref(link.right, g.right), value: 0, note: `Dated ${d}, price valid ${from ?? "…"} to ${to ?? "…"}` });

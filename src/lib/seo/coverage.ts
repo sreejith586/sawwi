@@ -28,6 +28,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-invoices": { store_invoices: "invoices" },
     "web-erp-credit-memos": { store_refunds: "credit_memos" },
     "web-erp-stock": { store_stock: "source_items" },
+    "web-erp-prices": { store_prices: "product_prices" },
   },
   "business-central": {
     "mkt-settlement-vs-sales": { sales: "sales_invoices" },
@@ -40,6 +41,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-invoices": { erp_invoices: "web_sales_invoices" },
     "web-erp-credit-memos": { erp_credit_notes: "web_sales_credit_memos" },
     "web-erp-stock": { erp_stock: "items" },
+    "web-erp-prices": { erp_prices: "items" },
   },
 };
 

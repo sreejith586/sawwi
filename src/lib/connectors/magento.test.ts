@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PRICE_COLUMNS, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -143,6 +143,23 @@ describe("Magento reports", () => {
     expect(q).toContain("searchCriteria[sortOrders][1][field]=source_code");
     expect(q).not.toContain("created_at");
     await expect(magento.pull(creds, "source_items", october, deps({ noMsi: true }))).rejects.toThrow(/Multi-Source Inventory/);
+  });
+
+  it("reads simple products' prices and special price dates, as of the period's end (D-55)", async () => {
+    const log: { method: string; url: string }[] = [];
+    const t = await magento.pull(creds, "product_prices", october, deps({ log }));
+    expect(t.headers).toEqual([...MAGENTO_PRICE_COLUMNS]);
+    expect(t.rows.map((r) => r.join("|"))).toEqual([
+      "ABY-BLK-M|Classic black abaya, M|simple|Enabled|420.00|380.00|2026-09-01|2026-10-15|2026-10-31",
+      "OUD-50|Oud perfume 50 ml|simple|Enabled|285.00|260.00|2026-10-20|2026-11-30|2026-10-31",
+      "SND-42|Leather sandals, 42|simple|Enabled|189.00||||2026-10-31",
+      "MAT-01|Travel prayer mat|simple|Enabled|75.00|80.00|||2026-10-31",
+      "OUD-100|Oud perfume 100 ml|simple|Enabled|450.00||||2026-10-31",
+    ]); // the configurable parent ABY-BLK is left out
+    expect(decodeURIComponent(log[0].url)).toContain("[field]=type_id&searchCriteria[filter_groups][0][filters][0][value]=simple,virtual,downloadable&searchCriteria[filter_groups][0][filters][0][condition_type]=in");
+    // A period that hasn't ended yet is checked as of today.
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await magento.pull(creds, "product_prices", { from: "2099-01-01", to: "2099-01-31" }, deps())).rows[0][8]).toBe(today);
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {

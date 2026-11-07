@@ -875,6 +875,54 @@ export const TEMPLATES: Template[] = [
     ],
     outputs: ["Oversold SKUs to fix first", "Stock to release to the store", "SKUs missing on either side"],
   },
+  {
+    id: "web-erp-prices",
+    title: "Store prices vs. ERP prices",
+    summary: "Check each SKU's webstore price against your ERP's price, and catch special prices left running past their end date.",
+    group: "webstore",
+    frequency: "weekly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["owner", "finance"],
+    sources: [
+      {
+        key: "store_prices",
+        label: "Webstore prices",
+        description: "Your store's catalogue: price per SKU, with any special (sale) price and its dates.",
+        examples: ["Magento 2 product prices with special prices", "Shopify products export", "WooCommerce products export"],
+        fields: [
+          f("sku", "SKU", "id", true),
+          f("price", "Price", "money", true),
+          f("special_price", "Special price", "money"),
+          f("special_from", "Special price from", "date"),
+          f("special_to", "Special price to", "date"),
+          f("checked_on", "Checked on", "date", true),
+        ],
+      },
+      {
+        key: "erp_prices",
+        label: "ERP item prices",
+        description: "The selling price your ERP holds per item, on the same VAT basis as the store.",
+        examples: ["Business Central items (unit price)", "Odoo product sales price", "Zoho Inventory items"],
+        fields: [f("sku", "SKU", "id", true), f("erp_price", "Unit price", "money", true)],
+      },
+    ],
+    links: [
+      {
+        left: "store_prices",
+        right: "erp_prices",
+        keys: [{ left: "sku", right: "sku", normalize: ["trim", "upper"] }],
+        cardinality: "many_to_one",
+        amount: { left: "price", right: "erp_price", tolerance: 0.01 },
+      },
+    ],
+    checks: [
+      { id: "wrong_price", label: "Price differs from the ERP", description: "The store's regular price isn't the ERP's price, so orders are invoiced at a different price than the shopper paid.", rule: { kind: "compare", link: 0, direction: "either" } },
+      { id: "special_expired", label: "Special price past its end date", description: "A special price whose end date has passed is still set. Magento stops applying it, but it's stale: remove it or extend it on purpose.", rule: { kind: "date_outside", link: 0, date: "checked_on", to: "special_to" } },
+      { id: "special_not_lower", label: "Special price above the regular price", description: "The sale price is higher than the regular price, usually a typo.", rule: { kind: "compare", link: 0, direction: "left_higher", left: "special_price", right: "price", tolerance: 0, leftWhere: { field: "special_price", pattern: "[1-9]" } } },
+      { id: "not_in_erp", label: "Priced online, unknown to the ERP", description: "A SKU the store sells that has no item in the ERP.", rule: { kind: "unmatched_left", link: 0 } },
+    ],
+    outputs: ["Price differences to correct", "Stale special prices", "SKUs missing from the ERP"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",

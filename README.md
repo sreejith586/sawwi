@@ -67,7 +67,7 @@ pnpm build
     (in `.env.local`: `SAWWI_CONNECTOR_KEYS=k1:` followed by the output of `openssl rand -base64 32`), rotated from
     Admin → Connection secrets (D-40); without it, connections are switched off.
 14. **Live demo store**: "Try the live demo" on the login and landing pages opens a shared workspace with
-    invented data for all 26 templates (two Business Central companies, a Magento store, a marketplace seller,
+    invented data for all 27 templates (two Business Central companies, a Magento store, a marketplace seller,
     and their gateway, courier, warehouse, bank, customs and statement files). Start any reconciliation, click **Fill with demo data**, then
     **Run reconciliation**. No account needed; uploads and AI calls are off there, and it resets every
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
