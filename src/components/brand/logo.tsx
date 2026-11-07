@@ -36,7 +36,8 @@ export function LogoLockup({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <span className={`flex min-w-0 items-center ${sm ? "gap-1.5" : "gap-2"}`}>
       <LogoMark className={sm ? "size-6" : "size-7"} />
-      <Wordmark className={sm ? "text-sm" : "text-[16px]"} />
+      {/* The word is a step larger than the tile's visual weight suggests, so it reads at a glance. */}
+      <Wordmark className={sm ? "text-base leading-none" : "text-[18px] leading-none"} />
     </span>
   );
 }
