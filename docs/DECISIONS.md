@@ -452,15 +452,16 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 
 ### D-45: The brand emerald as a quiet accent across the app
 - **Context:** after D-44 the user asked for the brand colours to be used "smart and subtle" across the app pages. D-9 kept the chrome neutral (near-black and white) and kept colour for meaning (danger, warn, info, success).
-- **Decision:** emerald marks focus, selection and "where you are". It never marks a value or a status, and it never fills large areas.
-  - Tokens: `--brand`, `--brand-soft` (a pale tint), `--on-brand` (text on the solid), with Tailwind `brand`, `brand-soft` and `on-brand`.
+- **Decision:** emerald marks the main call to action, focus, selection and "where you are". It never marks a value or a status.
+  - Tokens: `--brand`, `--brand-strong` (hover), `--brand-soft` (a pale tint), `--on-brand` (text on the solid), with matching Tailwind colours.
+  - **Call-to-action buttons are emerald**, at the user's request: `buttonClass("primary")`, the sidebar's "New reconciliation" button and the chat's Send button. Secondary buttons stay neutral.
   - Focus rings everywhere use `ring-brand/40` (they were `ring-foreground/30`). Text selection gets a light emerald tint.
   - Selected chips (onboarding, settings) get an emerald outline, a soft tint and an emerald check (they were black).
   - The active sidebar item gets the soft tint with an emerald icon.
   - Progress markers use the solid: onboarding steps, "how it works" step numbers, and the tick on a filled file slot. Numbered next steps in the run analysis use the soft tint.
   - Landing page: section eyebrows and feature icon tiles in emerald; template cards get an emerald border on hover.
-  - Primary buttons, the paywall banner, chat bubbles and the dark CTA band stay neutral. Success green, amber, red and blue keep their meanings (D-9).
+  - The landing page's bottom CTA band stays black (the user tried emerald and reverted it). The paywall banner and chat bubbles stay neutral too. Success green, amber, red and blue keep their meanings (D-9).
 - **Rejected alternatives:**
-  - Emerald primary buttons: too loud next to the coloured exception values, and it would compete with success green.
+  - Neutral (black) primary buttons: the user wanted the call to action in the brand colour. The risk is that an emerald button reads as "success". The brand emerald is bluer and darker than the success green, and success colour only appears on values and badges, never on buttons.
   - Keeping the chrome fully neutral: the user asked for the brand to show in the app.
-- **Consequences:** D-9 still holds for values. New UI uses `brand` only for focus, selection, active or progress states, and the semantic colours for meaning.
+- **Consequences:** D-9 still holds for values. New UI uses `brand` for the primary action and for focus, selection, active or progress states; it uses the semantic colours for meaning. Emerald doesn't fill large areas.

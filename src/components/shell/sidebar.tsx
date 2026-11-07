@@ -119,7 +119,7 @@ export function Sidebar({ nav, footer }: { nav: ReactNode; footer: ReactNode }) 
         <div className="px-3 collapsed:px-2.5">
           <Link
             href="/templates"
-            className="group/item relative flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 collapsed:px-0"
+            className="group/item relative flex h-9 items-center justify-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-on-brand shadow-sm transition-colors hover:bg-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 collapsed:px-0"
           >
             <PlusIcon className="size-4" />
             <span className="collapsed:sr-only">New reconciliation</span>

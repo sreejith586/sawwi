@@ -30,7 +30,7 @@ _Updated in every commit. Newest first within each section._
   - The mark is two sheets, with the front one ticked, on a theme-aware tile, next to a `sawwiapp` wordmark. It replaces the black "S" square in the marketing header, footer, auth, checkout, onboarding, sidebar and phone top bar.
   - New `favicon.ico`, `icon.svg` and `apple-icon.png` replace Next's default favicon.
   - The logo is kept clearly apart from sawwi.ai's blue star and joined "ww" wordmark.
-- **Brand emerald as a quiet accent** (D-45, same branch): focus rings, text selection, selected chips, the active sidebar item, progress markers, landing-page eyebrows and feature icons. Buttons and status colours are unchanged.
+- **Brand emerald as a quiet accent** (D-45, same branch): focus rings, text selection, selected chips, the active sidebar item, progress markers, landing-page eyebrows and feature icons. Primary (call-to-action) buttons are emerald; the landing page's bottom CTA band stays black. Secondary buttons and status colours are unchanged.
 
 - **Primary domain `sawwiapp.ai`** (D-43, #23).
   - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
