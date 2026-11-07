@@ -1,5 +1,5 @@
 import { isDemoOrg } from "@/lib/demo/demo";
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ColumnProfile } from "@/lib/files/profile";
@@ -81,7 +81,7 @@ export async function suggestMappings(params: {
   fields: CanonicalField[];
   columns: ColumnProfile[];
 }): Promise<{ suggestions: LlmSuggestion[]; usage: LlmUsage }> {
-  const client = new Anthropic();
+  const client = anthropicClient();
   const fieldList = params.fields.map((f) => `- ${f.key} (${f.type}${f.required ? ", required" : ""}): ${f.label}`).join("\n");
 
   const response = await client.messages.parse({
