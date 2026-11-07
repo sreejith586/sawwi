@@ -43,7 +43,7 @@ describe("background jobs (D-42)", () => {
 
   it("queues the periodic jobs once per period", () => {
     const keys = (iso: string) => periodicJobs(at(iso)).map((j) => j.key);
-    expect(keys("2026-11-07T10:05:00Z")).toEqual(["demo_reset:2026-11-07", "cleanup_incoming:2026-11-07T10", "prune_jobs:2026-11-07"]);
+    expect(keys("2026-11-07T10:05:00Z")).toEqual(["demo_reset:2026-11-07", "cleanup_incoming:2026-11-07T10", "prune_jobs:2026-11-07", "schedule_reminders:2026-11-07T10"]);
     expect(keys("2026-11-07T10:50:00Z")).toEqual(keys("2026-11-07T10:05:00Z"));
     expect(keys("2026-11-07T11:00:00Z")[1]).toBe("cleanup_incoming:2026-11-07T11");
     for (const j of periodicJobs(at("2026-11-07T10:00:00Z"))) expect(HANDLERS[j.kind]).toBeDefined();
@@ -61,8 +61,8 @@ describe("background jobs (D-42)", () => {
     await enqueueJob("mystery", "mystery:1");
     const now = new Date();
     const first = await tick(now);
-    expect(first.queued).toBe(3);
-    expect(first.ran.filter((r) => r.ok).map((r) => r.kind).sort()).toEqual(["cleanup_incoming", "demo_reset", "prune_jobs"]);
+    expect(first.queued).toBe(4);
+    expect(first.ran.filter((r) => r.ok).map((r) => r.kind).sort()).toEqual(["cleanup_incoming", "demo_reset", "prune_jobs", "schedule_reminders"]);
     expect(first.ran.find((r) => r.kind === "mystery")).toMatchObject({ ok: false, error: expect.stringMatching(/No handler/) });
 
     const jobs = await listRecentJobs();

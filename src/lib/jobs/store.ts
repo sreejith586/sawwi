@@ -66,6 +66,31 @@ export async function claimJobs(limit: number, now: Date, lockMs: number): Promi
   return rows.map(toJob);
 }
 
+/** Takes these specific jobs if they're due and nobody holds them: sending one right away after queueing it. */
+export async function claimJobsByKey(keys: string[], now: Date, lockMs: number): Promise<Job[]> {
+  if (keys.length === 0) return [];
+  const at = now.toISOString();
+  const rows = await getDb().all(
+    `UPDATE jobs SET status = 'running', attempts = attempts + 1, locked_until = ?
+     WHERE id IN (
+       SELECT id FROM jobs
+       WHERE key IN (${keys.map(() => "?").join(", ")}) AND ((status = 'queued' AND run_after <= ?) OR (status = 'running' AND locked_until < ?))
+       ORDER BY id FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+    new Date(now.getTime() + lockMs).toISOString(),
+    ...keys,
+    at,
+    at,
+  );
+  return rows.map(toJob);
+}
+
+/** Drops a job's payload once it's no longer needed, e.g. an email that held a single-use link. */
+export async function clearJobPayload(id: number) {
+  await getDb().run("UPDATE jobs SET payload_json = '{}' WHERE id = ?", id);
+}
+
 export async function finishJob(id: number, result: unknown) {
   await getDb().run("UPDATE jobs SET status = 'done', locked_until = NULL, last_error = NULL, result_json = ?, finished_at = ? WHERE id = ?", JSON.stringify(result ?? null), new Date().toISOString(), id);
 }

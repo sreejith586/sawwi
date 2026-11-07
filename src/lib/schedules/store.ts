@@ -67,3 +67,8 @@ export async function listScheduledRuns(orgKey: string): Promise<ScheduledRun[]>
        FROM runs r WHERE r.org_key = ? AND r.schedule_id IS NOT NULL ORDER BY r.created_at`, orgKey)) as Row[];
   return rows.map((r) => ({ id: String(r.id), scheduleId: String(r.schedule_id), period: String(r.schedule_period), done: Number(r.done) === 1, createdAt: String(r.created_at) }));
 }
+
+/** Workspaces with at least one live schedule: what the reminder sweep looks at (D-45). */
+export async function orgsWithActiveSchedules(): Promise<string[]> {
+  return ((await getDb().all("SELECT DISTINCT org_key FROM schedules WHERE paused = 0 ORDER BY org_key")) as Row[]).map((r) => String(r.org_key));
+}

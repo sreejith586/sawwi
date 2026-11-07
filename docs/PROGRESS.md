@@ -14,18 +14,28 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
+| 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In progress: email foundation, reminders and notices (D-45, this PR); password reset (D-46) and SEO pages (D-47) follow as stacked PRs |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | #23 | Stripe setup session |
+| Phase 8: email foundation, reminders, notices (D-44, D-45) | `feature/phase-8-email-reminders` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Primary domain `sawwiapp.ai`** (D-43, #23).
+- **Email through Resend: reminders and "ready to review"** (D-44, D-45, Phase 8 PR 1).
+  - Phase 8 scope recorded (D-44): email through Resend, then password reset, then SEO pages, as three stacked PRs.
+  - `src/lib/email/`: Resend's REST API when `RESEND_API_KEY` is set, a log line otherwise. Each email is a `send_email` job whose key is the message, also sent as Resend's idempotency key, so retries never send twice.
+  - **Reminders:** an hourly job emails owners, admins and editors once when a schedule comes due and nobody has started it.
+  - **"Ready to review":** after a reconciliation, everyone else in the workspace gets the exception count and value and a link, sent right after the response.
+  - **Settings → Email:** each person switches reminders and notices on or off.
+  - **Designed emails:** a branded HTML layout (logo, card, figure tiles, a button), checked at desktop and phone width, with a plain-text copy alongside. `scripts/send-test-email.ts` sends a sample of each.
+  - Migration 3 (`email_prefs`). 8 new tests with a fake Resend; nothing calls the live API.
+  - **The user's part** (docs/DEPLOY.md → Email): `RESEND_API_KEY` is set in Vercel and Resend receiving is on (the user, 2026-11-07). Left: confirm `sawwiapp.ai` shows "Verified" in Resend (DNS records), optionally set `EMAIL_FROM`, and redeploy after merging.
+- **Primary domain `sawwiapp.ai`** (D-43, #23, merged).
   - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
   - The runbook now covers the Stripe webhook destination (Your account, Snapshot, eight events).
   - **The user's part:** in Vercel, set `sawwiapp.com`, the `www` hosts and `sawwi.hypermaxsolutions.com` to redirect to `sawwiapp.ai`; set `APP_URL=https://sawwiapp.ai`; point the Stripe webhook at `https://sawwiapp.ai/api/stripe/webhook`; redeploy.
@@ -120,16 +130,15 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7, last PR:** jobs + cron (D-42) in review.
-   - Add `CRON_SECRET` in Vercel (Secret) before merging.
-   - After merging, check Admin → Background jobs.
-   - Phase 7 is then done.
-   - **The user's live check:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.
+0. **Phase 8:** email (this PR), then password reset (D-46) and SEO pages (D-47).
+   - Resend: the key is in Vercel. Confirm `sawwiapp.ai` is verified in Resend, then redeploy after merging (docs/DEPLOY.md).
+   - After merging, check Admin → Background jobs for `schedule_reminders` and `send_email`.
+   - **Still open from Phase 7:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.
 4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30).
-5. Scheduled connector pulls and emailed reminders, as new job kinds on the jobs table (D-26, D-27, D-42). Reminders need an email provider.
+5. Scheduled connector pulls, as a new job kind on the jobs table (D-26, D-27, D-42). Not chosen for Phase 8.
 
 ## Open questions
 
@@ -137,13 +146,13 @@ _Updated in every commit. Newest first within each section._
 - **Data residency:** the database and functions are in Frankfurt (D-41). Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in.
 - **Neon plan:** Free for now. Upgrade before real customer data (storage, compute hours, restore window).
 - **Vercel plan:** the team is on a Pro trial. Keep Pro after the trial (commercial use, cron).
-- **Email provider** for reminders, once the jobs table exists: Resend, Postmark or SES, plus DNS for a sending domain.
+- **Email replies:** the sender is `sawwi@sawwiapp.ai` (set by the user). With Resend receiving on, replies land in Resend. Should they go to a support inbox instead (a `reply-to`)?
 - **Shopify live test:** needs a store and a custom-app token from the user. Should Sawwi also get a public Shopify app (OAuth, one-click install)?
 - **Business Central live test:** needs the design partner's IT to register an Entra app and enable it in BC (D-29). Which environment (Sandbox first?) and company? Do they want customer/vendor ledger entries too? Those need a small AL extension (custom API page), since API v2.0 has none.
 - **Magento live test:** which store? On 2.4.4+ the merchant must allow integration tokens as Bearer tokens (or we add OAuth 1.0a signing). Magento 1 stays upload-only.
 - **Next connector:** Odoo (easy, free trial) or Amazon SP-API (most valuable, needs a developer registration, which only the user can start).
 - **Production key management:** built (D-40): a key ring in a sensitive Vercel variable, rotated from Admin. Add a cloud KMS (AWS or GCP) later?
-- **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want? Emailed reminders need a job runner and an email provider: add them?
+- **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want?
 - **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
 - **Anthropic API key:** not configured yet, so neither the Haiku mapping path nor the Phase 4 Sonnet/Haiku writing has run live. Rule-based fallbacks cover both meanwhile.
