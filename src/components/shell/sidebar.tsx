@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { CloseIcon, HomeIcon, PanelIcon, PlusIcon, RunsIcon, TemplatesIcon } from "@/components/icons";
+import { CalendarIcon, CloseIcon, HomeIcon, PanelIcon, PlusIcon, RunsIcon, TemplatesIcon } from "@/components/icons";
 import { toggleSidebar } from "@/lib/sidebar";
 
 // Left navigation. Desktop: sticky panel that collapses to an icon rail (button or ⌘/Ctrl+B).
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/home", label: "Home", icon: HomeIcon },
   { href: "/runs", label: "Reconciliations", icon: RunsIcon },
   { href: "/templates", label: "Templates", icon: TemplatesIcon },
+  { href: "/schedules", label: "Schedules", icon: CalendarIcon },
 ] as const;
 
 /** Tooltip shown next to an icon while the sidebar is collapsed (the label itself is sr-only then). */

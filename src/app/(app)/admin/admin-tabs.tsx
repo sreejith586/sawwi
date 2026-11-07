@@ -7,6 +7,7 @@ const TABS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/workspaces", label: "Workspaces" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/usage", label: "Usage" },
 ] as const;
 
 export function AdminTabs({ static: isStatic = false }: { static?: boolean }) {

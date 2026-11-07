@@ -13,7 +13,7 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (#5) and scheduled runs (#6) in review; connectors planned (D-27, §9) |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5) and scheduled runs (D-26, #6) merged; connectors planned (D-27, §9) |
 
 ## In flight
 
@@ -25,6 +25,8 @@ _Updated in every commit. Newest first within each section._
 ## Recent changes
 
 - **Phase 6, part 3: connectors plan** (D-27, ARCHITECTURE §9, docs only, in review). A connector emits the same table as an upload, so mapping and matching don't change. Recommended order: Shopify or Odoo, then Amazon SP-API, then Salla/Zid, gateways, other ERPs, and bank feeds via an open-banking aggregator. The plan covers encrypted credentials, and pulls per schedule period through slot bindings. It needs a job runner (user to approve).
+- **Phase 6, part 2: scheduled runs** (D-26, #6, merged). Schedule a template weekly or monthly from its page. When it comes due it shows in **Due now** on Home and on the new **Schedules** page. Start creates that period's run (once; reused on a second click), and saved mappings make a repeat ask nothing. Pause, resume and delete are available, and the schedules table sorts, filters and exports to Excel. Due dates are computed on read; there's no job runner. 10 new tests.
+- **Phase 6, part 1: usage and cost dashboard** (D-25, #5, merged). Settings → Usage & cost: estimated cost, tokens, cache hit rate and "repeat runs that asked nothing", a cost-per-day chart, and breakdowns by day, purpose, model and run with sort, filter and Excel. `/admin/usage` adds every workspace and a by-workspace view. Prices in one dated table (`src/lib/usage/pricing.ts`). No new LLM calls; 12 new tests.
 - **Docs:** the PDF plan (#3) is merged, so it's out of the in-flight table.
 - **Phase 5, PDF inputs (#4, bd5c07c), merged** (plan D-20; build D-21 to D-23, ARCHITECTURE §8): any slot takes `.pdf`, and several files at once. ZATCA UBL XML attachments, then the text layer (statements, invoices, settlement tables; wrapped narration, multi-page tables, carried-forward and total lines, Arabic digits and RTL), with the ZATCA QR as fallback. Statement metadata is shown next to the file. Balance and VAT checks run before matching; a failure holds the run with a chat question and a banner in the preview. Layout recipes are saved per workspace (`pdf_layouts`). Password-protected PDFs are refused with a message. 25 new tests with synthetic fixture PDFs (golden tables for text PDFs, key fields for OCR).
 - **Scanned PDFs: local OCR** (D-24, the user's decision on D-20): image-only pages (up to 20) are OCR'd on the server with `tesseract.js` (English + Arabic, bundled language data, nothing sent out). The OCR text goes through the same table reader, layout memory and checks; OCR files are marked (confidence, low-confidence rows) and a scan with nothing to check against holds the run.
@@ -46,10 +48,12 @@ _Updated in every commit. Newest first within each section._
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **User decision:** which connector to build first (recommended: Shopify or Odoo, see §9), and which job runner to allow (D-26, D-27).
+4. Scheduled runs, later: emailed reminders and connector-triggered runs need a job runner and an email provider. Ask the user first.
 
 ## Open questions
 
 - **First connector and job runner:** which source first (Shopify, Odoo, Amazon SP-API, …), and whether to add a job runner (DB jobs table + cron, Inngest, or a worker). Connectors and emailed reminders need one.
+- **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want? Emailed reminders need a job runner and an email provider: add them?
 - **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
 - **Anthropic API key:** not configured yet, so neither the Haiku mapping path nor the Phase 4 Sonnet/Haiku writing has run live. Rule-based fallbacks cover both meanwhile.

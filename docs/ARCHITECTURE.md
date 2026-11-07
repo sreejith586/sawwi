@@ -163,6 +163,8 @@ in layers. The cheapest one comes first:
 
 Track per-run tokens (input, cache read, cache write, output) from day one so cache hit rate is visible.
 
+**Usage dashboard (Phase 6, D-25).** Settings → Usage & cost reads `llm_usage` joined to `runs` (a call belongs to its run's workspace) and shows estimated cost, tokens, cache hit rate (cache read ÷ all prompt tokens) and the share of repeat runs that asked nothing (no chip question, no mapping call), with a cost-per-day chart and breakdowns by day, purpose, model and run. Every breakdown sorts, filters and downloads as Excel (`/api/usage`). Superadmins get the same across workspaces at `/admin/usage` (`/api/admin/usage`). Prices live in `src/lib/usage/pricing.ts` (per million tokens, dated, cache writes at the 1-hour TTL); the maths is pure in `src/lib/usage/aggregate.ts`. The page makes no LLM calls and is readable by viewers.
+
 ## 6. Stack
 
 _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memory TS matching engine (D-5, D-6), exceljs and the Anthropic SDK. The original plan is below, kept for reference.
@@ -181,12 +183,12 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 - **Roles:** owner / admin (team, profile, plan) / editor (run reconciliations) / viewer (read reports only).
 - **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
 - **Card payments (Stripe):** `/checkout/[plan]` embeds Stripe Checkout (`ui_mode: embedded_page`, subscription mode) with card, Apple Pay / Google Pay and Link. Prices come from `STRIPE_PRICE_*`; one Stripe Customer per workspace. `/checkout/return` verifies the session belongs to the workspace and applies the plan at once; `/api/stripe/webhook` (signature-verified) keeps it in sync for renewals, failed payments, cancellations and portal changes. "Manage billing" opens Stripe's billing portal. Checkout is offered only while the paywall is on; Enterprise stays a request.
-- **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend) and users, with Excel exports.
+- **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend), users and AI usage across workspaces, with Excel exports.
 - **Storage:** SQLite now (`src/lib/saas/store.ts` holds all SQL for this); port to Postgres with the rest.
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (connectors plan in §9). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (usage dashboard §5, #5, and scheduled runs, #6, merged; connectors plan in §9). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
 
 Phase 4 (`src/lib/insights/`):
 - **Analysis above the report.** Claude Sonnet 5.5 writes a headline, up to four findings and three next steps from a digest (`digestText`: totals, per-check counts/values and the 8 largest exceptions by key, never rows). Fetched after the report renders, then cached per result in `run_narratives`, so re-opening a run costs nothing. No API key, or a viewer opening an uncached run: the rule-based summary (`ruleNarrative`), not cached so a later key still writes one.
@@ -194,6 +196,13 @@ Phase 4 (`src/lib/insights/`):
 - **Prompt caching.** Every call sends the same two system blocks with `cache_control` (1h): fixed instructions shared by all runs, then the run digest shared by every turn on that run. Sonnet calls use the server-side refusal fallback (`fallbacks: "default"`). Usage is logged per purpose (`narrative`, `email_draft`, `explain`, `chat`).
 - **No template fits.** The gallery's "Start a custom reconciliation" names the two files (preset chips or free text) and picks a tolerance; the run uses the generic two-file spec (`src/lib/templates/custom.ts`: key + amount, optional date/description; missing either side, amount mismatch, duplicates). Its fields are always confirmed with chips (`confirmColumns`), with no AI guess. "Save as a reusable template" stores the spec per workspace (`custom_templates`) and copies the confirmed mappings, so the next run with the same exports asks nothing. Saved templates show under "Your templates" in the gallery. `src/lib/runs/templates.ts` resolves catalogue, generic and saved templates for every run.
 - Chat and analysis actions keep `getOwnedRun` + `runBlocker()`; downloads are read-only like the other exports.
+
+Phase 6, scheduled runs (D-26, `src/lib/schedules/`):
+- A schedule is a template + cadence per workspace (`schedules` table): weekly on a weekday, or monthly on a day of the month (29–31 clamp to the month end), in UTC. Editors add one from the template page.
+- Due state is computed when a page loads (`due.ts`, pure). There is no job runner. The first due date is the first occurrence on or after creation. A schedule is due when its latest occurrence has no run, in progress when that period's run has no report yet, and up to date once it has one. Paused schedules are never due.
+- **Due now** (Home, and `/schedules` in the sidebar) lists due schedules. Start (`startScheduledRun`) checks `runBlocker()`, creates an ordinary run tagged with `runs.schedule_id` and `runs.schedule_period`, and opens it; a second click opens the same run. The mapping cache makes a repeat with the same exports ask nothing. Runs are created only on Start, so they count toward the plan's monthly runs only when used.
+- Pause, resume and delete need edit rights. Viewers see schedules and the Excel export (`/api/schedules`).
+- Later: emailed reminders and connector-triggered runs (a pulled file goes into the period's run) need a job runner; see D-26.
 
 Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 

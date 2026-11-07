@@ -53,5 +53,12 @@ pnpm build
    Free-text questions use Claude Haiku. The AI only sees aggregates and a few exceptions, never files.
 10. **No template fits?** Start a custom reconciliation from the gallery: name two files, confirm the
     key and amount columns with chips, and save it as your own template.
+11. **Usage & cost** (Settings → Usage & cost) shows what the AI calls cost the workspace: tokens
+    (input, cache read, cache write, output), cache hit rate and estimated cost by day, purpose, model
+    and run, plus how many repeat runs asked nothing. Prices are in one table,
+    `src/lib/usage/pricing.ts`, with a date. Superadmins see every workspace at `/admin/usage`.
+12. **Schedules:** set a template to come due weekly or monthly. When it's due it appears under
+    "Due now" on Home and on the Schedules page; Start opens that period's run, and saved mappings
+    make a repeat ask nothing. No background jobs: due dates are worked out when the page loads.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

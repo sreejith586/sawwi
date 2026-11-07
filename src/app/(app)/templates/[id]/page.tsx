@@ -3,11 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { startRun } from "@/app/actions/runs";
+import { ScheduleForm } from "@/components/schedules/schedule-form";
 import { buttonClass } from "@/components/ui";
+import { canRun, getCurrentSession } from "@/lib/saas/session";
+import { cadenceLabel, defaultRule } from "@/lib/schedules/due";
+import { listSchedules } from "@/lib/schedules/store";
 import { specRows } from "@/lib/tables/rows";
 import { SpecTable } from "./spec-table";
 import { getTemplate, TEMPLATES } from "@/lib/templates/catalog";
-import { FREQUENCY_LABELS, GROUP_LABELS } from "@/lib/templates/types";
+import { FREQUENCY_LABELS, GROUP_LABELS, type Template } from "@/lib/templates/types";
 
 export function generateStaticParams() {
   return TEMPLATES.map((t) => ({ id: t.id }));
@@ -54,6 +58,10 @@ async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
           </button>
         </form>
       </div>
+
+      <Suspense fallback={null}>
+        <TemplateSchedule template={template} />
+      </Suspense>
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold">Files you&apos;ll upload</h2>
@@ -112,6 +120,28 @@ async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
           </ul>
         </div>
       </section>
+    </div>
+  );
+}
+
+/** Schedules for this template, and (for editors) a form to add one (D-26). */
+async function TemplateSchedule({ template }: { template: Template }) {
+  const session = await getCurrentSession();
+  if (!session) return null;
+  const existing = listSchedules(session.org.key).filter((s) => s.templateId === template.id);
+  const canEdit = canRun(session.access);
+  if (!canEdit && existing.length === 0) return null;
+  return (
+    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-surface px-4 py-3">
+      {existing.length > 0 && (
+        <p className="text-sm">
+          <span className="text-muted">Scheduled:</span> {existing.map((s) => `${cadenceLabel(s)}${s.paused ? " (paused)" : ""}`).join(" · ")}{" "}
+          <Link href="/schedules" className="text-muted hover:text-foreground">
+            Manage →
+          </Link>
+        </p>
+      )}
+      {canEdit && <ScheduleForm templateId={template.id} initial={defaultRule(template.frequency)} />}
     </div>
   );
 }
