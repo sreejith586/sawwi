@@ -19,11 +19,26 @@ export type ConnectionItem = { id: string; provider: string; accountLabel: strin
 export function AddConnection({ connectors, demoValues = {} }: { connectors: ConnectorOption[]; demoValues?: Record<string, Record<string, string>> }) {
   const [provider, setProvider] = useState(connectors[0]?.id ?? "");
   const [values, setValues] = useState<Record<string, string>>({});
-  const [state, action, pending] = useActionState<ConnectionActionState, FormData>(addConnectionAction, {});
+  const [state, action, pending] = useActionState<ConnectionActionState, FormData>(async (prev, form) => {
+    const result = await addConnectionAction(prev, form);
+    if (result.added) setValues({}); // keep the source, clear what was typed
+    return result;
+  }, {});
+  const [, startSubmit] = useTransition();
   const c = connectors.find((x) => x.id === provider);
   const demo = demoValues[provider];
   return (
-    <form action={action} autoComplete="off" className="space-y-4 rounded-xl border border-border bg-surface p-5">
+    // Submitted by hand rather than with `action=`, so React doesn't reset the fields (and the
+    // source picker) behind our state after each attempt.
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        startSubmit(() => action(form));
+      }}
+      autoComplete="off"
+      className="space-y-4 rounded-xl border border-border bg-surface p-5"
+    >
       <label className="block text-sm">
         <span className="font-medium">Source</span>
         <select

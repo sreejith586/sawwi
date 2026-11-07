@@ -4,6 +4,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import type { Run } from "@/lib/runs/types";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { mockFetchFor } from "./mock";
+import { assertPublicUrl } from "./net-guard";
 import { connectorById } from "./registry";
 import * as store from "./store";
 import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
@@ -13,7 +14,13 @@ import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
 
 export const liveDeps: ConnectorDeps = {
   // In local demo mode a mocked provider answers in-process (never in production; see ./mock).
-  fetch: (url, init) => mockFetchFor(url)?.(url, init) ?? fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
+  // Otherwise: https to public addresses only, and no redirects (D-30).
+  fetch: async (url, init) => {
+    const mock = mockFetchFor(url);
+    if (mock) return mock(url, init);
+    await assertPublicUrl(url);
+    return fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000) });
+  },
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 };
 
