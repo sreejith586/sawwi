@@ -25,11 +25,14 @@ _Updated in every commit. Newest first within each section._
 | Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | #26 | Phase 8 session |
 | Phase 8: SEO pages (D-47), based on #26 | `feature/phase-8-seo-pages` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
-| New logo, app icons and brand accents (D-48, D-49) | `feature/sawwiapp-logo` | — | Logo session |
+| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 
 ## Recent changes
 
-- **New logo and app icons** (D-48, `feature/sawwiapp-logo`).
+- **AI in production was failing** (D-50, `fix/anthropic-workspace-header`). Every summary, chat answer and AI column mapping returned a 400, because the API key isn't scoped to a workspace. Found by asking the chat a question on a test run in production.
+  - All clients now come from `anthropicClient()`, which sends `anthropic-workspace-id` when `ANTHROPIC_WORKSPACE_ID` is set. 2 new tests.
+  - **Done by the user (2026-11-07):** a new workspace-scoped key and `ANTHROPIC_WORKSPACE_ID` are set in Vercel, and production was redeployed. The chat now answers in production; checked with a question on a test run.
+- **New logo and app icons** (D-48, #27, merged).
   - The mark is two sheets, with the front one ticked, on a theme-aware tile, next to a `sawwiapp` wordmark. It replaces the black "S" square in the marketing header, footer, auth, checkout, onboarding, sidebar and phone top bar.
   - New `favicon.ico`, `icon.svg` and `apple-icon.png` replace Next's default favicon. The link-preview image and the email header use the new mark too, and the email button is emerald.
   - The logo is kept clearly apart from sawwi.ai's blue star and joined "ww" wordmark.

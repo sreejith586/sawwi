@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { LlmUsage } from "@/lib/mapping/llm";
@@ -67,7 +68,7 @@ const EmailSchema = z.object({ subject: z.string(), body: z.string() });
 
 /** Sonnet with structured output, and the server-side fallback should a safety classifier decline. */
 async function sonnet<T extends z.ZodType>(digest: string, task: string, schema: T, maxTokens: number): Promise<{ data: z.infer<T>; usage: LlmUsage }> {
-  const client = new Anthropic();
+  const client = anthropicClient();
   const response = await client.beta.messages.parse({
     model: NARRATIVE_MODEL,
     max_tokens: maxTokens,
@@ -103,7 +104,7 @@ export async function draftEmail(params: {
 
 /** Haiku for short answers: one exception explained, or a free-text question. */
 async function haiku(digest: string, messages: Anthropic.MessageParam[]): Promise<{ text: string; usage: LlmUsage }> {
-  const client = new Anthropic();
+  const client = anthropicClient();
   const response = await client.messages.create({
     model: CHAT_MODEL,
     max_tokens: 2000,

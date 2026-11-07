@@ -24,6 +24,7 @@ a person, never by an agent or committed to the repo.
 | `BLOB_STORE_ID` | Blob integration | Blob integration | File store (D-39). |
 | `SAWWI_CONNECTOR_KEYS` | Sensitive, required for connections | Sensitive, a **different** key | Key ring for connection secrets: `k1:<openssl rand -base64 32>` (D-40). Never remove a key that still has secrets (Admin → Connection secrets). |
 | `ANTHROPIC_API_KEY` | Sensitive | Optional | AI mapping and writing. Without it, rule-based fallbacks. |
+| `ANTHROPIC_WORKSPACE_ID` | Config | Only for an unscoped key | The Claude Console workspace ID (`wrkspc_…`). Needed when the API key isn't scoped to a workspace; Anthropic refuses every call otherwise. |
 | `SAWWI_SUPERADMIN_EMAILS` | Your email | Your email | Who gets `/admin`. |
 | `APP_URL` | `https://sawwiapp.ai` | unset | Pins links and Stripe return URLs. |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_WEBHOOK_SECRET` | Live keys, Sensitive | Test-mode keys | Card checkout. Only shown while the paywall is on. |
