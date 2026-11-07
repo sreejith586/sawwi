@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connectorsEnabled } from "@/lib/connectors/crypto";
+import { mockDemoValues } from "@/lib/connectors/mock";
 import { CONNECTORS } from "@/lib/connectors/registry";
 import { syncRows } from "@/lib/connectors/rows";
 import { listConnections } from "@/lib/connectors/store";
@@ -29,7 +30,7 @@ async function Connections() {
       <section>
         <h2 className="text-sm font-semibold">Your connections</h2>
         <div className="mt-3">
-          <ConnectionList items={items} canManage={canManage} />
+          <ConnectionList items={items} canManage={canManage} labels={Object.fromEntries(CONNECTORS.map((c) => [c.id, c.label]))} />
         </div>
       </section>
 
@@ -38,7 +39,7 @@ async function Connections() {
           <h2 className="text-sm font-semibold">Add a connection</h2>
           <div className="mt-3">
             {enabled ? (
-              <AddConnection connectors={connectors} />
+              <AddConnection connectors={connectors} demoValues={mockDemoValues()} />
             ) : (
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted">
                 Connections are switched off on this server: it needs an encryption key for stored tokens (<code>SAWWI_CONNECTOR_KEY</code>, see the
@@ -46,7 +47,7 @@ async function Connections() {
               </p>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted">More sources (Amazon SP-API, Odoo, Zoho Books, Salla, Zid, payment gateways, bank feeds) are planned.</p>
+          <p className="mt-2 text-xs text-muted">More sources (Magento 2, Amazon SP-API, Odoo, Zoho Books, Salla, Zid, payment gateways, bank feeds) are planned.</p>
         </section>
       )}
 

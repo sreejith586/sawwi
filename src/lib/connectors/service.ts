@@ -3,6 +3,7 @@ import type { RunContext } from "@/lib/runs/engine";
 import { ingestFiles } from "@/lib/runs/engine";
 import type { Run } from "@/lib/runs/types";
 import { decryptSecret, encryptSecret } from "./crypto";
+import { mockFetchFor } from "./mock";
 import { connectorById } from "./registry";
 import * as store from "./store";
 import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
@@ -11,7 +12,8 @@ import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
 // into a run slot. A pull becomes a CSV "upload", so mapping and matching are unchanged.
 
 export const liveDeps: ConnectorDeps = {
-  fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
+  // In local demo mode a mocked provider answers in-process (never in production; see ./mock).
+  fetch: (url, init) => mockFetchFor(url)?.(url, init) ?? fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 };
 

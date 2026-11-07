@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { buttonClass } from "@/components/ui";
+import { slotFit } from "@/lib/connectors/slot-fit";
 import type { ImportSource } from "@/lib/connectors/sources";
 import type { RunView } from "@/lib/runs/view";
 
@@ -18,16 +19,18 @@ function lastMonth(): { from: string; to: string } {
 /** Pulls a report from a connected source into this slot, as if it had been uploaded (D-28). */
 export function ImportFromConnection(props: {
   runId: string;
+  templateId: string;
   slotKey: string;
   sources: ImportSource[];
   onView: (v: RunView) => void;
   onError: (e?: string) => void;
 }) {
-  // Reports that usually fill this slot first; any report can go into any slot.
+  // Reports made for this template's slot first, then ones for any slot of that name; any
+  // report can still go into any slot.
   const options = props.sources.flatMap((s) =>
-    s.reports.map((r) => ({ value: `${s.connectionId}:${r.id}`, label: `${s.label} · ${r.label}`, fits: r.slots.includes(props.slotKey) })),
+    s.reports.map((r) => ({ value: `${s.connectionId}:${r.id}`, label: `${s.label} · ${r.label}`, fits: slotFit(r.slots, props.templateId, props.slotKey) })),
   );
-  options.sort((a, b) => Number(b.fits) - Number(a.fits));
+  options.sort((a, b) => b.fits - a.fits);
   const [choice, setChoice] = useState(options[0]?.value ?? "");
   const [period, setPeriod] = useState(lastMonth);
   const [busy, setBusy] = useState(false);
