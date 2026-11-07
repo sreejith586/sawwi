@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChatIcon, CloseIcon } from "@/components/icons";
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, currentChatWidth, isChatOpen, resetChatWidth, setChatOpen, setChatWidth, subscribeChatPanel } from "@/lib/chat-panel";
 
@@ -101,6 +102,97 @@ function ResizeHandle() {
   );
 }
 
+// The general panel (no reconciliation open): canned questions with fixed answers (D-35). Free
+// questions across all reconciliations come later.
+const GENERAL_QUESTIONS: { q: string; a: ReactNode }[] = [
+  {
+    q: "What can Sawwi reconcile?",
+    a: (
+      <>
+        Marketplace settlements, fees, returns and claims (Amazon, Noon and others), webstore orders against card gateways, cash on delivery and
+        Tabby/Tamara, B2B customer payments and statements, and purchasing: purchase orders, goods received and supplier invoices.{" "}
+        <Link href="/templates" className="font-medium underline underline-offset-4">
+          Browse all templates
+        </Link>
+      </>
+    ),
+  },
+  {
+    q: "How does matching work?",
+    a: "You pick a template and upload (or import) its files as your systems export them. I map the columns once and remember them, then match the rows by rules in code, never by AI, so the same files always give the same result. When something is unclear I ask you once, with buttons.",
+  },
+  {
+    q: "Is my data sent to AI?",
+    a: "Your files never are. Matching runs in code. When AI is switched on, it only writes the summary, emails and explanations, from the totals and a few example exceptions.",
+  },
+  {
+    q: "Which reconciliations need my attention?",
+    a: (
+      <>
+        <Link href="/runs" className="font-medium underline underline-offset-4">
+          Reconciliations
+        </Link>{" "}
+        lists every run with its status and exceptions, and{" "}
+        <Link href="/home" className="font-medium underline underline-offset-4">
+          Home
+        </Link>{" "}
+        shows scheduled ones that are due. Open a reconciliation and its own chat appears here.
+      </>
+    ),
+  },
+];
+
+function GeneralChat() {
+  const [asked, setAsked] = useState<number[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [asked.length]);
+  const remaining = GENERAL_QUESTIONS.map((_, i) => i).filter((i) => !asked.includes(i));
+
+  return (
+    <>
+      <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 text-sm">
+        <div className="mt-auto rounded-2xl rounded-bl-md bg-surface-muted px-3.5 py-2.5 leading-relaxed">
+          Hi! Open a reconciliation and I&apos;ll help with its files and results right here. Or start with one of these:
+        </div>
+        {asked.map((i) => (
+          <div key={i} className="space-y-3">
+            <div className="flex justify-end">
+              <p className="max-w-[88%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2 text-accent-foreground">{GENERAL_QUESTIONS[i].q}</p>
+            </div>
+            <p className="max-w-[88%] rounded-2xl rounded-bl-md bg-surface-muted px-3.5 py-2 leading-relaxed">{GENERAL_QUESTIONS[i].a}</p>
+          </div>
+        ))}
+        {remaining.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <p className="text-xs font-medium text-muted">{asked.length ? "More questions" : "Suggested questions"}</p>
+            {remaining.map((i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setAsked((a) => [...a, i])}
+                className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-left transition hover:border-foreground/40 hover:bg-surface-muted"
+              >
+                {GENERAL_QUESTIONS[i].q}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-border p-3">
+        <input
+          disabled
+          placeholder="Free questions across all reconciliations: coming soon"
+          aria-label="Ask Sawwi (coming soon)"
+          className="h-9 w-full rounded-lg border border-border bg-surface-muted px-3 text-sm placeholder:text-muted disabled:cursor-not-allowed"
+        />
+      </div>
+    </>
+  );
+}
+
 export function ChatPanel() {
   // Escape closes the overlay drawer on narrow screens (the docked panel stays put).
   useEffect(() => {
@@ -139,21 +231,7 @@ export function ChatPanel() {
         {/* A page's own chat (a reconciliation's) is portalled in here; otherwise the general panel shows. */}
         <div id={CHAT_SLOT_ID} ref={registerBody} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
         <div className="app-chat-fallback flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto p-4">
-            <div className="rounded-xl bg-surface-muted px-3.5 py-3 text-sm">
-              Hi! Soon you&apos;ll be able to ask me about all your reconciliations here, like{" "}
-              <span className="font-medium">&ldquo;Which Noon orders were never paid out?&rdquo;</span>
-              <p className="mt-2 text-muted">For now, open a reconciliation: its own chat appears in this panel, with questions about your files and follow-ups on the report.</p>
-            </div>
-          </div>
-          <div className="border-t border-border p-3">
-            <input
-              disabled
-              placeholder="Coming soon"
-              aria-label="Ask Sawwi (coming soon)"
-              className="h-9 w-full rounded-lg border border-border bg-surface-muted px-3 text-sm placeholder:text-muted disabled:cursor-not-allowed"
-            />
-          </div>
+          <GeneralChat />
         </div>
       </aside>
     </>

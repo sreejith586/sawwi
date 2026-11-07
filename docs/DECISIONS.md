@@ -258,3 +258,19 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Opening it on narrow screens too:** it covers the whole page there.
 - **Consequences:** closing the panel on a run page closes it for this visit only; the next run page opens it again. Testing note: a hidden browser pane never runs animation frames, so React never reveals streamed page content there and pages look stuck on "Loading…". That is a test-environment effect, not an app bug.
 
+### D-35: Canned questions in a fresh chat, answered by rules
+- **Context:** the user asked: "Add a list of canned questions when the chat is fresh." A new chat showed only a greeting, so people didn't know what to ask. Before a report there was nothing to ask at all, and the general panel was a "coming soon" placeholder.
+- **Decision:**
+  - **On a reconciliation:** while nobody has asked anything and no setup question is waiting, the chat lists "What files do I need?", "What does this reconciliation check?", "How are the files matched?" and "Where do I find these exports?".
+    - Each is a new chat intent (`about`), answered from the template by rules (`src/lib/insights/about.ts`): the files with their required fields, the automatic and manual checks, each link's keys, tolerances and date window, and typical exports per file. That means no AI and no tokens.
+    - It works before any file is uploaded, and in the demo store. The answers are saved in the run's chat like any other.
+    - Questions not yet asked stay listed as "More questions" until there's a report. After that, the report's follow-up buttons take over, so "What should I fix first?" isn't listed twice.
+  - **In the general panel** (no reconciliation open): "What can Sawwi reconcile?", "How does matching work?", "Is my data sent to AI?" and "Which reconciliations need my attention?".
+    - The answers are fixed, shown on the spot in the panel, and link to Templates, Reconciliations and Home.
+    - They aren't saved. Free questions across all reconciliations are still to come.
+- **Rejected alternatives:**
+  - **Sending canned questions to the AI:** it costs tokens for answers the template already knows, and it wouldn't work in the demo or without a key.
+  - **Showing them only before the first message:** the remaining ones were lost after one click.
+  - **Static FAQ text in the panel:** a question and its answer read better in a chat.
+- **Consequences:** the answers change automatically when a template changes. They are only as good as the template's descriptions and examples.
+

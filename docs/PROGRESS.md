@@ -19,7 +19,7 @@ _Updated in every commit. Newest first within each section._
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Chat panel open by default on run pages, one header (D-34) | `ui-chat-open-on-run-pages` | (this PR) | Chat sidebar session (fork) |
+| Chat panel: open by default on run pages, one header, canned questions (D-34, D-35) | `ui-chat-open-on-run-pages` | (this PR) | Chat sidebar session (fork) |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
@@ -29,6 +29,11 @@ _Updated in every commit. Newest first within each section._
   - Leaving the run restores your own open/closed choice; narrow screens keep it closed.
   - One header: the run's status ("Ask about this result", "AI off") sits under "Ask Sawwi" instead of in a second header.
   - Also fixes the run's chat sometimes not landing in the panel after a direct visit.
+- **Canned questions in a fresh chat** (D-35, same branch).
+  - On a reconciliation: "What files do I need?", "What does this reconciliation check?", "How are the files matched?" and "Where do I find these exports?". They're answered from the template by rules, with no AI and no tokens, even before any upload.
+  - Unasked ones stay listed until there's a report.
+  - The general panel offers four questions about Sawwi, with links.
+  - 6 new tests.
 - **Chat in a resizable right sidebar** (D-33, #13, merged).
   - "Ask Sawwi" is now a right-hand panel that mirrors the left nav: docked from 64rem, a drawer on narrow screens.
   - Drag its left border to resize it (300 to 720 px). Double-click resets the width, and arrow keys work too. The width and whether it's open are remembered.

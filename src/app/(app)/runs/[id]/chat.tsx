@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ABOUT_QUESTIONS } from "@/lib/insights/about";
 import type { ChatIntent } from "@/lib/insights/chat";
 import { ExcelButton, SeverityDot } from "@/components/data-table";
 import { useChatPanelSlot } from "@/components/shell/chat-panel";
@@ -38,6 +39,12 @@ export function Chat({
   }, [view.messages.length, current?.id, thinking]);
 
   const followUps = Boolean(view.report && view.insights && !current);
+  // Canned questions (D-35): shown on a fresh chat, and the ones not asked yet stay until there's
+  // a report (then the follow-up buttons take over). Hidden while a setup question waits.
+  const asked = new Set(view.messages.filter((m) => m.payload?.type === "question").map((m) => m.body));
+  const askedAny = asked.size > 0;
+  const suggestions = ABOUT_QUESTIONS.filter((q) => !asked.has(q.question));
+  const showSuggestions = !current && suggestions.length > 0 && (!askedAny || !view.report);
   const headerSlot = useChatPanelSlot("header");
 
   return (
@@ -70,6 +77,7 @@ export function Chat({
             </p>
           </div>
         )}
+        {showSuggestions && !thinking && <SuggestedQuestions questions={suggestions} more={askedAny} disabled={busy} onIntent={onIntent} />}
         {current && (
           <div className="space-y-2.5">
             <Bubble role="sawwi" highlight>
@@ -94,6 +102,36 @@ export function Chat({
         </div>
       )}
     </section>
+  );
+}
+
+/** Canned questions for a fresh chat, answered from the template by rules (D-35). */
+function SuggestedQuestions({
+  questions,
+  more,
+  disabled,
+  onIntent,
+}: {
+  questions: typeof ABOUT_QUESTIONS;
+  more: boolean;
+  disabled: boolean;
+  onIntent: (i: ChatIntent) => void;
+}) {
+  return (
+    <div className="space-y-1.5 pt-1">
+      <p className="text-xs font-medium text-muted">{more ? "More questions" : "Suggested questions"}</p>
+      {questions.map((q) => (
+        <button
+          key={q.topic}
+          type="button"
+          disabled={disabled}
+          onClick={() => onIntent({ kind: "about", topic: q.topic })}
+          className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm transition hover:border-foreground/40 hover:bg-surface-muted disabled:opacity-50"
+        >
+          {q.question}
+        </button>
+      ))}
+    </div>
   );
 }
 
