@@ -200,3 +200,14 @@ describe("rule-based fallbacks (no API key)", () => {
     expect(ruleExplanation(template, result, i)).toContain("4.50");
   });
 });
+
+describe("labels in running text (D-54)", () => {
+  it("lower-cases labels but keeps acronyms", async () => {
+    const { inText } = await import("./facts");
+    expect(inText("ERP posted sales invoices")).toBe("ERP posted sales invoices");
+    expect(inText("Goods returns (GRN / RMA)")).toBe("goods returns (GRN / RMA)");
+    expect(inText("Not posted in the ERP")).toBe("not posted in the ERP");
+    expect(inText("Order ID")).toBe("order ID");
+    expect(inText("Webstore stock by source")).toBe("webstore stock by source");
+  });
+});

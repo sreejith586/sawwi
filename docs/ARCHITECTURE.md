@@ -87,7 +87,7 @@ Marketplace and provider names are examples; every template works from uploaded 
 13. Refunds issued vs. returns physically received
 24. Store invoices vs. ERP posted invoices (e.g. Magento 2 → Business Central): not synced, posted twice, total, VAT or customer differs (D-52; the customer check is the engine's `text_mismatch` rule, which compares a text field across matched records, ignoring case and blanks)
 25. Store refunds (credit memos) vs. ERP credit notes: not posted, posted twice, amount or VAT differs (D-53)
-26. Store stock vs. ERP inventory per SKU: overselling, stock hidden from the store, SKUs unknown to the ERP (D-54)
+26. Store stock vs. ERP inventory per SKU: overselling, stock hidden from the store, SKUs unknown to the ERP (D-54; gaps valued at quantity × unit price through a `compare` rule's `value` expression, where `diff` is left minus right)
 
 **Direct B2B (own B2B portal, wholesale, sales team)**
 15. Customer payments vs. open invoices (cash application: short pays, overpayments, unapplied cash)

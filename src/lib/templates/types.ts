@@ -84,6 +84,9 @@ export type CheckRule =
       tolerance?: number;
       leftWhere?: Where;
       rightWhere?: Where;
+      /** Money at risk when the compared figures aren't money (e.g. quantities): an expression
+       *  over the matched records' fields, where `diff` is left minus right. Defaults to `diff`. */
+      value?: string;
     }
   /** Same key twice on one side. `by` overrides the link keys (e.g. supplier + invoice no.). */
   | { kind: "duplicate"; link: number; side: "left" | "right"; by?: string[] }

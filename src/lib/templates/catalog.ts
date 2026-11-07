@@ -848,7 +848,7 @@ export const TEMPLATES: Template[] = [
         label: "ERP item inventory",
         description: "Your ERP's items with the quantity on hand right now.",
         examples: ["Business Central items (inventory)", "Odoo stock on hand", "Zoho Inventory items"],
-        fields: [SKU, f("description", "Description", "text"), f("erp_qty", "Inventory", "number", true)],
+        fields: [SKU, f("description", "Description", "text"), f("erp_qty", "Inventory", "number", true), f("unit_price", "Unit price", "money")],
       },
       {
         key: "store_stock",
@@ -868,9 +868,9 @@ export const TEMPLATES: Template[] = [
       },
     ],
     checks: [
-      { id: "overselling", label: "Store sells more than you hold", description: "The store offers more units than the ERP has on hand, so shoppers can buy stock you don't have.", rule: { kind: "compare", link: 0, direction: "right_higher" } },
-      { id: "hidden_stock", label: "Stock hidden from the store", description: "The ERP holds more than the store offers: a source set out of stock, or a sync that didn't run.", rule: { kind: "compare", link: 0, direction: "left_higher" } },
-      { id: "not_in_erp", label: "Sold online, unknown to the ERP", description: "The store has sellable stock for a SKU the ERP doesn't have, so its sales can't be posted.", rule: { kind: "unmatched_right", link: 0, where: { field: "store_qty", pattern: "[1-9]" } } },
+      { id: "overselling", label: "Store sells more than you hold", description: "The store offers more units than the ERP has on hand, so shoppers can buy stock you don't have.", rule: { kind: "compare", link: 0, direction: "right_higher", value: "abs(diff) * unit_price" } },
+      { id: "hidden_stock", label: "Stock hidden from the store", description: "The ERP holds more than the store offers: a source set out of stock, or a sync that didn't run.", rule: { kind: "compare", link: 0, direction: "left_higher", value: "abs(diff) * unit_price" } },
+      { id: "not_in_erp", label: "Sold online, unknown to the ERP", description: "The store has sellable stock for a SKU the ERP doesn't have, so its sales can't be posted.", rule: { kind: "unmatched_right", link: 0, where: { field: "store_qty", pattern: "[1-9]" }, value: "0" } },
       { id: "not_in_store", label: "In the ERP, not in the store", description: "An ERP item with stock that the store doesn't list. Fine for items you don't sell online." },
     ],
     outputs: ["Oversold SKUs to fix first", "Stock to release to the store", "SKUs missing on either side"],

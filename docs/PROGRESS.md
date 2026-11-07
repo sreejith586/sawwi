@@ -37,6 +37,7 @@ _Updated in every commit. Newest first within each section._
   - New template `web-erp-stock`: Magento's sellable quantity per SKU (summed over in-stock sources) against Business Central's item inventory. Flags overselling, stock hidden from the store, and SKUs Business Central doesn't know.
   - Magento connector: new `source_items` report (Multi-Source Inventory, current stock). Business Central connector: new `items` report (inventory and unit price), the first undated report.
   - Demo: the store company's items and two Magento sources; the template fills in one click and finds its 3 planted exceptions.
+  - From the browser check: stock gaps are valued at quantity × unit price (a `value` expression on `compare`), "Explain" says "units" for quantity checks, and generated text keeps acronyms ("ERP", "VAT", "GRN") instead of lower-casing them. A remembered column mapping now also maps fields a template gained after it was saved, by name and without questions.
   - 1 new test, 2 extended. A new SEO test checks each connector page lists every template its connector fills, with no duplicates; it found the Business Central page missing "B2B invoices vs. payment release", now listed.
 
 - **Store refunds vs. ERP credit notes** (D-53, `feature/magento-bc-credit-memos`, PR 2 of the stack, based on PR 1).
@@ -219,4 +220,4 @@ _Updated in every commit. Newest first within each section._
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
 - Small files of whole numbers (e.g. 5 invoice lines, all with different quantities) profile the quantity column as an ID, so mapping asks one confirm question. This is a general profiling rule, not specific to PDFs. Connectors avoid it by writing decimals with 2 places (D-29).
-- "Value at risk" adds quantity differences into money totals for quantity checks (D-13).
+- "Value at risk" adds quantity differences into money totals for quantity checks (D-13), except where a check prices them with a `value` expression, as the stock template does (D-54).
