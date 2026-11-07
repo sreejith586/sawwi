@@ -39,12 +39,12 @@ export const SOLUTIONS: Solution[] = [
       heading: "Connect Magento 2, or upload the exports",
       connector: "magento",
       paragraphs: [
-        "Sawwi's Magento 2 connector reads seven reports through the Magento REST API with an integration token: orders, invoices, credit memos (totals), credit memo lines (refunded items), shipment tracking numbers with weights, stock per SKU and source (Multi-Source Inventory), and product prices with special prices and their dates. It only reads; Sawwi never writes to your store.",
+        "Sawwi's Magento 2 connector reads eight reports through the Magento REST API with an integration token: orders, sales by payment method, invoices, credit memos (totals), credit memo lines (refunded items), shipment tracking numbers with weights, stock per SKU and source (Multi-Source Inventory), and product prices with special prices and their dates. It only reads; Sawwi never writes to your store.",
         "Run Magento with Microsoft Dynamics 365 Business Central? Sawwi checks that every Magento invoice and refund was posted in Business Central once, with the same total, VAT and customer, and that Magento's stock and prices match Business Central's inventory and unit prices, reading both sides through their connectors.",
         "The connector is new. If it doesn't suit your setup yet, export the same data from the Magento admin and upload it. Magento 1 stores work through uploads of the order grid and credit memo exports.",
       ],
     },
-    templates: ["web-orders-vs-gateway", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "web-cod-remittance", "web-bnpl", "web-refunds-vs-returns", "web-courier-freight", "bank-payouts"],
+    templates: ["web-orders-vs-gateway", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "web-cod-remittance", "web-bnpl", "web-refunds-vs-returns", "web-courier-freight", "web-payouts-by-method", "bank-payouts"],
     faqs: [
       { q: "Which Magento versions does Sawwi work with?", a: "The connector works with Magento 2 and Adobe Commerce through the REST API. On Magento 2.4.4 and later, the store must allow integration tokens to be used as bearer tokens. Magento 1 stores can upload their order and credit memo exports instead." },
       { q: "Does Sawwi change anything in my Magento store?", a: "No. The connector only reads orders, invoices, credit memos, shipments, stock and prices, with a token you create for Sawwi and can revoke at any time. The token is stored encrypted." },
@@ -160,7 +160,7 @@ export const SOLUTIONS: Solution[] = [
         "There is no live bank feed yet: statements are uploaded. " + UPLOAD_ANY,
       ],
     },
-    templates: ["bank-payouts", "b2b-cash-application", "b2b-pdc-clearing"],
+    templates: ["bank-payouts", "web-payouts-by-method", "b2b-cash-application", "b2b-pdc-clearing"],
     faqs: [
       { q: "Can I upload a PDF bank statement?", a: "Yes. Sawwi reads the statement table from the PDF, including multi-page tables and wrapped descriptions, and checks the running balance before it matches anything. Scanned statements are read with OCR on Sawwi's server; nothing is sent to an outside service." },
       { q: "Does Sawwi connect to my bank?", a: "Not yet. Statements are uploaded. A bank feed through a licensed open-banking provider is planned, not built." },

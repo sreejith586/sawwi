@@ -78,6 +78,10 @@ const EXPECTED: Record<string, string[]> = {
   ],
   "b2b-returns-vs-credit-notes": ["return_no_cn: RMA-0091", "value_mismatch: RMA-0088"],
   "b2b-pdc-clearing": ["amount_diff: 000416", "bounced: RETURNED CHEQUE INSUFFICIENT FUNDS", "due_not_deposited: 000414"],
+  // Magento sales by provider vs payouts (before fees) vs the bank. Stripe: 108 captured 5.00 short; Tabby: 109 not paid out; COD: 107 collected 10.00 short.
+  "web-payouts-by-method": [
+    "credit_difference: po_1119", "not_paid_out: Cash on delivery", "not_paid_out: Stripe", "not_paid_out: Tabby", "unidentified_credit: REF 99812",
+  ],
   "bank-payouts": ["fx_difference: po_1119", "not_credited: po_1126", "unidentified_credit: REF 99812"],
   "p2p-import-landed-cost": [
     "declaration_unknown: HLCU5555000", "declared_below_invoice: MAEU7654321", "duplicate_freight: Oasis Freight Forwarding / FWD-8812",

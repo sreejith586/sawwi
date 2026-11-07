@@ -30,9 +30,15 @@ _Updated in every commit. Newest first within each section._
 | Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
 | 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
 | 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | PR 3 | Magento↔BC session |
-| 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | this PR | Magento↔BC session |
+| 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | PR 4 | Magento↔BC session |
+| 5: webstore sales by payment method vs. payouts and bank (D-56), based on PR 4 | `feature/magento-payouts-by-method` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Webstore sales by payment method vs. payouts and bank** (D-56, `feature/magento-payouts-by-method`, PR 5 of the stack, based on PR 4).
+  - New template `web-payouts-by-method`: Magento sales per payment provider (card, PayPal, Apple Pay, Tabby, COD…) against each provider's payouts before fees, and each payout against the bank. It shares the payouts file and payouts-to-bank link with "Bank statement vs. expected payouts", whose results are unchanged.
+  - Magento connector: new `payment_totals` report (payable orders per provider and method, net of online refunds).
+  - Demo: a payouts file named by provider; the template fills in one click and finds its 5 planted exceptions. 2 new tests (one keeps every template's summary within the 160-character page description; "Returns vs. invoiced items" was 163 and is trimmed).
 
 - **Store prices vs. ERP prices** (D-55, `feature/magento-bc-prices`, PR 4 of the stack, based on PR 3).
   - New template `web-erp-prices`: each Magento SKU's price against Business Central's unit price, plus special prices past their end date and special prices above the regular price.

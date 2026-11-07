@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PRICE_COLUMNS, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PAYMENT_TOTAL_COLUMNS, MAGENTO_PRICE_COLUMNS, paymentProvider, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -160,6 +160,24 @@ describe("Magento reports", () => {
     // A period that hasn't ended yet is checked as of today.
     const today = new Date().toISOString().slice(0, 10);
     expect((await magento.pull(creds, "product_prices", { from: "2099-01-01", to: "2099-01-31" }, deps())).rows[0][8]).toBe(today);
+  });
+
+  it("totals payable orders per payment provider and method, net of online refunds (D-56)", async () => {
+    const t = await magento.pull(creds, "payment_totals", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_PAYMENT_TOTAL_COLUMNS]);
+    expect(t.rows).toEqual([
+      // 102 complete, 107 processing; 105 cancelled is left out.
+      ["Cash on delivery", "Cash On Delivery", "cashondelivery", "2.00", "659.00", "0.00", "659.00", "AED", "2026-10-01", "2026-10-31"],
+      // 101, 103 (refunded 305), 106 (refunded 199), 108 (15.00 refunded offline as store credit); 110 is pending.
+      ["Stripe", "Credit Card (Stripe)", "stripe_payments", "4.00", "1529.00", "504.00", "1025.00", "AED", "2026-10-01", "2026-10-31"],
+      ["Tabby", "Tabby: Pay in 4", "tabby_installments", "2.00", "1324.00", "0.00", "1324.00", "AED", "2026-10-01", "2026-10-31"],
+    ]);
+    expect(paymentProvider("stripe_payments", "Apple Pay (Stripe)")).toBe("Stripe");
+    expect(paymentProvider("paypal_express", "PayPal Express Checkout")).toBe("PayPal");
+    expect(paymentProvider("braintree_paypal", "PayPal (Braintree)")).toBe("PayPal");
+    expect(paymentProvider("checkoutcom_apple_pay", "Apple Pay")).toBe("Checkout.com");
+    expect(paymentProvider("tamara_pay_by_instalments", "Tamara")).toBe("Tamara");
+    expect(paymentProvider("my_local_gateway", "Network International")).toBe("Network International");
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {

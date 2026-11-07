@@ -151,6 +151,7 @@ export const MAGENTO_INVOICE_COLUMNS = ["Order ID", "Store invoice no.", "Invoic
 export const MAGENTO_CREDIT_MEMO_COLUMNS = ["Order ID", "Credit memo ID", "Refund date", "Customer e-mail", "Customer", "Subtotal", "Shipping refunded", "Adjustment", "VAT amount", "Credit memo total (incl. VAT)", "Currency"] as const;
 export const MAGENTO_SOURCE_ITEM_COLUMNS = ["SKU", "Source", "Source quantity", "Stock status", "Sellable quantity"] as const;
 export const MAGENTO_PRICE_COLUMNS = ["SKU", "Product", "Product type", "Status", "Price", "Special price", "Special price from", "Special price to", "Checked on"] as const;
+export const MAGENTO_PAYMENT_TOTAL_COLUMNS = ["Payment provider", "Payment method", "Method code", "Orders", "Order total", "Refunded online", "Expected to receive", "Currency", "Period from", "Period to"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -184,6 +185,13 @@ const REPORTS: Report[] = [
     description: "Every simple, virtual and downloadable product with its price, special price and the special price's dates, as set on the default store view right now.",
     slots: ["web-erp-prices/store_prices"],
     columns: MAGENTO_PRICE_COLUMNS,
+  },
+  {
+    id: "payment_totals",
+    label: "Sales by payment method",
+    description: "Orders placed in the period that are being fulfilled or done, totalled per payment provider and method, net of refunds paid back through the provider.",
+    slots: ["web-payouts-by-method/method_sales"],
+    columns: MAGENTO_PAYMENT_TOTAL_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -231,6 +239,54 @@ export function priceRow(p: Doc, checkedOn: string): string[] {
     str(p.sku), str(p.name), str(p.type_id), Number(p.status) === 2 ? "Disabled" : "Enabled", num(p.price ?? 0),
     special === undefined || special === null || special === "" ? "" : num(special), day(attr(p, "special_from_date")), day(attr(p, "special_to_date")), checkedOn,
   ];
+}
+
+/**
+ * Who pays the money out, from the payment method code. Wallets (Apple Pay, Google Pay) run through
+ * a gateway, so they share its provider and stay apart by method title. Unknown codes keep their title.
+ */
+const PROVIDERS: [RegExp, string][] = [
+  [/^stripe/, "Stripe"],
+  [/^checkout/, "Checkout.com"],
+  [/paypal/, "PayPal"],
+  [/^braintree/, "Braintree"],
+  [/^adyen/, "Adyen"],
+  [/^tap/, "Tap"],
+  [/paytabs/, "PayTabs"],
+  [/telr/, "Telr"],
+  [/^amazon_?pay/, "Amazon Pay"],
+  [/tabby/, "Tabby"],
+  [/tamara/, "Tamara"],
+  [/^(cashondelivery|cod|msp_cashondelivery)/, "Cash on delivery"],
+  [/^(checkmo|banktransfer|purchaseorder)$/, "Offline"],
+];
+export function paymentProvider(code: string, title: string): string {
+  const c = code.toLowerCase();
+  return PROVIDERS.find(([re]) => re.test(c))?.[1] ?? (title || code || "Unknown");
+}
+
+/** Orders being fulfilled or done; new, pending payment, on hold and cancelled ones aren't owed a payout. */
+const PAYABLE_STATES = new Set(["processing", "complete", "closed"]);
+
+export function paymentTotalRows(orders: Doc[], w: PullWindow): string[][] {
+  const groups = new Map<string, { provider: string; title: string; code: string; orders: number; total: number; refunded: number; currency: string }>();
+  for (const o of orders) {
+    if (!PAYABLE_STATES.has(str(o.state))) continue;
+    const payment = (o.payment ?? {}) as { method?: string; additional_information?: unknown[] };
+    const code = str(payment.method);
+    const title = str(payment.additional_information?.[0]) || code;
+    const currency = str(o.order_currency_code);
+    const key = `${code}\u0000${title}\u0000${currency}`;
+    const g = groups.get(key) ?? { provider: paymentProvider(code, title), title, code, orders: 0, total: 0, refunded: 0, currency };
+    g.orders++;
+    g.total += Number(o.grand_total ?? 0);
+    // Offline refunds (store credit, cash) don't come out of the provider's payouts.
+    g.refunded += Number(o.total_online_refunded ?? o.total_refunded ?? 0);
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title))
+    .map((g) => [g.provider, g.title, g.code, num(g.orders), num(g.total), num(g.refunded), num(g.total - g.refunded), g.currency, w.from, w.to]);
 }
 
 /** Refunded items; configurable parents and their zero-priced children are collapsed to one line. */
@@ -297,6 +353,8 @@ export const magento: Connector<MagentoCredentials> = {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
       rows = memos.map((m) => creditMemoTotalRow(m, orders.get(Number(m.order_id)) ?? NO_ORDER));
+    } else if (report === "payment_totals") {
+      rows = paymentTotalRows(await search(creds, "orders", window, deps), window);
     } else if (report === "product_prices") {
       const today = new Date().toISOString().slice(0, 10);
       const checkedOn = window.to < today ? window.to : today;

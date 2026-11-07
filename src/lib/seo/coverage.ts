@@ -29,6 +29,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-credit-memos": { store_refunds: "credit_memos" },
     "web-erp-stock": { store_stock: "source_items" },
     "web-erp-prices": { store_prices: "product_prices" },
+    "web-payouts-by-method": { method_sales: "payment_totals" },
   },
   "business-central": {
     "mkt-settlement-vs-sales": { sales: "sales_invoices" },
