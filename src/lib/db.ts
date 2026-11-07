@@ -92,6 +92,9 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   output_tokens INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS llm_usage_run ON llm_usage (run_id);
+CREATE INDEX IF NOT EXISTS llm_usage_created ON llm_usage (created_at);
+CREATE INDEX IF NOT EXISTS runs_org ON runs (org_key, created_at);
 CREATE TABLE IF NOT EXISTS run_narratives (
   run_id TEXT PRIMARY KEY,
   result_at TEXT NOT NULL,
@@ -99,6 +102,18 @@ CREATE TABLE IF NOT EXISTS run_narratives (
   body_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS schedules (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  template_id TEXT NOT NULL,
+  cadence TEXT NOT NULL,
+  anchor INTEGER NOT NULL,
+  starts_on TEXT NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS schedules_org ON schedules (org_key);
 CREATE TABLE IF NOT EXISTS connections (
   id TEXT PRIMARY KEY,
   org_key TEXT NOT NULL,
@@ -136,7 +151,12 @@ CREATE TABLE IF NOT EXISTS custom_templates (
 `;
 
 /** Columns added after a table first shipped: CREATE TABLE IF NOT EXISTS won't add them to old databases. */
-const COLUMNS: [table: string, column: string, type: string][] = [["messages", "payload_json", "TEXT"]];
+const COLUMNS: [table: string, column: string, type: string][] = [
+  ["messages", "payload_json", "TEXT"],
+  // Runs started from a schedule (D-26): which schedule, and the due date (period) it was for.
+  ["runs", "schedule_id", "TEXT"],
+  ["runs", "schedule_period", "TEXT"],
+];
 
 function migrate(d: DatabaseSync) {
   for (const [table, column, type] of COLUMNS) {

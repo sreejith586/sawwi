@@ -4,7 +4,14 @@ import ExcelJS from "exceljs";
 // Styled like the report exports in src/lib/recon/excel.ts: bold shaded header,
 // frozen header row, header autofilter, money format with red negatives.
 
-export type SheetColumn = { header: string; key: string; type?: "text" | "number" | "money" | "date"; width?: number };
+export type SheetColumn = {
+  header: string;
+  key: string;
+  type?: "text" | "number" | "money" | "date";
+  width?: number;
+  /** Overrides the type's number format, e.g. "0.0%" or "$#,##0.0000". */
+  numFmt?: string;
+};
 
 const MONEY = "#,##0.00;[Red]-#,##0.00";
 const NUMBER = "#,##0.##;[Red]-#,##0.##";
@@ -20,7 +27,7 @@ export async function tableWorkbook(opts: { sheetName: string; columns: SheetCol
       header: c.header,
       key: c.key,
       width: c.width ?? Math.min(60, Math.max(10, longest + 2)),
-      style: c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : {},
+      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : {},
     };
   });
 
