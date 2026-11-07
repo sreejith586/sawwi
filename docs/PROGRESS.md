@@ -14,46 +14,50 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41) |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Phase 7 scope: go live on Vercel + Neon (D-37) | `phase-7-scope` | #16 | Phase 7 session |
-| Postgres everywhere: Neon via `pg`, PGlite locally (D-38) | `phase-7-postgres` | #17 (stacked on #16) | Phase 7 session |
-| Files in private Vercel Blob, direct browser uploads (D-39) | `phase-7-blob-uploads` | #18 (stacked on #17) | Phase 7 session |
-| Connector key ring: envelope encryption, rotation (D-40) | `phase-7-connector-keyring` | #19 (stacked on #18) | Phase 7 session |
-| Vercel deploy: fra1, health check, runbook (D-41) | `phase-7-vercel-deploy` | (this PR, stacked on #19) | Phase 7 session |
-| Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | (this PR) | Stripe setup session |
+| Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | #23 | Stripe setup session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Primary domain `sawwiapp.ai`** (D-43, branch `chore/domain-sawwiapp-ai`, in review).
+- **Primary domain `sawwiapp.ai`** (D-43, #23).
   - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
   - The runbook now covers the Stripe webhook destination (Your account, Snapshot, eight events).
   - **The user's part:** in Vercel, set `sawwiapp.com`, the `www` hosts and `sawwi.hypermaxsolutions.com` to redirect to `sawwiapp.ai`; set `APP_URL=https://sawwiapp.ai`; point the Stripe webhook at `https://sawwiapp.ai/api/stripe/webhook`; redeploy.
-- **Vercel deploy** (D-41, branch `phase-7-vercel-deploy`, in review).
+- **Background jobs** (D-42, #22 → merged to `main` as #24).
+  - A `jobs` table, run every 15 minutes by Vercel Cron through `/api/cron/tick` (protected by `CRON_SECRET`).
+  - Jobs are queued once per key, claimed safely, retried with backoff, and listed in Admin.
+  - First jobs: the demo store's midnight reset, cleanup of abandoned uploads, and pruning old jobs.
+  - 6 new tests.
+  - **Needs** `CRON_SECRET` in Vercel (Secret).
+- **Production is live again** (2026-11-07). The user approved merging the Phase 7 stack (#16–#20) in this session. Before the merge, every production page failed, because `main` used SQLite and Vercel's disk is read-only.
+  - Production `/api/health` reports the database ok, the files ok on Blob, and the region `fra1`.
+  - The live demo reconciles end to end in production: 9 of 10 matched, 5 exceptions, AED 779.
+  - Production environment variables were set by the user (connector key ring, superadmin, app URL, Anthropic, Stripe).
+- **Vercel deploy** (D-41, #20, merged).
   - Functions are pinned to `fra1`, next to Neon.
   - `/api/health` checks the database and the file store.
   - The `pg` SSL warning is quieted.
   - `docs/DEPLOY.md` is the runbook.
   - Checked on #18's preview: the live demo runs end to end on Neon and Blob (5 exceptions, AED 779).
-  - **Production is down until this stack is merged:** `main` still uses SQLite, which can't write on Vercel.
-- **Connector key ring** (D-40, branch `phase-7-connector-keyring`, in review).
+- **Connector key ring** (D-40, #19, merged).
   - Connection tokens use envelope encryption under named master keys from `SAWWI_CONNECTOR_KEYS`, active key first.
   - Superadmins rotate them from Admin → Connection secrets.
   - The old single key and old secrets keep working.
   - 4 new tests, including a full rotation through the database.
-- **Files in a private Vercel Blob store** (D-39, branch `phase-7-blob-uploads`, in review).
+- **Files in a private Vercel Blob store** (D-39, #18, merged).
   - Normalized tables live in Blob on Vercel and in `.data/files` locally.
   - With Blob on, uploads go from the browser straight to Blob, past Vercel's 4.5 MB request limit, using a short-lived token scoped to the run. The server then parses them and deletes the raw copies.
   - The demo reset deletes its runs' files.
   - 9 new tests use a mocked Blob SDK, and the local path was checked in the browser.
   - **Fix:** uploads, setup answers and column remaps now check role, plan and trial (`runBlocker()`), so Viewers can no longer change a run.
   - **Needs:** a live upload test on a preview. The Blob store is connected, through OIDC (`BLOB_STORE_ID`), with no long-lived token.
-- **Postgres everywhere** (D-38, branch `phase-7-postgres`, in review).
+- **Postgres everywhere** (D-38, #17, merged).
   - `node:sqlite` is gone. Production will use Neon through `pg` (`DATABASE_URL`). Locally and in tests, Sawwi runs PGlite, an in-process Postgres, so no install is needed.
   - Every store function is now async, and so are its callers. Tables are created by numbered migrations in `src/lib/db.ts`.
   - Lint now fails on a missed `await`.
@@ -61,14 +65,14 @@ _Updated in every commit. Newest first within each section._
   - Checked in the browser: the live demo, a demo-data fill, a reconciliation, and the runs, usage and connections pages.
   - Local data from before this change (`.data/sawwi.db`) is no longer read.
   - Neon is connected to the Vercel project with the "SAWWI" prefix, so `SAWWI_DATABASE_URL` is read as well as `DATABASE_URL`.
-- **Phase 7 scope: go live on Vercel + Neon** (D-37, branch `phase-7-scope`, in review). Six PRs, in order:
+- **Phase 7 scope: go live on Vercel + Neon** (D-37, #16, merged). Six PRs, in order:
   1. this scope;
   2. Postgres everywhere (Neon in production, PGlite in dev and tests, async stores);
   3. uploads in private Vercel Blob, sent from the browser straight to Blob (Vercel's 4.5 MB request cap);
   4. a connector keyring with rotation;
   5. Vercel deploy config, health check and runbook;
   6. a jobs table + Vercel Cron.
-- **Demo data for every template; Phase 6 done** (D-36, branch `phase-6-remaining-demo-data`, in review). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
+- **Demo data for every template; Phase 6 done** (D-36, #15, merged). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
 - **Chat panel opens by default on run pages** (D-34, #14, merged).
   - Where the panel can dock (64rem and up), a reconciliation opens it. A direct visit opens it before first paint.
   - Leaving the run restores your own open/closed choice; narrow screens keep it closed.
@@ -116,21 +120,16 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7 (D-37):** Postgres (D-38), Blob files (D-39), connector key ring (D-40) and deploy (D-41) in review; last the jobs table + Vercel Cron (`phase-7-jobs-cron`).
-   - **Merge the stack in order (#16 → #20) to bring production back.**
-   - Then set the production variables from `docs/DEPLOY.md`.
-   - Neon is connected (prefix "SAWWI").
-   - Blob store connected; still to do: test a large upload on #18's preview.
-   - **The user's part, when the deploy PR is ready:**
-     - a Vercel Pro team with the project linked to the repo;
-     - Neon and a private Blob store added from the Storage tab;
-     - the DNS record for sawwi.hypermaxsolutions.com;
-     - production secrets entered in Vercel.
+0. **Phase 7, last PR:** jobs + cron (D-42) in review.
+   - Add `CRON_SECRET` in Vercel (Secret) before merging.
+   - After merging, check Admin → Background jobs.
+   - Phase 7 is then done.
+   - **The user's live check:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.
 4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30).
-5. Scheduled connector pulls and emailed reminders, on top of Phase 7's jobs table (D-26, D-27, D-37).
+5. Scheduled connector pulls and emailed reminders, as new job kinds on the jobs table (D-26, D-27, D-42). Reminders need an email provider.
 
 ## Open questions
 

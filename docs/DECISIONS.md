@@ -405,6 +405,24 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Neon Free's limits (storage, compute hours, short restore window) mean upgrading before real customer data.
   - Production stays broken until this PR stack (#16–#20) is merged, because `main` still uses SQLite.
 
+### D-42: Background jobs: a jobs table run by Vercel Cron every 15 minutes
+- **Context:** D-37's last PR. The app had no way to do work without a visitor. The demo store reset on its first request after midnight (D-32), and raw uploads abandoned between the two upload requests (D-39) were never cleaned up. D-26 and D-27 deferred a job runner for scheduled pulls and emailed reminders.
+- **Decision:** option (a) from D-27: a `jobs` table in Postgres plus Vercel Cron calling a protected route.
+  - **Queueing is by unique key**, so two ticks or two instances never queue the same work twice. Periodic jobs are keyed by their period (day or hour) and queued as of the tick's own clock, so they run in that tick.
+  - **Claiming** uses `FOR UPDATE SKIP LOCKED` with a 5-minute lock. Two runners never take the same job, and a job whose runner crashed is taken again once its lock expires.
+  - **Retries:** 3 attempts, 1 and 2 minutes apart, then the job is marked failed. An unknown kind fails at once. Handlers must be idempotent.
+  - **`/api/cron/tick`** checks `Authorization: Bearer $CRON_SECRET` in constant time. It is off (503) when no secret is set. It runs jobs within a 45 s budget, and `vercel.json` schedules it every 15 minutes.
+  - **First jobs:** the demo reset (the on-request check stays as a fallback), deleting `incoming/` uploads older than an hour, and pruning finished jobs older than 30 days.
+  - Admin lists the last 15 jobs with their status, attempts and result or error.
+- **Rejected alternatives:**
+  - Inngest or another hosted queue: a new account and SDK for three small jobs.
+  - A separate worker process: Vercel doesn't run one.
+  - One cron entry per job: harder to add jobs to, and no retries or history.
+- **Consequences:**
+  - Cron runs on production deployments only, and more often than daily needs Vercel Pro.
+  - Jobs start at most 15 minutes late.
+  - The next job kinds are scheduled connector pulls and emailed reminders (D-26, D-27). Reminders also need an email provider.
+
 ### D-43: The public address is sawwiapp.ai; every other domain redirects to it
 - **Context:** the user registered `sawwiapp.com` and `sawwiapp.ai` and pointed both at the Vercel project. Both served the app directly, next to `sawwi.hypermaxsolutions.com` (D-12). Several addresses serving the same app split sign-in cookies (a session on one domain isn't sent to another), can't all be the Stripe webhook URL, and split search ranking.
 - **Decision:**
