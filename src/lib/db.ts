@@ -92,6 +92,9 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   output_tokens INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS llm_usage_run ON llm_usage (run_id);
+CREATE INDEX IF NOT EXISTS llm_usage_created ON llm_usage (created_at);
+CREATE INDEX IF NOT EXISTS runs_org ON runs (org_key, created_at);
 CREATE TABLE IF NOT EXISTS run_narratives (
   run_id TEXT PRIMARY KEY,
   result_at TEXT NOT NULL,

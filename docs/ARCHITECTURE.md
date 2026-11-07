@@ -163,6 +163,8 @@ in layers. The cheapest one comes first:
 
 Track per-run tokens (input, cache read, cache write, output) from day one so cache hit rate is visible.
 
+**Usage dashboard (Phase 6, D-25).** Settings → Usage & cost reads `llm_usage` joined to `runs` (a call belongs to its run's workspace) and shows estimated cost, tokens, cache hit rate (cache read ÷ all prompt tokens) and the share of repeat runs that asked nothing (no chip question, no mapping call), with a cost-per-day chart and breakdowns by day, purpose, model and run. Every breakdown sorts, filters and downloads as Excel (`/api/usage`). Superadmins get the same across workspaces at `/admin/usage` (`/api/admin/usage`). Prices live in `src/lib/usage/pricing.ts` (per million tokens, dated, cache writes at the 1-hour TTL); the maths is pure in `src/lib/usage/aggregate.ts`. The page makes no LLM calls and is readable by viewers.
+
 ## 6. Stack
 
 _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memory TS matching engine (D-5, D-6), exceljs and the Anthropic SDK. The original plan is below, kept for reference.
@@ -181,12 +183,12 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, `node:sqlite` store, an in-memor
 - **Roles:** owner / admin (team, profile, plan) / editor (run reconciliations) / viewer (read reports only).
 - **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
 - **Card payments (Stripe):** `/checkout/[plan]` embeds Stripe Checkout (`ui_mode: embedded_page`, subscription mode) with card, Apple Pay / Google Pay and Link. Prices come from `STRIPE_PRICE_*`; one Stripe Customer per workspace. `/checkout/return` verifies the session belongs to the workspace and applies the plan at once; `/api/stripe/webhook` (signature-verified) keeps it in sync for renewals, failed payments, cancellations and portal changes. "Manage billing" opens Stripe's billing portal. Checkout is offered only while the paywall is on; Enterprise stays a request.
-- **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend) and users, with Excel exports.
+- **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend), users and AI usage across workspaces, with Excel exports.
 - **Storage:** SQLite now (`src/lib/saas/store.ts` holds all SQL for this); port to Postgres with the rest.
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (scheduled runs below). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–5 done; Phase 6 in progress (usage dashboard, §5, merged in #5; scheduled runs below). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
 
 Phase 4 (`src/lib/insights/`):
 - **Analysis above the report.** Claude Sonnet 5.5 writes a headline, up to four findings and three next steps from a digest (`digestText`: totals, per-check counts/values and the 8 largest exceptions by key, never rows). Fetched after the report renders, then cached per result in `run_narratives`, so re-opening a run costs nothing. No API key, or a viewer opening an uncached run: the rule-based summary (`ruleNarrative`), not cached so a later key still writes one.
