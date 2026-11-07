@@ -288,3 +288,32 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Rejected alternative:** a future-dated cheque to show "Due within 30 days". A reconciliation's "as of" date is the latest date in its data, so a future cheque becomes the as-of date and reads as already due. The demo shows past-due cheques only.
 - **Consequences:** a planted duplicate shows up twice on purpose. A bill entered twice in the supplier ledger is flagged as a duplicate, and its total also differs from the statement. The same happens with the AWB billed twice in courier freight.
 
+
+### D-37: Phase 7 is "go live": Postgres on Neon, private Blob uploads, a connector keyring, deployed on Vercel
+- **Context:** Phase 6 left three candidates: a job runner, more connectors, and production readiness. Nothing has run for a real user yet. The Anthropic path and the Business Central, Shopify and Magento live checks are all waiting, and where the app is hosted decides how a job runner works. The user chose production readiness on **Vercel + Neon**.
+- **Decision:** Phase 7 makes Sawwi deployable at sawwi.hypermaxsolutions.com. It ships as six PRs, in order:
+  1. **Scope** (this entry).
+  2. **Postgres everywhere.** `node:sqlite` goes. Production uses Neon, added through the Vercel Marketplace (`DATABASE_URL`), via `pg` with a module-level `Pool` and `attachDatabasePool` from `@vercel/functions` (Fluid compute). Local dev and tests use PGlite (in-process Postgres, no Docker, no account) when `DATABASE_URL` is unset, so there's one SQL dialect. The store API becomes async. SQL stays in the store modules, and the schema stays in `src/lib/db.ts` as numbered migrations recorded in a `schema_migrations` table. No ORM.
+  3. **Uploads in private Vercel Blob** (`@vercel/blob` 2.3+, private store), behind a small file-storage interface; local disk in dev. Vercel caps a function's request body at 4.5 MB, below the 25 MB upload cap, so files go from the browser straight to Blob (client upload with a server-issued token, checked with `runBlocker()`), and the server reads them back from Blob.
+  4. **A connector keyring.** Envelope encryption: each secret gets its own data key, wrapped by a master key with a key ID. Master keys come from a sensitive Vercel environment variable (`SAWWI_CONNECTOR_KEYS`, several allowed for rotation), and a re-wrap command moves secrets to the newest key. A cloud KMS can be added later as another key provider. There is no AWS or GCP account in this plan, so none is required now.
+  5. **Vercel deploy.** Project config, a `/api/health` route (database and Blob reachable), the region chosen next to the Neon database, the full environment variable list, and a runbook (`docs/DEPLOY.md`): first deploy, domain, secrets, Stripe webhook, rollback, backups (Neon point-in-time restore).
+  6. **Jobs table + Vercel Cron.** This is the smallest job runner from D-26/D-27, option (a). It's a `jobs` table and a cron route protected by `CRON_SECRET`, which first takes over the demo store's daily reset and a sweep of due schedules. Scheduled connector pulls and emailed reminders build on it in a later phase.
+- **Needs from the user:**
+  - a Vercel Pro team (the Hobby plan is for non-commercial use and allows only daily cron), with the project linked to the GitHub repo;
+  - Neon and a private Blob store added from the project's Storage tab;
+  - the DNS record for sawwi.hypermaxsolutions.com;
+  - production secrets entered by the user in Vercel: Stripe live keys and webhook secret, `ANTHROPIC_API_KEY`, the connector keys and `CRON_SECRET`.
+
+  Agents never enter or see them.
+- **Rejected alternatives:**
+  - The Neon serverless driver (`@neondatabase/serverless`): `pg` with pooling is the fit for Vercel Fluid compute.
+  - Keeping SQLite for dev next to Postgres in production: two dialects, and production bugs found late.
+  - Docker Postgres for tests: an extra install for every contributor and in CI.
+  - Uploads as `bytea` in Postgres: it bloats the database and its backups.
+  - Public blobs: uploads are customers' financial data.
+  - An AWS KMS now: a second cloud account the user didn't choose.
+  - Building B (job runner) or C (connectors) first: B depends on the host, and C adds unverified connectors before the built ones have had a live check.
+- **Consequences:**
+  - Every store call and its callers become async, which is the largest single change of the phase.
+  - Tests run against PGlite, which is real Postgres, so SQL tested locally is the SQL that runs in production.
+  - Data residency for GCC customers (UAE, and KSA's PDPL) depends on the Vercel and Neon regions. It's an open question for the user before real customer data goes in.
