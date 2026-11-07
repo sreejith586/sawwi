@@ -2,6 +2,7 @@ import { MAX_FILES_PER_SLOT, MAX_UPLOAD_BYTES, UnsupportedFileError } from "@/li
 import { discardIncoming, IncomingError, readIncoming } from "@/lib/files/incoming";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { getOwnedRun } from "@/lib/runs/access";
+import { runBlocker } from "@/lib/saas/session";
 import { ingestFiles, RunInputError } from "@/lib/runs/engine";
 import { buildRunView } from "@/lib/runs/view";
 
@@ -21,6 +22,12 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/f
   if (isDemoOrg(owned.run.orgKey)) {
     if (json && typeof json.slot === "string") await discardIncoming(id, json.slot, json.uploads);
     return Response.json({ error: "Uploads are off in the live demo. Use “Fill with demo data”, or sign up to reconcile your own files." }, { status: 403 });
+  }
+  // A new file is new work on the run: viewers, suspended workspaces and ended trials can't (like pulls and reconciling).
+  const blocked = await runBlocker();
+  if (blocked) {
+    if (json && typeof json.slot === "string") await discardIncoming(id, json.slot, json.uploads);
+    return Response.json({ error: blocked.message }, { status: 403 });
   }
 
   let slot: unknown;

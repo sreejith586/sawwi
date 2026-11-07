@@ -32,6 +32,7 @@ _Updated in every commit. Newest first within each section._
   - With Blob on, uploads go from the browser straight to Blob, past Vercel's 4.5 MB request limit, using a short-lived token scoped to the run. The server then parses them and deletes the raw copies.
   - The demo reset deletes its runs' files.
   - 9 new tests use a mocked Blob SDK, and the local path was checked in the browser.
+  - **Fix:** uploads, setup answers and column remaps now check role, plan and trial (`runBlocker()`), so Viewers can no longer change a run.
   - **Needs:** a private Blob store connected to the Vercel project, then a live upload test on a preview.
 - **Postgres everywhere** (D-38, branch `phase-7-postgres`, in review).
   - `node:sqlite` is gone. Production will use Neon through `pg` (`DATABASE_URL`). Locally and in tests, Sawwi runs PGlite, an in-process Postgres, so no install is needed.

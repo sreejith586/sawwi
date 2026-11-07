@@ -27,9 +27,13 @@ export async function startRun(templateId: string) {
   redirect(`/runs/${run.id}`);
 }
 
+// Every action here changes the run, so all of them go through runBlocker() (role, plan,
+// trial, suspension): viewers can open reports but not answer, remap or reconcile.
 async function withRun(runId: string, fn: (run: Run, countries: Country[]) => Promise<unknown>): Promise<RunActionResult> {
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
+  const blocked = await runBlocker();
+  if (blocked) return { error: blocked.message };
   try {
     await fn(owned.run, owned.profile.countries);
   } catch (error) {
@@ -48,7 +52,5 @@ export async function setFieldColumn(runId: string, slotKey: string, fieldKey: s
 }
 
 export async function reconcileRun(runId: string): Promise<RunActionResult> {
-  const blocked = await runBlocker();
-  if (blocked) return { error: blocked.message };
   return withRun(runId, (run, countries) => runReconciliation(run, countries));
 }

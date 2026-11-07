@@ -359,6 +359,7 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     Locally, without Blob, the browser still posts multipart form data.
   - The browser checks the file type and the 25 MB total before uploading, with the server's own wording, so a refused token never shows up as a vague network error.
   - The upload limits live in `upload-paths.ts`, shared by the browser and the server.
+  - **Fixed along the way:** uploading a file, answering a setup question and remapping a column now go through `runBlocker()`, like pulls, demo fill and reconciling already did. Before, a Viewer (or a suspended workspace, or one whose trial had ended) could upload files into a run, answer its questions and change its mappings, though Viewers are meant to read reports only.
 - **Rejected alternatives:**
   - Public blobs: they're reachable by anyone with the URL, and these are financial files.
   - Streaming uploads through a function: the 4.5 MB cap.
