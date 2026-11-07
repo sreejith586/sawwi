@@ -67,9 +67,12 @@ describe("demo workspace", () => {
     await resetDemoIfDue(at("2026-11-07T00:00:05Z")); // start from a clean slate for this test
     const demoRun = await runStore.createRun(DEMO_ORG_KEY, "web-orders-vs-gateway");
     await fillRunWithDemoData(demoRun, { countries: ["AE"] });
-    const uploads = path.join(dir, "uploads", demoRun.id);
-    mkdirSync(uploads, { recursive: true });
-    writeFileSync(path.join(uploads, "x.csv"), "a,b\n");
+    // Its filled tables, plus a raw upload that was never parsed (D-39).
+    const tables = path.join(dir, "files", "runs", demoRun.id);
+    expect(existsSync(tables)).toBe(true);
+    const incoming = path.join(dir, "files", "incoming", demoRun.id);
+    mkdirSync(incoming, { recursive: true });
+    writeFileSync(path.join(incoming, "x.csv"), "a,b\n");
     const realRun = await runStore.createRun("acme", "web-orders-vs-gateway");
 
     expect(await resetDemoIfDue(at("2026-11-07T22:00:00Z"))).toBe(false); // same day: nothing happens
@@ -79,7 +82,8 @@ describe("demo workspace", () => {
     expect(await lastDemoReset()).toBe("2026-11-08T00:01:00.000Z");
     expect(await runStore.getRun(demoRun.id)).toBeUndefined();
     expect(await runStore.getRunFiles(demoRun.id)).toEqual([]);
-    expect(existsSync(uploads)).toBe(false);
+    expect(existsSync(tables)).toBe(false);
+    expect(existsSync(incoming)).toBe(false);
     expect(await runStore.getRun(realRun.id)).toBeDefined(); // other workspaces untouched
     // The workspace and its visitor survive, so open sessions keep working.
     expect((await saas.getOrgByKey(DEMO_ORG_KEY))?.id).toBe(org.id);

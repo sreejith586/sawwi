@@ -72,6 +72,6 @@ pnpm build
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
 
 Local data lives in `.data/`, which is git-ignored: the database (`.data/pglite`, an in-process
-Postgres, D-37) and uploaded files. Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon
+Postgres, D-37) and files (`.data/files`; a private Vercel Blob store when `BLOB_READ_WRITE_TOKEN` is set, D-39). Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon
 branch); tables are created on first use. The SQLite file from before Phase 7 (`.data/sawwi.db`) is
 no longer read: local data starts empty, so use the live demo or sign up again.

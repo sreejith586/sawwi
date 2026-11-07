@@ -1,6 +1,5 @@
-import { rmSync } from "node:fs";
-import path from "node:path";
-import { dataDir, getDb } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { deletePrefixes, fileKeys } from "@/lib/files/storage";
 
 // SQL for the demo store's daily reset (D-32). The wipe is generic: every table with a run_id
 // column loses the demo's runs' rows, and every table with an org_key column loses the demo's
@@ -36,6 +35,6 @@ export async function wipeOrgData(orgKey: string): Promise<Record<string, number
       if (r.changes) removed[table] = r.changes;
     }
   });
-  for (const id of runIds) rmSync(path.join(dataDir(), "uploads", id), { recursive: true, force: true });
+  await deletePrefixes(runIds.flatMap(fileKeys.runPrefixes));
   return removed;
 }

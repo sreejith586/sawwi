@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { importSources } from "@/lib/connectors/sources";
 import { isDemoOrg } from "@/lib/demo/demo";
+import { blobEnabled } from "@/lib/files/storage";
 import { getOwnedRun } from "@/lib/runs/access";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
 import { buildRunView } from "@/lib/runs/view";
@@ -22,7 +23,7 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession();
   const editor = Boolean(session && canRun(session.access));
   const sources = session && editor ? await importSources(session.org.key) : [];
-  return <RunWorkspace initial={view} sources={sources} demo={editor && isDemoOrg(session?.org.key)} />;
+  return <RunWorkspace initial={view} sources={sources} demo={editor && isDemoOrg(session?.org.key)} directUploads={blobEnabled()} />;
 }
 
 export default function RunPage(props: PageProps<"/runs/[id]">) {

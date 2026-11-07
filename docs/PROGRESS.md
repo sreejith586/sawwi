@@ -14,18 +14,25 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37, #16), Postgres everywhere (D-38) |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
 | Phase 7 scope: go live on Vercel + Neon (D-37) | `phase-7-scope` | #16 | Phase 7 session |
-| Postgres everywhere: Neon via `pg`, PGlite locally (D-38) | `phase-7-postgres` | (this PR, stacked on #16) | Phase 7 session |
+| Postgres everywhere: Neon via `pg`, PGlite locally (D-38) | `phase-7-postgres` | #17 (stacked on #16) | Phase 7 session |
+| Files in private Vercel Blob, direct browser uploads (D-39) | `phase-7-blob-uploads` | (this PR, stacked on #17) | Phase 7 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Files in a private Vercel Blob store** (D-39, branch `phase-7-blob-uploads`, in review).
+  - Normalized tables live in Blob on Vercel and in `.data/files` locally.
+  - With Blob on, uploads go from the browser straight to Blob, past Vercel's 4.5 MB request limit, using a short-lived token scoped to the run. The server then parses them and deletes the raw copies.
+  - The demo reset deletes its runs' files.
+  - 9 new tests use a mocked Blob SDK, and the local path was checked in the browser.
+  - **Needs:** a private Blob store connected to the Vercel project, then a live upload test on a preview.
 - **Postgres everywhere** (D-38, branch `phase-7-postgres`, in review).
   - `node:sqlite` is gone. Production will use Neon through `pg` (`DATABASE_URL`). Locally and in tests, Sawwi runs PGlite, an in-process Postgres, so no install is needed.
   - Every store function is now async, and so are its callers. Tables are created by numbered migrations in `src/lib/db.ts`.
@@ -89,7 +96,9 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7 (D-37):** Postgres (D-38) in review; next Blob uploads (`phase-7-blob-uploads`), then connector keyring, Vercel deploy, jobs + cron.
+0. **Phase 7 (D-37):** Postgres (D-38) and Blob files (D-39) in review; next the connector keyring (`phase-7-connector-keyring`), then Vercel deploy, jobs + cron.
+   - Neon is connected (prefix "SAWWI").
+   - Still to do: connect a private Blob store and test a large upload on a preview.
    - **The user's part, when the deploy PR is ready:**
      - a Vercel Pro team with the project linked to the repo;
      - Neon and a private Blob store added from the Storage tab;

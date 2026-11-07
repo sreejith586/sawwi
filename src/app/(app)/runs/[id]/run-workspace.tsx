@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { saveAsTemplate, sendChat } from "@/app/actions/insights";
@@ -15,6 +16,7 @@ import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
 import { chatCanDock, restoreChatOpen, setChatAttention, setChatOpen } from "@/lib/chat-panel";
 import type { ImportSource } from "@/lib/connectors/sources";
+import { incomingPath, MAX_UPLOAD_BYTES, uploadContentType, uploadExtension } from "@/lib/files/upload-paths";
 import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
 import type { RunView, SlotView } from "@/lib/runs/view";
@@ -22,7 +24,18 @@ import { MAPPING_SEARCH, mappingRows, previewFilterKeys, type MappingRow, type P
 import { Chat } from "./chat";
 import { Report } from "./report";
 
-export function RunWorkspace({ initial, sources = [], demo = false }: { initial: RunView; sources?: ImportSource[]; demo?: boolean }) {
+export function RunWorkspace({
+  initial,
+  sources = [],
+  demo = false,
+  directUploads = false,
+}: {
+  initial: RunView;
+  sources?: ImportSource[];
+  demo?: boolean;
+  /** Files go from the browser straight to the private Blob store (D-39). */
+  directUploads?: boolean;
+}) {
   const [view, setView] = useState(initial);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -112,6 +125,7 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
               templateId={view.templateId}
               sources={sources}
               noUploads={demo}
+              directUploads={directUploads}
               onView={update}
               onError={setError}
               onRemap={(field, column) => startTransition(async () => apply(await setFieldColumn(view.id, slot.key, field, column)))}
@@ -183,6 +197,7 @@ function SlotCard(props: {
   sources: ImportSource[];
   /** The demo store (D-32): shared by visitors, so files come from its demo sources only. */
   noUploads?: boolean;
+  directUploads?: boolean;
   onView: (v: RunView) => void;
   onError: (e?: string) => void;
   onRemap: (field: string, column: string | null) => void;
@@ -204,10 +219,45 @@ function SlotCard(props: {
     const timer = hasPdf ? setTimeout(() => setSlow(true), 2500) : undefined;
     props.onError(undefined);
     try {
-      const body = new FormData();
-      body.set("slot", slot.key);
-      for (const file of files) body.append("file", file);
-      const res = await fetch(`/api/runs/${props.runId}/files`, { method: "POST", body });
+      let res: Response;
+      if (props.directUploads) {
+        // The same messages the server gives, before anything is sent.
+        const unsupported = files.find((f) => !uploadExtension(f.name));
+        if (unsupported) {
+          props.onError(
+            unsupported.name.toLowerCase().endsWith(".xls")
+              ? "Old .xls files aren't supported yet. Save the file as .xlsx or .csv and upload again."
+              : "Upload a CSV, TSV, Excel (.xlsx) or PDF file.",
+          );
+          return;
+        }
+        if (files.reduce((n, f) => n + f.size, 0) > MAX_UPLOAD_BYTES) {
+          props.onError("That upload is over 25 MB. Export a shorter period, or contact us for bulk uploads.");
+          return;
+        }
+        // Straight to the private Blob store, then the server reads them from there (D-39).
+        const uploads = await Promise.all(
+          files.map(async (file, i) => {
+            const blob = await uploadToBlob(incomingPath(props.runId, slot.key, i, file.name), file, {
+              access: "private",
+              handleUploadUrl: `/api/runs/${props.runId}/uploads`,
+              contentType: uploadContentType(file.name),
+              multipart: file.size > 5 * 1024 * 1024,
+            });
+            return { pathname: blob.pathname, name: file.name };
+          }),
+        );
+        res = await fetch(`/api/runs/${props.runId}/files`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ slot: slot.key, uploads }),
+        });
+      } else {
+        const body = new FormData();
+        body.set("slot", slot.key);
+        for (const file of files) body.append("file", file);
+        res = await fetch(`/api/runs/${props.runId}/files`, { method: "POST", body });
+      }
       const json = (await res.json()) as { view?: RunView; error?: string };
       if (json.view) props.onView(json.view);
       if (json.error) props.onError(json.error);

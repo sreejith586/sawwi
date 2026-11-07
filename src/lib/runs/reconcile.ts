@@ -1,3 +1,4 @@
+import { readText } from "@/lib/files/storage";
 import type { Country } from "@/lib/profile/options";
 import { loadDataset, type Dataset } from "@/lib/recon/load";
 import { reconcile, type ReconResult } from "@/lib/recon/match";
@@ -13,7 +14,7 @@ export async function loadRunDatasets(run: Run): Promise<Map<string, Dataset>> {
   const datasets = new Map<string, Dataset>();
   for (const file of await store.getRunFiles(run.id)) {
     const slot = template.sources.find((s) => s.key === file.slotKey);
-    if (slot) datasets.set(slot.key, loadDataset(file, slot));
+    if (slot) datasets.set(slot.key, loadDataset(file, slot, await readText(file.storedPath)));
   }
   return datasets;
 }

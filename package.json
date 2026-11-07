@@ -17,6 +17,7 @@
     "@stripe/stripe-js": "10.1.0",
     "@tesseract.js-data/ara": "1.0.0",
     "@tesseract.js-data/eng": "1.0.0",
+    "@vercel/blob": "2.8.1",
     "@vercel/functions": "3.10.3",
     "exceljs": "^4.4.0",
     "jsqr": "1.4.0",

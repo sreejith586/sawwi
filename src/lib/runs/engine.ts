@@ -1,7 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import Papa from "papaparse";
-import { dataDir } from "@/lib/db";
+import { fileKeys, putFile, readText } from "@/lib/files/storage";
 import { parseUploads } from "@/lib/files/parse";
 import { profileTable, type FileProfile } from "@/lib/files/profile";
 import { assign, AUTO_ACCEPT, CONFIRM_FLOOR, scoreCandidates, type Candidate } from "@/lib/mapping/heuristic";
@@ -218,10 +216,9 @@ export async function ingestFiles(run: Run, slotKey: string, files: { name: stri
   }
   const fileName = files.length === 1 ? files[0].name : `${files[0].name} + ${files.length - 1} more`;
 
-  const dir = path.join(dataDir(), "uploads", run.id);
-  mkdirSync(dir, { recursive: true });
-  const storedPath = path.join(dir, `${slotKey}.csv`);
-  writeFileSync(storedPath, Papa.unparse({ fields: table.headers, data: table.rows }));
+  // The normalized table is what every later step reads; the raw upload isn't kept (D-39).
+  const storedPath = fileKeys.table(run.id, slotKey);
+  await putFile(storedPath, Papa.unparse({ fields: table.headers, data: table.rows }));
 
   const profile = profileTable(table);
   const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx, template.confirmColumns);
@@ -450,8 +447,8 @@ async function afterChange(run: Run, template: Template) {
   }
 }
 
-function readColumn(file: RunFile, column: string): string[] {
-  const parsed = Papa.parse<Record<string, string>>(readFileSync(file.storedPath, "utf8"), { header: true, skipEmptyLines: "greedy" });
+async function readColumn(file: RunFile, column: string): Promise<string[]> {
+  const parsed = Papa.parse<Record<string, string>>(await readText(file.storedPath), { header: true, skipEmptyLines: "greedy" });
   return parsed.data.map((r) => r[column] ?? "");
 }
 
@@ -478,8 +475,8 @@ async function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
       const fieldLabel = requireSlot(template, link.left).fields.find((f) => f.key === key.left)?.label ?? key.left;
       const result =
         key.mode === "contains"
-          ? { overlap: containmentOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []), suggestion: undefined }
-          : checkKeyOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []);
+          ? { overlap: containmentOverlap(await readColumn(left, lc), await readColumn(right, rc), key.normalize ?? []), suggestion: undefined }
+          : checkKeyOverlap(await readColumn(left, lc), await readColumn(right, rc), key.normalize ?? []);
       if (result.suggestion) {
         await store.addQuestion(run.id, null, {
           kind: "key_format",
