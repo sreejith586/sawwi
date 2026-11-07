@@ -147,3 +147,66 @@ body {
     transition: none;
   }
 }
+
+/*
+ * Right chat panel ("Ask Sawwi"), the mirror of the sidebar. Open with <html data-chat="open">;
+ * width in --chat-width (set by the inline script and the drag handle, lib/chat-panel.ts).
+ * Below 64rem it is an overlay drawer; from 64rem it docks and pushes the page over.
+ */
+.app-chat {
+  display: flex;
+  width: min(100vw, 26rem);
+  translate: 100% 0;
+  visibility: hidden;
+  transition: translate 200ms ease, visibility 200ms;
+}
+.app-chat-backdrop {
+  display: none;
+}
+[data-chat="open"] .app-chat {
+  translate: 0 0;
+  visibility: visible;
+}
+[data-chat="open"] .app-chat-backdrop {
+  display: block;
+}
+/* The general panel shows only when no page has put its own chat in the slot. */
+.app-chat-slot:empty {
+  display: none;
+}
+.app-chat-slot:not(:empty) + .app-chat-fallback {
+  display: none;
+}
+@media (width >= 64rem) {
+  .app-chat {
+    display: none;
+    width: var(--chat-width, 24rem);
+    translate: 0 0;
+    visibility: visible;
+    transition: none;
+  }
+  [data-chat="open"] .app-chat {
+    display: flex;
+  }
+  [data-chat="open"] .app-chat-backdrop {
+    display: none;
+  }
+}
+/* Red dot on the top-bar button: the run's chat needs an answer and the panel is closed. */
+.app-chat-dot {
+  display: none;
+}
+[data-chat-attention]:not([data-chat="open"]) .app-chat-dot {
+  display: block;
+}
+/* While dragging the border: no text selection, resize cursor everywhere. */
+[data-chat-resizing],
+[data-chat-resizing] * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-chat {
+    transition: none;
+  }
+}

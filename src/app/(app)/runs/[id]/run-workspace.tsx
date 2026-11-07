@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { saveAsTemplate, sendChat } from "@/app/actions/insights";
 import { answer, reconcileRun, setFieldColumn, type RunActionResult } from "@/app/actions/runs";
 import type { ChatIntent } from "@/lib/insights/chat";
 import { DemoFill } from "@/components/connectors/demo-fill";
 import { ImportFromConnection } from "@/components/connectors/import-from-connection";
 import { Pill } from "@/components/data-table";
+import { useChatPanelSlot } from "@/components/shell/chat-panel";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
+import { setChatAttention, setChatOpen } from "@/lib/chat-panel";
 import type { ImportSource } from "@/lib/connectors/sources";
 import type { PdfFileInfo } from "@/lib/pdf/types";
 import { RUN_STATUS, type StatusTone } from "@/lib/runs/status";
@@ -37,7 +40,22 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
     setError(result.error);
   };
 
-  const ask = (intent: ChatIntent) => startChat(async () => apply(await sendChat(view.id, intent)));
+  // The run's chat lives in the right-hand panel (components/shell/chat-panel.tsx). Asking
+  // something opens it, so the answer is in view.
+  const chatSlot = useChatPanelSlot();
+  const ask = (intent: ChatIntent) => {
+    setChatOpen(true);
+    startChat(async () => apply(await sendChat(view.id, intent)));
+  };
+
+  // A setup question needs an answer: open the panel on wide screens, and flag the chat button
+  // (a dot) whenever the panel is closed. Leaving the run clears the flag.
+  const questionId = view.openQuestions[0]?.id;
+  useEffect(() => {
+    if (questionId && window.matchMedia("(min-width: 64rem)").matches) setChatOpen(true);
+    setChatAttention(Boolean(questionId));
+  }, [questionId]);
+  useEffect(() => () => setChatAttention(false), []);
 
   const status = RUN_STATUS[view.status];
   const uploaded = view.slots.filter((s) => s.file).length;
@@ -54,6 +72,14 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
         {uploaded} of {view.slots.length} files uploaded
         {needed > 0 && ` · ${needed} more needed`}
         {open > 0 && ` · ${open} question${open === 1 ? "" : "s"} open`}
+        {open > 0 && (
+          <>
+            {" · "}
+            <button type="button" onClick={() => setChatOpen(true)} className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
+              Answer in the chat
+            </button>
+          </>
+        )}
       </p>
       <Steps status={view.status} />
       {error && <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
@@ -66,7 +92,7 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
       )}
 
       {view.report && <h2 className="mt-10 text-lg font-semibold tracking-tight">Inputs</h2>}
-      <div className={`${view.report ? "mt-3" : "mt-6"} grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]`}>
+      <div className={view.report ? "mt-3" : "mt-6"}>
         <div className="min-w-0 space-y-4">
           {view.slots.map((slot, i) => (
             <SlotCard
@@ -105,13 +131,17 @@ export function RunWorkspace({ initial, sources = [], demo = false }: { initial:
           )}
         </div>
 
-        <Chat
-          view={view}
-          busy={pending}
-          thinking={thinking}
-          onIntent={ask}
-          onAnswer={(qid, value) => startTransition(async () => apply(await answer(view.id, qid, value)))}
-        />
+        {chatSlot &&
+          createPortal(
+            <Chat
+              view={view}
+              busy={pending}
+              thinking={thinking}
+              onIntent={ask}
+              onAnswer={(qid, value) => startTransition(async () => apply(await answer(view.id, qid, value)))}
+            />,
+            chatSlot,
+          )}
       </div>
     </div>
   );

@@ -223,3 +223,25 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - **A cron job for the reset:** needs a job runner (D-26). Resetting on read does the same without one.
     - **Allowing AI in the demo with a quota:** possible later; the rule-based text already shows the flow.
 - **Consequences:** visitors share one store, so they can see each other's runs for up to a day. That's acceptable for invented data, and the banner says so. A visitor working at midnight UTC sees their runs vanish. The supplier and customer statement, price compliance and returns-vs-credit-notes templates still have no demo data. The demo's runs count in admin usage and lists like any workspace. Developers now try the connectors through the demo store; there's no switch to mock them in their own workspace.
+
+### D-33: The chat lives in a resizable right sidebar, the mirror of the left nav
+- **Context:** the user asked: "Open the chat agent on a right side bar similar to the left nav bar. Also allow width adjustment using mouse so the user can click and drag the left border." Before this, "Ask Sawwi" was a fixed 384px overlay opened from the top bar, with placeholder content. The real chat agent was a fixed 360px column on each reconciliation page.
+- **Decision:**
+  - **One right-hand panel in the app shell** (`components/shell/chat-panel.tsx`), opened and closed from the top bar's chat button.
+    - From 64rem it docks: full height and sticky, pushing the page over like the left sidebar does.
+    - Below 64rem it is an overlay drawer with a backdrop, and Escape closes it, as the left nav does on phones.
+    - Open/closed and the width live on `<html>` (`data-chat`, `--chat-width`) and in localStorage. An inline script restores them before first paint (`lib/chat-panel.ts`, same pattern as the sidebar and theme), so the panel never jumps on load.
+  - **Resizing:** the user drags the panel's left border.
+    - The width stays between 300 and 720 px, and never takes more than 60% of the window.
+    - Double-click resets it to 384 px.
+    - The border is also a focusable `separator`: Left and Right arrows change it by 24 px, and Home / End go to the maximum and minimum.
+  - **A reconciliation's chat goes into the panel** through a portal into `#chat-panel-slot`, so its state stays in the run page. The page itself uses the full width. On other pages the general Ask Sawwi panel shows, still a placeholder.
+    - When a run has a setup question, the panel opens on wide screens, and the chat button shows a red dot whenever the panel is closed.
+    - Clicking "Explain" or a follow-up opens the panel.
+    - The question count under the title has an "Answer in the chat" link.
+- **Rejected alternatives:**
+  - **Keeping the run chat in its page column alongside a separate panel:** two chats side by side, and less room for the report.
+  - **A resize library:** pointer events and one CSS variable are enough.
+  - **Width in React state:** it would flash the default width before hydration, and layouts would re-render while dragging.
+- **Consequences:** on a run page the chat is closed until the user opens it, unless a question is waiting, so it no longer takes 360 px by default. On narrow screens it covers the page while open.
+

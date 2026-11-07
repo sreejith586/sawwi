@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { ChatPanel } from "@/components/shell/chat-panel";
 import { ActiveNavItems, NavItems, Sidebar } from "@/components/shell/sidebar";
 import { SettingsMenu, SettingsMenuSkeleton } from "@/components/shell/settings-menu";
 import { PlanBanner } from "@/components/shell/plan-banner";
@@ -6,7 +7,7 @@ import { TopBar } from "@/components/shell/top-bar";
 import { labelOf, ROLES } from "@/lib/profile/options";
 import { getCurrentSession } from "@/lib/saas/session";
 
-// Signed-in app: left sidebar + top bar around every page except onboarding.
+// Signed-in app: left sidebar, top bar and the right chat panel around every page except onboarding.
 
 async function AccountMenu() {
   const session = await getCurrentSession();
@@ -55,6 +56,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </Suspense>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8 sm:py-10">{children}</main>
       </div>
+      <ChatPanel />
     </div>
   );
 }
