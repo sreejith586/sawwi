@@ -14,7 +14,7 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40) |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41) |
 
 ## In flight
 
@@ -23,11 +23,19 @@ _Updated in every commit. Newest first within each section._
 | Phase 7 scope: go live on Vercel + Neon (D-37) | `phase-7-scope` | #16 | Phase 7 session |
 | Postgres everywhere: Neon via `pg`, PGlite locally (D-38) | `phase-7-postgres` | #17 (stacked on #16) | Phase 7 session |
 | Files in private Vercel Blob, direct browser uploads (D-39) | `phase-7-blob-uploads` | #18 (stacked on #17) | Phase 7 session |
-| Connector key ring: envelope encryption, rotation (D-40) | `phase-7-connector-keyring` | (this PR, stacked on #18) | Phase 7 session |
+| Connector key ring: envelope encryption, rotation (D-40) | `phase-7-connector-keyring` | #19 (stacked on #18) | Phase 7 session |
+| Vercel deploy: fra1, health check, runbook (D-41) | `phase-7-vercel-deploy` | (this PR, stacked on #19) | Phase 7 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Vercel deploy** (D-41, branch `phase-7-vercel-deploy`, in review).
+  - Functions are pinned to `fra1`, next to Neon.
+  - `/api/health` checks the database and the file store.
+  - The `pg` SSL warning is quieted.
+  - `docs/DEPLOY.md` is the runbook.
+  - Checked on #18's preview: the live demo runs end to end on Neon and Blob (5 exceptions, AED 779).
+  - **Production is down until this stack is merged:** `main` still uses SQLite, which can't write on Vercel.
 - **Connector key ring** (D-40, branch `phase-7-connector-keyring`, in review).
   - Connection tokens use envelope encryption under named master keys from `SAWWI_CONNECTOR_KEYS`, active key first.
   - Superadmins rotate them from Admin → Connection secrets.
@@ -103,7 +111,9 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7 (D-37):** Postgres (D-38), Blob files (D-39) and connector key ring (D-40) in review; next the Vercel deploy PR (`phase-7-vercel-deploy`), then jobs + cron.
+0. **Phase 7 (D-37):** Postgres (D-38), Blob files (D-39), connector key ring (D-40) and deploy (D-41) in review; last the jobs table + Vercel Cron (`phase-7-jobs-cron`).
+   - **Merge the stack in order (#16 → #20) to bring production back.**
+   - Then set the production variables from `docs/DEPLOY.md`.
    - Neon is connected (prefix "SAWWI").
    - Blob store connected; still to do: test a large upload on #18's preview.
    - **The user's part, when the deploy PR is ready:**
@@ -120,7 +130,9 @@ _Updated in every commit. Newest first within each section._
 ## Open questions
 
 - **Demo store:** shared by all visitors (they can see each other's runs until the daily reset), with uploads and AI off. Do you want a private sandbox per visitor, or a small AI quota in the demo, instead?
-- **Hosting region and data residency:** which Vercel and Neon region (closest to the GCC)? Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in (D-37).
+- **Data residency:** the database and functions are in Frankfurt (D-41). Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in.
+- **Neon plan:** Free for now. Upgrade before real customer data (storage, compute hours, restore window).
+- **Vercel plan:** the team is on a Pro trial. Keep Pro after the trial (commercial use, cron).
 - **Email provider** for reminders, once the jobs table exists: Resend, Postmark or SES, plus DNS for a sending domain.
 - **Shopify live test:** needs a store and a custom-app token from the user. Should Sawwi also get a public Shopify app (OAuth, one-click install)?
 - **Business Central live test:** needs the design partner's IT to register an Entra app and enable it in BC (D-29). Which environment (Sandbox first?) and company? Do they want customer/vendor ledger entries too? Those need a small AL extension (custom API page), since API v2.0 has none.

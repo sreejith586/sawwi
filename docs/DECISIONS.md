@@ -387,3 +387,19 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Re-encrypting with one new key and no ids: a deploy gap would leave secrets unreadable.
   - A command-line rotation script: there's no shell on Vercel.
 - **Consequences:** env-held master keys are only as safe as the Vercel project's environment settings, so production keys must be marked Sensitive. Losing every key that a secret is sealed under means those connections must be re-added.
+
+### D-41: Deploying on Vercel: functions in Frankfurt next to Neon, a health check, a runbook
+- **Context:** D-37's fifth PR. The Vercel project already existed, and production (`main`, still SQLite) was failing on every page: `mkdir /var/task/.data` fails on Vercel's read-only disk. Neon (`neon-sawwi`, Frankfurt, Free plan) and a private Blob store (`sawwi-blob`, signed in through OIDC) are connected for Production and Preview, with the "SAWWI" prefix. The team is on a Vercel Pro trial.
+- **Decision:**
+  - **Region:** functions run in `fra1` (`vercel.json`), the same region as the Neon database. A page makes several sequential queries, and a cross-region round trip on each would cost more than the distance to the Gulf.
+  - **Health check:** `/api/health` is public and uncached. It reports only ok/failing for the database and the file store, plus which store and region, never error details. Uptime checks and the runbook use it.
+  - **`pg` SSL:** a Neon URL's `sslmode=require` is rewritten to `verify-full`. That's what `pg` already does, but it warns about it on every cold start.
+  - **Runbook:** `docs/DEPLOY.md` lists what production needs, every environment variable per environment, how to ship and check a change, how to roll back, and how to restore.
+  - **Schema migrations stay additive,** because a rollback doesn't undo them and the old deployment serves against the new schema until promotion.
+- **Rejected alternatives:**
+  - A region nearer the Gulf with the database in Frankfurt: every query would cross regions.
+  - Moving Neon to a Gulf region: there's no Neon region in the GCC. The UAE and KSA data-residency question stays open.
+- **Consequences:**
+  - Gulf users get roughly 100 ms extra latency per page.
+  - Neon Free's limits (storage, compute hours, short restore window) mean upgrading before real customer data.
+  - Production stays broken until this PR stack (#16–#20) is merged, because `main` still uses SQLite.

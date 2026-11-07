@@ -3,7 +3,7 @@
 Reconciliation for e-commerce sellers in the GCC: marketplace sellers, own webstores (Shopify,
 Magento 1 & 2, WooCommerce, Salla, Zid) and companies selling directly to businesses.
 
-Product and architecture plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Where things stand: [docs/PROGRESS.md](docs/PROGRESS.md). Why: [docs/DECISIONS.md](docs/DECISIONS.md). How to contribute (PRs, docs in every commit): [docs/PROCESS.md](docs/PROCESS.md).
+Product and architecture plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Deploying: [docs/DEPLOY.md](docs/DEPLOY.md). Where things stand: [docs/PROGRESS.md](docs/PROGRESS.md). Why: [docs/DECISIONS.md](docs/DECISIONS.md). How to contribute (PRs, docs in every commit): [docs/PROCESS.md](docs/PROCESS.md).
 
 ## Run locally
 

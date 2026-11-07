@@ -199,6 +199,10 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via
 - **Uploads.** Vercel caps a function's request body at 4.5 MB, below the 25 MB upload limit. With Blob on, the run page uploads each file straight to Blob (`@vercel/blob/client`, multipart above 5 MB) using a presigned URL from `/api/runs/[id]/uploads` (`handleUploadPresigned` + `issueSignedToken`). That route checks the run belongs to the workspace, runs `runBlocker()`, refuses the demo store, and signs a 10-minute `put`-only token for one path in the run's `incoming/` folder, limited to the upload types and 25 MB. The page then posts `{ slot, uploads }` to `/api/runs/[id]/files`, which only accepts that run's slot folder, re-checks the total size, parses, and deletes the raw copies whatever happens. Locally, files are posted as multipart form data, as before.
 - **Deleting.** The demo store's daily reset deletes its runs' `runs/` and `incoming/` folders. Raw uploads abandoned between the two requests are cleaned up by the jobs runner (Phase 7, PR 6).
 
+## 6d. Deployment (Phase 7, D-41)
+
+Vercel project `hypermax-solutions/sawwi`, functions in `fra1` (`vercel.json`) next to the Neon database. `/api/health` reports whether the database and file store answer. Everything else (what production needs, environment variables, shipping, rollback, restore) is in `docs/DEPLOY.md`.
+
 ## 7. Build phases
 
 Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–6 done (Phase 6: usage dashboard §5, scheduled runs, connectors and the demo store §9, chat panel). Phase 7 (D-37) is in progress: go live on Vercel + Neon (Postgres everywhere with PGlite in dev and tests, private Blob uploads, connector keyring, deploy, jobs table + Vercel Cron). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
