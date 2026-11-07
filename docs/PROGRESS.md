@@ -14,19 +14,22 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: live on sawwi.hypermaxsolutions.com. Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20). Last: jobs table + Vercel Cron (D-42) in review |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Docs: Phase 7 stack merged, production live | `phase-7-docs-merged` | #21 | Phase 7 session |
-| Background jobs: jobs table + Vercel Cron (D-42) | `phase-7-jobs-cron` | (this PR, stacked on #21) | Phase 7 session |
+| Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | #23 | Stripe setup session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Background jobs** (D-42, branch `phase-7-jobs-cron`, in review).
+- **Primary domain `sawwiapp.ai`** (D-43, #23).
+  - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
+  - The runbook now covers the Stripe webhook destination (Your account, Snapshot, eight events).
+  - **The user's part:** in Vercel, set `sawwiapp.com`, the `www` hosts and `sawwi.hypermaxsolutions.com` to redirect to `sawwiapp.ai`; set `APP_URL=https://sawwiapp.ai`; point the Stripe webhook at `https://sawwiapp.ai/api/stripe/webhook`; redeploy.
+- **Background jobs** (D-42, #22 → merged to `main` as #24).
   - A `jobs` table, run every 15 minutes by Vercel Cron through `/api/cron/tick` (protected by `CRON_SECRET`).
   - Jobs are queued once per key, claimed safely, retried with backoff, and listed in Admin.
   - First jobs: the demo store's midnight reset, cleanup of abandoned uploads, and pruning old jobs.
