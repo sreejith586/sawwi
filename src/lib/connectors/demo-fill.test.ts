@@ -55,6 +55,7 @@ const EXPECTED: Record<string, string[]> = {
     "amount_mismatch: 000000103", "amount_mismatch: 000000108", "duplicate_posting: 000000103 / 305.00", "not_posted: 000000106",
     "vat_mismatch: 000000103", "vat_mismatch: 000000108",
   ],
+  "web-erp-stock": ["hidden_stock: SND-42", "not_in_erp: OUD-100", "overselling: OUD-50"],
   "b2b-cash-application": ["overdue: SI-3102", "overdue: SI-3104", "overdue: SI-3105", "overdue: SI-3106", "short_paid: SI-3103", "unapplied_receipt: TT REF 88213 MARINA FM"],
   "b2b-order-delivery-invoice": ["invoiced_not_delivered: LED-40", "open_orders: SO-1043 / CBL-25", "qty_mismatch: SSH-2103 / AC-18K"],
   // Marketplace templates: one invented seller (MP-10xx orders, two October settlements).
@@ -115,7 +116,7 @@ describe("Fill with demo data", () => {
   it("keeps the two Business Central companies' reports apart (D-52)", async () => {
     const sources = await importSources(DEMO_ORG_KEY);
     const reports = (id: string) => sources.find((s) => s.connectionId === id)!.reports.map((r) => r.id);
-    expect(reports("demo:business-central-store")).toEqual(["web_sales_invoices", "web_sales_credit_memos"]);
+    expect(reports("demo:business-central-store")).toEqual(["web_sales_invoices", "web_sales_credit_memos", "items"]);
     expect(reports("demo:business-central")).not.toContain("web_sales_invoices");
     expect(reports("demo:business-central")).toContain("sales_invoices");
     const run = await runStore.createRun(DEMO_ORG_KEY, "b2b-cash-application");

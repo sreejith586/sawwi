@@ -16,6 +16,10 @@ import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
 //   - 000000106: never posted (only a draft exists).
 //   - 000000108: a 15.00 goodwill refund posted as 20.00.
 //
+//  Items (web-erp-stock): the store's SKUs with their inventory, plus GIFT-BOX, which isn't sold
+//  online. Against Magento's stock: OUD-50 holds 4 (Magento sells 10), SND-42 holds 20 (Magento
+//  sells 15), and Magento's OUD-100 isn't an item here.
+//
 // It is kept apart from "Sawwi Demo Trading LLC" so the B2B demo results don't change.
 
 type Doc = Record<string, unknown>;
@@ -60,7 +64,19 @@ function webCreditMemo(number: string, orderInc: string, over: { total?: number;
   };
 }
 
+function item(number: string, displayName: string, inventory: number, unitPrice: number, type = "Inventory"): Doc {
+  return { id: guid(), number, displayName, type, inventory, baseUnitOfMeasureCode: "PCS", unitPrice, priceIncludesTax: true, blocked: false, gtin: "" };
+}
+
 export const DEMO_STORE_DATA: Record<string, Doc[]> = {
+  items: [
+    item("ABY-BLK-M", "Classic black abaya, M", 12, 420),
+    item("GIFT-BOX", "Gift box (showroom only)", 50, 15),
+    item("MAT-01", "Travel prayer mat", 30, 75),
+    item("OUD-50", "Oud perfume 50 ml", 4, 285),
+    item("SND-42", "Leather sandals, 42", 20, 199),
+    item("SHIP-STD", "Standard delivery", 0, 20, "Service"),
+  ],
   salesInvoices: [
     webInvoice("PSI-W1001", "000000101"),
     webInvoice("PSI-W1002", "000000102", { email: "guest@example.com", name: "Web guest" }),

@@ -37,7 +37,12 @@ describe("SEO pages (D-47)", () => {
       expect(`${s.title} · Sawwi`.length, s.slug).toBeLessThanOrEqual(65);
       expect(s.description.length, s.slug).toBeLessThanOrEqual(160);
       expect(s.faqs.length).toBeGreaterThan(0);
-      if (s.dataIn.connector) expect(Object.keys(CONNECTOR_COVERAGE)).toContain(s.dataIn.connector);
+      expect(new Set(s.templates).size, `${s.slug}: a template listed twice`).toBe(s.templates.length);
+      if (s.dataIn.connector) {
+        expect(Object.keys(CONNECTOR_COVERAGE)).toContain(s.dataIn.connector);
+        // A connector's page lists every template its connector fills.
+        for (const id of Object.keys(CONNECTOR_COVERAGE[s.dataIn.connector])) expect(s.templates, `${s.slug} should list ${id}`).toContain(id);
+      }
     }
     // The ones the brief named.
     for (const slug of ["magento-2", "dynamics-365-business-central", "shopify", "amazon-settlement", "noon-settlement", "bank", "payment-gateway", "cash-on-delivery", "bnpl"]) expect(slugs).toContain(slug);

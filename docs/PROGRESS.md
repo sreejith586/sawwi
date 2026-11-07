@@ -28,9 +28,16 @@ _Updated in every commit. Newest first within each section._
 | Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 | Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
-| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | this PR | Magento↔BC session |
+| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
+| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Store stock vs. ERP inventory** (D-54, `feature/magento-bc-stock`, PR 3 of the stack, based on PR 2).
+  - New template `web-erp-stock`: Magento's sellable quantity per SKU (summed over in-stock sources) against Business Central's item inventory. Flags overselling, stock hidden from the store, and SKUs Business Central doesn't know.
+  - Magento connector: new `source_items` report (Multi-Source Inventory, current stock). Business Central connector: new `items` report (inventory and unit price), the first undated report.
+  - Demo: the store company's items and two Magento sources; the template fills in one click and finds its 3 planted exceptions.
+  - 1 new test, 2 extended. A new SEO test checks each connector page lists every template its connector fills, with no duplicates; it found the Business Central page missing "B2B invoices vs. payment release", now listed.
 
 - **Store refunds vs. ERP credit notes** (D-53, `feature/magento-bc-credit-memos`, PR 2 of the stack, based on PR 1).
   - New template `web-erp-credit-memos`: every Magento credit memo should be a posted Business Central credit memo, once, for the same amount and VAT. Matched on the order number.

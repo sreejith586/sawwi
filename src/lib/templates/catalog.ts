@@ -834,6 +834,47 @@ export const TEMPLATES: Template[] = [
     ],
     outputs: ["Refunds missing from the ERP", "Duplicate credit notes to reverse", "Amount and VAT differences"],
   },
+  {
+    id: "web-erp-stock",
+    title: "Store stock vs. ERP inventory",
+    summary: "Compare what your webstore offers for sale per SKU with the inventory your ERP holds: catch overselling and stock hidden from shoppers.",
+    group: "webstore",
+    frequency: "daily",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["fulfilment", "owner", "finance"],
+    sources: [
+      {
+        key: "erp_stock",
+        label: "ERP item inventory",
+        description: "Your ERP's items with the quantity on hand right now.",
+        examples: ["Business Central items (inventory)", "Odoo stock on hand", "Zoho Inventory items"],
+        fields: [SKU, f("description", "Description", "text"), f("erp_qty", "Inventory", "number", true)],
+      },
+      {
+        key: "store_stock",
+        label: "Webstore stock by source",
+        description: "The quantity your store can sell per SKU, one row per stock location if there are several.",
+        examples: ["Magento 2 MSI source items", "Shopify inventory levels", "WooCommerce stock export"],
+        fields: [SKU, f("source", "Source", "text"), f("store_qty", "Sellable quantity", "number", true)],
+      },
+    ],
+    links: [
+      {
+        left: "erp_stock",
+        right: "store_stock",
+        keys: [{ left: "sku", right: "sku", normalize: ["trim", "upper"] }],
+        cardinality: "one_to_many",
+        amount: { left: "erp_qty", right: "store_qty", tolerance: 0 },
+      },
+    ],
+    checks: [
+      { id: "overselling", label: "Store sells more than you hold", description: "The store offers more units than the ERP has on hand, so shoppers can buy stock you don't have.", rule: { kind: "compare", link: 0, direction: "right_higher" } },
+      { id: "hidden_stock", label: "Stock hidden from the store", description: "The ERP holds more than the store offers: a source set out of stock, or a sync that didn't run.", rule: { kind: "compare", link: 0, direction: "left_higher" } },
+      { id: "not_in_erp", label: "Sold online, unknown to the ERP", description: "The store has sellable stock for a SKU the ERP doesn't have, so its sales can't be posted.", rule: { kind: "unmatched_right", link: 0, where: { field: "store_qty", pattern: "[1-9]" } } },
+      { id: "not_in_store", label: "In the ERP, not in the store", description: "An ERP item with stock that the store doesn't list. Fine for items you don't sell online." },
+    ],
+    outputs: ["Oversold SKUs to fix first", "Stock to release to the store", "SKUs missing on either side"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",

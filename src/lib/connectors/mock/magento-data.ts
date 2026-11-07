@@ -123,3 +123,18 @@ export const DEMO_SHIPMENTS: Doc[] = [
 ];
 
 export const DEMO_STORE_CONFIGS: Doc[] = [{ id: 1, code: "default", website_id: 1, locale: "en_US", base_currency_code: "AED", default_display_currency_code: "AED", timezone: "Asia/Dubai", weight_unit: "kgs", base_url: "https://demo-store.sawwi-mock.example/" }];
+
+// Multi-Source Inventory: two sources, the Dubai warehouse ("default") and a Sharjah shop
+// ("shj"). Planted against the demo store's Business Central items (web-erp-stock, D-54):
+//  - OUD-50: 10 sellable, Business Central holds 4 (overselling).
+//  - SND-42: the Sharjah shop's 5 are set out of stock, so 15 sellable against 20 (hidden stock).
+//  - OUD-100: in the store, unknown to Business Central.
+export const DEMO_SOURCE_ITEMS: Doc[] = [
+  { sku: "ABY-BLK-M", source_code: "default", quantity: 12, status: 1 },
+  { sku: "MAT-01", source_code: "default", quantity: 18, status: 1 },
+  { sku: "MAT-01", source_code: "shj", quantity: 12, status: 1 },
+  { sku: "OUD-100", source_code: "default", quantity: 6, status: 1 },
+  { sku: "OUD-50", source_code: "default", quantity: 10, status: 1 },
+  { sku: "SND-42", source_code: "default", quantity: 15, status: 1 },
+  { sku: "SND-42", source_code: "shj", quantity: 5, status: 0 },
+];
