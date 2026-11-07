@@ -45,7 +45,7 @@ async function Connections() {
               <AddConnection connectors={connectors} />
             ) : (
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted">
-                Connections are switched off on this server: it needs an encryption key for stored tokens (<code>SAWWI_CONNECTOR_KEY</code>, see the
+                Connections are switched off on this server: it needs an encryption key for stored tokens (<code>SAWWI_CONNECTOR_KEYS</code>, see the
                 README).
               </p>
             )}

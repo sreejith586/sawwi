@@ -4,6 +4,8 @@ import { planById } from "@/lib/saas/plans";
 import { requireSuperadminPage } from "@/lib/saas/admin";
 import { orgRows } from "@/lib/saas/admin-rows";
 import { getSettings, listOpenRequests, listOrgsForAdmin, listUsersForAdmin } from "@/lib/saas/store";
+import { keyringStatus } from "@/lib/connectors/keyring";
+import { ConnectorKeys } from "./connector-keys";
 import { PlatformControls, UpgradeRequests } from "./platform-controls";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -16,6 +18,7 @@ async function Overview() {
   const orgs = await listOrgsForAdmin();
   const users = await listUsersForAdmin();
   const requests = await listOpenRequests();
+  const keys = await keyringStatus();
   const rows = orgRows(orgs);
   const onTrial = rows.filter((o) => o.trialState === "Active").length;
   const trialEnded = rows.filter((o) => o.trialState === "Ended").length;
@@ -43,6 +46,14 @@ async function Overview() {
         <p className="mt-0.5 text-sm text-muted">No payment provider is connected yet, so plans are switched here once payment is arranged.</p>
         <div className="mt-3">
           <UpgradeRequests requests={requests.map((r) => ({ id: r.id, org: r.orgName, requester: r.requester, plan: planById(r.plan).name, createdAt: day(r.createdAt) }))} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold">Connection secrets</h2>
+        <p className="mt-0.5 text-sm text-muted">Connection tokens are encrypted at rest under a named key; rotate it here.</p>
+        <div className="mt-3">
+          <ConnectorKeys status={keys} />
         </div>
       </section>
     </div>

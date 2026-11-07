@@ -324,7 +324,10 @@ async function open(): Promise<Driver> {
     const { default: pg } = await import("pg");
     pg.types.setTypeParser(INT8, Number);
     pg.types.setTypeParser(NUMERIC, Number);
-    const pool = new pg.Pool({ connectionString: url, max: Number(process.env.SAWWI_DB_POOL ?? 5) });
+    // Neon's URLs say sslmode=require, which pg already treats as verify-full (and warns about on
+    // every cold start). Say verify-full outright: Neon's certificates are publicly trusted.
+    const connectionString = url.replace(/([?&]sslmode=)(prefer|require|verify-ca)\b/, "$1verify-full");
+    const pool = new pg.Pool({ connectionString, max: Number(process.env.SAWWI_DB_POOL ?? 5) });
     if (process.env.VERCEL) {
       // Fluid compute reuses warm instances: close idle connections before one is suspended.
       const { attachDatabasePool } = await import("@vercel/functions");
