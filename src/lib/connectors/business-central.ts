@@ -216,6 +216,19 @@ export const BC_REPORTS: ReportSpec[] = [
     ],
   },
   {
+    id: "web_sales_credit_memos",
+    label: "Posted sales credit memos for web refunds",
+    description: "Posted sales credit memos in the period that carry a web store order number (External Document No.), with the customer's e-mail, VAT and total.",
+    slots: ["web-erp-credit-memos/erp_credit_notes"],
+    entity: "salesCreditMemos",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    columns: ["Posted credit memo no.", "Store order no. (external document no.)", "Posting date", "Credit memo date", "Applies-to invoice no.", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Credit amount incl. VAT", "Status"],
+    rows: (d, { lcy }) => [
+      [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.creditMemoDate), str(d.invoiceNumber), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
     id: "sales_order_lines",
     label: "Sales order lines (open orders)",
     description: "Lines of sales orders dated in the period that are still open. Business Central deletes an order once it is fully invoiced.",

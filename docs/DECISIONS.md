@@ -562,3 +562,15 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Comparing customer names: BC copies the name from the customer card, and Magento guests have none. E-mail is set per document and is what connectors carry over. If a business posts every web order to one generic customer with one e-mail, this check will flag every order and should be ignored; that is noted on the check.
   - Magento orders as the left side: unpaid or undelivered orders aren't owed an invoice yet and would show as "not synced".
 - **Consequences:** 24 templates. The Magento connector has four reports, Business Central nine. Public pages for Magento 2 and Business Central list the new template and report; the connector-claims test checks both. Live checks with the design partner's tenant and store still wait for the user.
+
+### D-53: Store refunds vs. ERP credit notes
+- **Context:** PR 2 of the Magento ↔ Business Central stack (D-52): every Magento refund should be posted in BC as a credit memo for the same amount.
+- **Decision:**
+  - New template `web-erp-credit-memos`, built like `web-erp-invoices`: Magento credit memos against BC posted sales credit memos, matched on the order number (leading zeros stripped), many-to-many so several refunds on one order sum.
+  - **Key is the order number, not the credit memo number.** Magento numbers orders and credit memos in separate series that overlap (order 000000103, credit memo 000000103 are different documents), so trying the credit memo number first could pair the wrong documents. Web connectors that post refunds commonly carry the order number to External Document No.
+  - New Magento report `credit_memos`: one row per credit memo with subtotal, shipping refunded, adjustment, VAT and total. The item-level `credit_memo_lines` stays for refunds vs. returns; an adjustment-only refund (no items) appears only in the new report.
+  - New BC report `web_sales_credit_memos`: posted `salesCreditMemos` with a store order number in External Document No., plus the sell-to e-mail.
+  - **Checks:** not posted, posted twice (same order and amount), amount and VAT differences (0.05). "Credit note without a store refund" is listed for review, for the same reason as D-52.
+  - **Demo:** order 108 gets a 15.00 goodwill refund, offline as store credit with no items (so refunds vs. returns and the card gateway file are unaffected; the gateway template still flags 108 as before). In the store company: 103's refund posted twice, 106's only as a draft, 108's posted as 20.00.
+- **Rejected alternatives:** matching on the credit memo number with the order number as fallback (`combine: "or"`): see the overlapping series above. Comparing customer e-mail here too: refunds go back to the customer of the order, which `web-erp-invoices` already checks.
+- **Consequences:** 25 templates. Magento has five reports, Business Central ten.

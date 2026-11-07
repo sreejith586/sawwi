@@ -21,9 +21,9 @@ const base: Profile = {
 const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
 
 describe("template catalogue", () => {
-  it("has 24 templates with unique ids", () => {
-    expect(TEMPLATES).toHaveLength(24);
-    expect(new Set(ids(TEMPLATES)).size).toBe(24);
+  it("has 25 templates with unique ids", () => {
+    expect(TEMPLATES).toHaveLength(25);
+    expect(new Set(ids(TEMPLATES)).size).toBe(25);
   });
 
   it("links only declared slots and fields", () => {

@@ -27,9 +27,16 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
-| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | this PR | Magento↔BC session |
+| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
+| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Store refunds vs. ERP credit notes** (D-53, `feature/magento-bc-credit-memos`, PR 2 of the stack, based on PR 1).
+  - New template `web-erp-credit-memos`: every Magento credit memo should be a posted Business Central credit memo, once, for the same amount and VAT. Matched on the order number.
+  - Magento connector: new `credit_memos` report (totals, with shipping and adjustment refunds). Business Central connector: new `web_sales_credit_memos` report.
+  - Demo: a 15.00 goodwill refund on order 108 (store credit, no items); the store company posts 103's refund twice, leaves 106's as a draft and posts 108's as 20.00. The template fills in one click and finds its 6 planted exceptions; the other demo results are unchanged.
+  - 2 new tests, 2 extended.
 
 - **Store invoices vs. ERP posted invoices** (D-52, `feature/magento-bc-invoices`, PR 1 of the Magento ↔ Business Central stack).
   - New template `web-erp-invoices`: every Magento invoice should be a posted Business Central invoice, once, with the same total, VAT and customer e-mail. Flags orders never synced, orders posted twice, total, VAT and customer differences; "posted without a store invoice" is listed for review.

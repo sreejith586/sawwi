@@ -55,7 +55,7 @@ export const DEMO_ORDERS: Doc[] = [
   order(105, "000000105", "2026-10-09 14:02:11", "canceled", "cashondelivery", [["MAT-01", 2]]),
   order(106, "000000106", "2026-10-12 09:55:27", "complete", "stripe_payments", [["SND-42", 1], ["OUD-50", 1]], { total_refunded: 199 }),
   order(107, "000000107", "2026-10-15 17:31:09", "processing", "cashondelivery", [["ABY-BLK-M", 1]]),
-  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]]),
+  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]], { total_refunded: 15 }),
   order(109, "000000109", "2026-10-26 20:20:20", "processing", "tabby_installments", [["OUD-50", 1], ["SND-42", 1]]),
   order(110, "000000110", "2026-10-31 23:59:00", "pending", "stripe_payments", [["MAT-01", 1]]),
   order(111, "000000111", "2026-11-01 00:10:00", "pending", "cashondelivery", [["SND-42", 1]]),
@@ -81,19 +81,26 @@ export const DEMO_INVOICES: Doc[] = [
   // 107 (COD, not delivered), 109 (Tabby, not captured) and 110 (pending) have no invoice yet.
 ];
 
-function memo(entity: number, inc: string, orderId: number, created: string, lines: Line[], adjustment = 0): Doc {
+function memo(entity: number, inc: string, orderId: number, created: string, lines: Line[], extra: { shipping?: number; adjustment?: number } = {}): Doc {
   const items = lines.map(([sku, qty], i) => {
     const incl = PRODUCTS[sku].price * qty;
     const tax = r2((incl * 5) / 105);
     return { entity_id: entity * 10 + i, sku, name: PRODUCTS[sku].name, qty, price: r2(PRODUCTS[sku].price - (PRODUCTS[sku].price * 5) / 105), row_total: r2(incl - tax), tax_amount: tax, discount_amount: 0 };
   });
-  const grand = r2(lines.reduce((a, [sku, qty]) => a + PRODUCTS[sku].price * qty, 0) + adjustment);
-  return { entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, order_currency_code: "AED", grand_total: grand, adjustment, items };
+  const shipping = extra.shipping ?? 0;
+  const adjustment = extra.adjustment ?? 0;
+  const grand = r2(lines.reduce((a, [sku, qty]) => a + PRODUCTS[sku].price * qty, 0) + shipping + adjustment);
+  return {
+    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, order_currency_code: "AED",
+    subtotal: r2(items.reduce((a, i) => a + i.row_total, 0)), tax_amount: r2(items.reduce((a, i) => a + i.tax_amount, 0) + (shipping * 5) / 105), shipping_amount: shipping, // adjustments carry no VAT discount_amount: 0,
+    adjustment, adjustment_positive: Math.max(adjustment, 0), adjustment_negative: Math.max(-adjustment, 0), grand_total: grand, items,
+  };
 }
 
 export const DEMO_CREDIT_MEMOS: Doc[] = [
-  memo(501, "000000501", 103, "2026-10-08 10:00:00", [["OUD-50", 1]], 20), // full refund incl. 20 shipping
+  memo(501, "000000501", 103, "2026-10-08 10:00:00", [["OUD-50", 1]], { shipping: 20 }), // full refund incl. 20 shipping
   memo(502, "000000502", 106, "2026-10-19 15:45:00", [["SND-42", 1]]), // sandals returned
+  memo(503, "000000503", 108, "2026-10-24 11:30:00", [], { adjustment: 15 }), // goodwill refund, offline as store credit, no items back
 ];
 
 function ship(entity: number, inc: string, orderId: number, created: string, tracks: [carrier: string, awb: string][]): Doc {

@@ -1,4 +1,4 @@
-import { DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
+import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
 
 // A second made-up Business Central company: the books of the demo Magento store (D-52). A web
 // connector posts each Magento invoice as a posted sales invoice, with the Magento order number
@@ -10,6 +10,11 @@ import { DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
 //   - 000000104: posted twice.
 //   - 000000106: posted at 504.00, with shipping, against a Magento invoice of 484.00.
 //   - 000000108: posted with no VAT (total right, VAT 0).
+//
+//  Magento credit memos vs BC posted credit memos (web-erp-credit-memos)
+//   - 000000103: refund posted twice.
+//   - 000000106: never posted (only a draft exists).
+//   - 000000108: a 15.00 goodwill refund posted as 20.00.
 //
 // It is kept apart from "Sawwi Demo Trading LLC" so the B2B demo results don't change.
 
@@ -42,6 +47,19 @@ function webInvoice(number: string, orderInc: string, over: { total?: number; ta
   };
 }
 
+function webCreditMemo(number: string, orderInc: string, over: { total?: number; status?: string } = {}): Doc {
+  const o = orderOf(orderInc);
+  const m = DEMO_CREDIT_MEMOS.find((x) => x.order_id === o.entity_id)!;
+  const total = over.total ?? Number(m.grand_total);
+  const tax = r2((total * 5) / 105);
+  const date = nextDay(String(m.created_at).slice(0, 10));
+  return {
+    id: guid(), number, externalDocumentNumber: orderInc, creditMemoDate: date, postingDate: date, dueDate: date,
+    customerNumber: "WEB", customerName: `${o.customer_firstname} ${o.customer_lastname}`, email: o.customer_email,
+    currencyCode: "", totalAmountExcludingTax: r2(total - tax), totalTaxAmount: tax, totalAmountIncludingTax: total, status: over.status ?? "Paid", invoiceNumber: "", salesCreditMemoLines: [],
+  };
+}
+
 export const DEMO_STORE_DATA: Record<string, Doc[]> = {
   salesInvoices: [
     webInvoice("PSI-W1001", "000000101"),
@@ -51,5 +69,11 @@ export const DEMO_STORE_DATA: Record<string, Doc[]> = {
     webInvoice("PSI-W1005", "000000104"), // the same order posted again
     webInvoice("PSI-W1006", "000000106", { total: 504 }),
     webInvoice("PSI-W1008", "000000108", { tax: 0 }),
+  ],
+  salesCreditMemos: [
+    webCreditMemo("PCM-W2001", "000000103"),
+    webCreditMemo("PCM-W2002", "000000103"), // the same refund posted again
+    webCreditMemo("PCM-W2003", "000000106", { status: "Draft" }),
+    webCreditMemo("PCM-W2004", "000000108", { total: 20 }),
   ],
 };

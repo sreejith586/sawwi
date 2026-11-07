@@ -140,6 +140,7 @@ async function weightUnit(creds: MagentoCredentials, deps: ConnectorDeps): Promi
 export const MAGENTO_ORDER_COLUMNS = ["Order ID", "Order date", "Order status", "Payment method", "Payment method title", "Order total", "Refunded amount", "Shipping charged", "Currency", "Subtotal", "Discount", "Tax", "Total paid", "Store"] as const;
 export const MAGENTO_REFUND_COLUMNS = ["Order ID", "Refund / credit memo ID", "Refund date", "SKU", "Product", "Quantity", "Refund amount", "Credit memo total", "Currency"] as const;
 export const MAGENTO_INVOICE_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Customer e-mail", "Customer", "Subtotal", "Shipping", "Discount", "VAT amount", "Invoice total (incl. VAT)", "Currency"] as const;
+export const MAGENTO_CREDIT_MEMO_COLUMNS = ["Order ID", "Credit memo ID", "Refund date", "Customer e-mail", "Customer", "Subtotal", "Shipping refunded", "Adjustment", "VAT amount", "Credit memo total (incl. VAT)", "Currency"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -152,6 +153,13 @@ const REPORTS: Report[] = [
     description: "One row per invoice created in the period, with its order, customer e-mail, VAT and total.",
     slots: ["web-erp-invoices/store_invoices"],
     columns: MAGENTO_INVOICE_COLUMNS,
+  },
+  {
+    id: "credit_memos",
+    label: "Credit memos (totals)",
+    description: "One row per credit memo created in the period, with its order, customer e-mail, VAT and total, including shipping and adjustment refunds.",
+    slots: ["web-erp-credit-memos/store_refunds"],
+    columns: MAGENTO_CREDIT_MEMO_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -169,6 +177,14 @@ export function invoiceRow(inv: Doc, order: OrderInfo): string[] {
   return [
     order.number, str(inv.increment_id), isoTime(inv.created_at), order.email, order.name,
     num(inv.subtotal ?? 0), num(inv.shipping_amount ?? 0), num(inv.discount_amount ?? 0), num(inv.tax_amount ?? 0), num(inv.grand_total), str(inv.order_currency_code),
+  ];
+}
+
+export function creditMemoTotalRow(m: Doc, order: OrderInfo): string[] {
+  const adjustment = m.adjustment ?? Number(m.adjustment_positive ?? 0) - Number(m.adjustment_negative ?? 0);
+  return [
+    order.number, str(m.increment_id), isoTime(m.created_at), order.email, order.name,
+    num(m.subtotal ?? 0), num(m.shipping_amount ?? 0), num(adjustment), num(m.tax_amount ?? 0), num(m.grand_total), str(m.order_currency_code),
   ];
 }
 
@@ -232,6 +248,10 @@ export const magento: Connector<MagentoCredentials> = {
       const invoices = await search(creds, "invoices", window, deps);
       const orders = await orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps);
       rows = invoices.map((i) => invoiceRow(i, orders.get(Number(i.order_id)) ?? NO_ORDER));
+    } else if (report === "credit_memos") {
+      const memos = await search(creds, "creditmemos", window, deps);
+      const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
+      rows = memos.map((m) => creditMemoTotalRow(m, orders.get(Number(m.order_id)) ?? NO_ORDER));
     } else if (report === "credit_memo_lines") {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);

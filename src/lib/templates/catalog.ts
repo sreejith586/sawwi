@@ -783,6 +783,57 @@ export const TEMPLATES: Template[] = [
     ],
     outputs: ["Orders missing from the ERP", "Duplicate postings to reverse", "Total, VAT and customer differences"],
   },
+  {
+    id: "web-erp-credit-memos",
+    title: "Store refunds vs. ERP credit notes",
+    summary: "Check every refund your webstore issued was posted in your ERP once, as a credit note for the same amount and VAT.",
+    group: "webstore",
+    frequency: "weekly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "store_refunds",
+        label: "Webstore credit memos (refunds)",
+        description: "Credit memos your store created in the period, including shipping and goodwill refunds.",
+        examples: ["Magento 2 / Adobe Commerce credit memos", "Shopify refunds export", "WooCommerce refunds"],
+        fields: [ORDER_ID, f("refund_id", "Credit memo ID", "id"), f("refund_date", "Refund date", "date", true), f("customer_email", "Customer e-mail", "text"), f("refund_amount", "Credit memo total (incl. VAT)", "money", true), VAT, CURRENCY],
+      },
+      {
+        key: "erp_credit_notes",
+        label: "ERP posted credit notes",
+        description: "Sales credit memos posted in your ERP for web refunds, with the store's order number as their external reference.",
+        examples: ["Business Central posted sales credit memos", "Odoo credit notes", "Zoho Books credit notes"],
+        fields: [
+          f("credit_note_no", "Posted credit memo no.", "id", true),
+          f("order_ref", "Store order no. (external document no.)", "id", true),
+          f("posting_date", "Posting date", "date", true),
+          f("customer_email", "Customer e-mail", "text"),
+          f("credit_amount", "Credit amount incl. VAT", "money", true),
+          VAT,
+          CURRENCY,
+        ],
+      },
+    ],
+    links: [
+      {
+        left: "store_refunds",
+        right: "erp_credit_notes",
+        keys: [{ left: "order_id", right: "order_ref", normalize: ["trim", "upper", "strip_leading_zeros"] }],
+        cardinality: "many_to_many",
+        amount: { left: "refund_amount", right: "credit_amount", tolerance: 0.05 },
+        dateWindowDays: 7,
+      },
+    ],
+    checks: [
+      { id: "not_posted", label: "Refund not posted in the ERP", description: "The store refunded the customer, but the ERP has no credit note for that order: revenue and VAT are overstated.", rule: { kind: "unmatched_left", link: 0 } },
+      { id: "duplicate_posting", label: "Credit note posted twice", description: "The same refund was posted more than once for the same amount.", rule: { kind: "duplicate", link: 0, side: "right", by: ["order_ref", "credit_amount"] } },
+      { id: "amount_mismatch", label: "Amount differs", description: "The ERP credited a different amount than the store refunded for that order.", rule: { kind: "compare", link: 0, direction: "either" } },
+      { id: "vat_mismatch", label: "VAT differs", description: "VAT on the ERP credit note differs from the VAT the store refunded.", rule: { kind: "compare", link: 0, direction: "either", left: "vat_amount", right: "vat_amount", tolerance: 0.05 } },
+      { id: "posted_no_refund", label: "Credit note without a store refund", description: "An ERP credit note whose order number has no store refund in the period. Often timing, or a credit raised by hand." },
+    ],
+    outputs: ["Refunds missing from the ERP", "Duplicate credit notes to reverse", "Amount and VAT differences"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",
