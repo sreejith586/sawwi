@@ -2,6 +2,7 @@ import { resetDemoIfDue } from "@/lib/demo/workspace";
 import { deliverEmail } from "@/lib/email/deliver";
 import { queueDueReminders } from "@/lib/email/reminders";
 import { deleteFiles, listOlderThan } from "@/lib/files/storage";
+import { pruneResets } from "@/lib/saas/reset-store";
 import { claimJobs, claimJobsByKey, enqueueJob, failJob, finishJob, pruneJobs, type Job } from "./store";
 
 // Background work (D-42). Vercel Cron calls /api/cron/tick every 15 minutes; each tick queues the
@@ -24,8 +25,8 @@ export const HANDLERS: Record<string, Handler> = {
     await deleteFiles(stale);
     return { deleted: stale.length };
   },
-  /** Finished jobs are kept 30 days for a look in Admin, then go. */
-  prune_jobs: async (_, now) => ({ pruned: await pruneJobs(new Date(now.getTime() - 30 * DAY)) }),
+  /** Finished jobs are kept 30 days; password-reset requests and links a day (D-46). */
+  prune_jobs: async (_, now) => ({ pruned: await pruneJobs(new Date(now.getTime() - 30 * DAY)), resets: await pruneResets(new Date(now.getTime() - DAY)) }),
   /** One email (D-45). Its key is the message's identity, so it's never sent twice. */
   send_email: (job) => deliverEmail(job),
   /** Queues a reminder for every schedule that came due, once per period and person (D-45). */

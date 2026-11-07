@@ -1,10 +1,12 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { invitesForEmail, markMemberJoined } from "@/lib/accounts/members";
 import { decodeProfileCookie, PROFILE_COOKIE } from "@/lib/profile/profile";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/lib/saas/password";
+import { sendSoon } from "@/lib/email/queue";
+import { requestPasswordReset, resetPassword } from "@/lib/saas/reset";
 import { endSession, startSession } from "@/lib/saas/session";
 import * as store from "@/lib/saas/store";
 
@@ -96,4 +98,34 @@ export async function logIn(_prev: AuthState, formData: FormData): Promise<AuthS
 export async function signOut() {
   await endSession();
   redirect("/");
+}
+
+// ─── Password reset (D-46) ───────────────────────────────────────────────
+
+export type ForgotState = { sent?: boolean; email?: string; error?: string };
+
+/** The client's address, for rate limiting only (hashed before it's stored). */
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "";
+}
+
+export async function forgotPassword(_prev: ForgotState, formData: FormData): Promise<ForgotState> {
+  const email = str(formData.get("email")).toLowerCase();
+  if (!EMAIL.test(email)) return { error: "Enter the email you log in with.", email };
+  const outcome = await requestPasswordReset(email, await clientIp());
+  if (outcome.limited) return { error: "Too many reset requests from here. Try again in an hour.", email };
+  // Sent after the response, so answering takes the same time whether or not there's an account.
+  if (outcome.emailKey) sendSoon([outcome.emailKey]);
+  return { sent: true, email };
+}
+
+export type ResetState = { error?: string; fieldError?: string };
+
+export async function completeReset(_prev: ResetState, formData: FormData): Promise<ResetState> {
+  const token = str(formData.get("token"));
+  const password = typeof formData.get("password") === "string" ? String(formData.get("password")) : "";
+  const result = await resetPassword(token, password);
+  if (!result.ok) return result.field ? { fieldError: result.error } : { error: result.error };
+  redirect("/login?reset=1");
 }

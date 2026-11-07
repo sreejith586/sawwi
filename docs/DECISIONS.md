@@ -463,3 +463,18 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - A reminder for viewers: they can't act on it.
   - "Ready to review" to the person who ran it: it's on their screen.
 - **Consequences:** with no Resend key, nothing is sent and the log shows what would have been. Reminders go out at most an hour after a schedule comes due (the sweep is hourly, the tick every 15 minutes). Preview deployments have no cron (D-42), so only emails sent from a request (notices, resets) go out there, and their links point at `APP_URL`.
+
+### D-46: Password reset: a hashed single-use token for an hour, the same answer for every email, rate-limited in the database
+- **Context:** D-44's second PR. Until now, a forgotten password needed a superadmin.
+- **Decision:**
+  - **`/forgot-password`** takes an email and always answers "If there's a Sawwi account for that email, we've sent it a link". The email goes out after the response (`sendSoon`), so the answer takes about the same time whether or not there's an account.
+  - **The link** is `/reset-password?token=…`, with 32 random bytes (256 bits). Only its SHA-256 hash is stored (`password_resets`, migration 4), the same way sessions are, so a copy of the database gives nobody a working link. It works for 60 minutes and once: using it is a single `UPDATE … WHERE used_at IS NULL AND expires_at > now RETURNING`, so two submits can't both succeed.
+  - **"Signed":** the brief asked for a signed token. A random token looked up by its hash gives what signing would: it can't be forged or guessed, and nothing is readable in it. It also needs no signing key to keep secret or rotate. So there's no HMAC over the token.
+  - **After a reset:** the new password is set, every other open link for that user stops working, and every session is deleted (signed out on every device). The person logs in again with the new password.
+  - **Rate limits** live in Postgres (`reset_requests`), not in memory, because Vercel runs many instances. They count by hashed email and hashed IP over the last hour. More than 3 requests for one email: the answer stays the same and nothing is sent, so nobody can flood an inbox and the answer gives nothing away. 10 requests from one address: "Too many reset requests from here", which says nothing about any account. Requests and old links are pruned after a day by `prune_jobs`.
+  - **The email** uses the same designed layout (D-45), is always sent whatever the user's switches, and its job payload (which holds the link) is cleared once it's sent. The reset page sends no referrer and isn't indexed.
+- **Rejected alternatives:**
+  - An HMAC-signed token with an expiry inside it: it's single-use only with a database row anyway, and it needs a new secret.
+  - Signing the person in straight after the reset: a link that signs someone in is worth more to an attacker. Logging in again is one step.
+  - An in-memory rate limit, as the login form has: it's per instance, so it does little on Vercel.
+- **Consequences:** reset emails need Resend (D-45). Without it, the link appears only in the server log (locally with the body). Links point at `APP_URL`, so on a preview without `APP_URL` they open production.

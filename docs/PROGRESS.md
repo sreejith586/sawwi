@@ -14,19 +14,27 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In progress: email foundation, reminders and notices (D-45, this PR); password reset (D-46) and SEO pages (D-47) follow as stacked PRs |
+| 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In progress: email foundation, reminders and notices (D-45, #25); password reset (D-46, this PR, based on #25); SEO pages (D-47) next |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Phase 8: email foundation, reminders, notices (D-44, D-45) | `feature/phase-8-email-reminders` | this PR | Phase 8 session |
+| Phase 8: email foundation, reminders, notices (D-44, D-45) | `feature/phase-8-email-reminders` | #25 | Phase 8 session |
+| Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Email through Resend: reminders and "ready to review"** (D-44, D-45, Phase 8 PR 1).
+- **Password reset** (D-46, Phase 8 PR 2, based on #25).
+  - "Forgot your password?" on the login page opens `/forgot-password`. It always gives the same answer, so nobody learns whether an email has an account.
+  - The emailed link holds a 256-bit token, stored only as a hash. It works once, for an hour.
+  - Resetting signs the user out everywhere and voids their other links.
+  - Rate-limited in the database: 3 requests an hour per email (silently), 10 per address.
+  - Migration 4. 3 new tests.
+  - Checked in the browser: request → link from the log → new password → log in; a used link shows "expired".
+- **Email through Resend: reminders and "ready to review"** (D-44, D-45, Phase 8 PR 1, #25).
   - Phase 8 scope recorded (D-44): email through Resend, then password reset, then SEO pages, as three stacked PRs.
   - `src/lib/email/`: Resend's REST API when `RESEND_API_KEY` is set, a log line otherwise. Each email is a `send_email` job whose key is the message, also sent as Resend's idempotency key, so retries never send twice.
   - **Reminders:** an hourly job emails owners, admins and editors once when a schedule comes due and nobody has started it.
@@ -130,7 +138,7 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 8:** email (this PR), then password reset (D-46) and SEO pages (D-47).
+0. **Phase 8:** email (#25), password reset (D-46, this PR), then SEO pages (D-47). Merge in that order.
    - Resend: the key is in Vercel. Confirm `sawwiapp.ai` is verified in Resend, then redeploy after merging (docs/DEPLOY.md).
    - After merging, check Admin → Background jobs for `schedule_reminders` and `send_email`.
    - **Still open from Phase 7:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.

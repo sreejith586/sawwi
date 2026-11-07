@@ -178,7 +178,7 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via
 
 ## 6a. Accounts, workspaces and paywall (SaaS groundwork)
 
-- **Public:** `/` intro page, `/signup`, `/login`. Everything else needs a session (`src/proxy.ts` does an optimistic cookie check; `src/lib/saas/session.ts` re-validates against the DB in every page, action and route).
+- **Public:** `/` intro page, `/signup`, `/login`, `/forgot-password`, `/reset-password` (D-46). Everything else needs a session (`src/proxy.ts` does an optimistic cookie check; `src/lib/saas/session.ts` re-validates against the DB in every page, action and route).
 - **Accounts:** email + scrypt password, DB-backed sessions (only the token hash is stored). Each sign-up creates a workspace (`orgs`) whose fixed `key` files its runs, mappings and members; the business profile lives on the workspace. Invited emails join the inviting workspace on sign-up or login.
 - **Roles:** owner / admin (team, profile, plan) / editor (run reconciliations) / viewer (read reports only).
 - **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
@@ -221,6 +221,7 @@ Vercel project `hypermax-solutions/sawwi`, functions in `fra1` (`vercel.json`) n
 - **Who gets what.** `src/lib/email/store.ts` holds the SQL: `email_prefs` (migration 3: reminders, notices; no row = on) and `recipients(orgKey, roles, topic)`, which leaves out suspended workspaces, deactivated teammates and anyone with that topic off.
 - **Reminders** (`reminders.ts`): the hourly `schedule_reminders` job reads each workspace's schedule rows (`schedules/view.ts`, the same due maths as the Schedules page) and queues one email per due period (no run yet, due in the last 7 days) for each owner, admin and editor: key `email:reminder:<schedule>:<period>:<user>`. The demo store is skipped.
 - **"Ready to review"** (`notices.ts`): `reconcileRun` queues one email per other member of the workspace, any role (key `email:ready:<run>:<user>`), with the exception count and value, rows matched and the report link, and sends them right after the response.
+- **Password reset** (D-46): `/forgot-password` → `requestPasswordReset` (`src/lib/saas/reset.ts`; SQL in `reset-store.ts`, tables `password_resets` and `reset_requests`, migration 4) → a `reset` email with `/reset-password?token=…` → `resetPassword` uses the token once, sets the password, voids other links and deletes the user's sessions → `/login?reset=1`. Rate limits are counted in the database by hashed email (3 an hour, silently) and hashed IP (10 an hour, with an error).
 - **Settings → Email** (`/settings/email`): each person's own switches, any role. The demo store sends nothing.
 
 ## 7. Build phases
