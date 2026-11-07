@@ -435,11 +435,11 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Dropping `sawwi.hypermaxsolutions.com`: links already shared would break.
 - **Consequences:** users signed in on the old address sign in once more on `sawwiapp.ai`. The domain redirects and `APP_URL` are set by the user in Vercel; the code default only matters where `APP_URL` is unset.
 
-### D-46: An Anthropic key not scoped to a workspace needs ANTHROPIC_WORKSPACE_ID
-- **Context:** in production every AI call failed with a 400: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header". The key set in Vercel is an unscoped one. Users only saw the rule-based summary and "I couldn't answer that just now" in the chat. (D-44 and D-45 are taken by the open logo PR, #27.)
+### D-50: An Anthropic key not scoped to a workspace needs ANTHROPIC_WORKSPACE_ID
+- **Context:** in production every AI call failed with a 400: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header". The key set in Vercel is an unscoped one. Users only saw the rule-based summary and "I couldn't answer that just now" in the chat.
 - **Decision:**
   - Every Anthropic client comes from `anthropicClient()` (`src/lib/anthropic.ts`). When `ANTHROPIC_WORKSPACE_ID` is set, each request carries it as the `anthropic-workspace-id` header. Unset, nothing changes.
   - Either fix works in production: set `ANTHROPIC_WORKSPACE_ID` to the Claude Console workspace ID (`wrkspc_…`), or replace the key with one created inside a workspace.
 - **Rejected alternatives:**
   - Requiring a workspace-scoped key with no code change: it works, but an unscoped key is what was set up, and the header keeps both kinds working.
-- **Consequences:** `llmAvailable()` still only checks that a key exists, so a misconfigured key shows up as "LLM … failed" errors in the Vercel logs, not in the UI.
+- **Consequences:** production was fixed first by the user swapping in a workspace-scoped key (2026-11-07); this change keeps an unscoped key working too. `llmAvailable()` still only checks that a key exists, so a misconfigured key shows up as "LLM … failed" errors in the Vercel logs, not in the UI.

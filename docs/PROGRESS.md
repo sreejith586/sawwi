@@ -22,13 +22,13 @@ _Updated in every commit. Newest first within each section._
 | --- | --- | --- | --- |
 | Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | #23 | Stripe setup session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
-| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-46) | `fix/anthropic-workspace-header` | — | Logo session |
+| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | — | Logo session |
 
 ## Recent changes
 
-- **AI in production was failing** (D-46, `fix/anthropic-workspace-header`). Every summary, chat answer and AI column mapping returned a 400, because the API key isn't scoped to a workspace. Found by asking the chat a question on a test run in production.
+- **AI in production was failing** (D-50, `fix/anthropic-workspace-header`). Every summary, chat answer and AI column mapping returned a 400, because the API key isn't scoped to a workspace. Found by asking the chat a question on a test run in production.
   - All clients now come from `anthropicClient()`, which sends `anthropic-workspace-id` when `ANTHROPIC_WORKSPACE_ID` is set. 2 new tests.
-  - **The user's part:** in Vercel, set `ANTHROPIC_WORKSPACE_ID` (Production and Preview) to the workspace ID from the Claude Console and redeploy, or replace `ANTHROPIC_API_KEY` with a workspace-scoped key.
+  - **Done by the user (2026-11-07):** a new workspace-scoped key and `ANTHROPIC_WORKSPACE_ID` are set in Vercel, and production was redeployed. The chat now answers in production; checked with a question on a test run.
 
 - **Primary domain `sawwiapp.ai`** (D-43, #23).
   - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
