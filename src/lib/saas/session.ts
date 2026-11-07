@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { cache } from "react";
 import { findMemberByEmail } from "@/lib/accounts/members";
+import { isDemoOrg } from "@/lib/demo/demo";
+import { resetDemoIfDue } from "@/lib/demo/workspace";
 import { entitlement, type Entitlement } from "./plans";
 import { ONBOARDED_COOKIE, SESSION_COOKIE } from "./cookies";
 import * as store from "./store";
@@ -39,6 +41,8 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | undefi
   const org = store.getOrg(s.orgId);
   const membership = store.getMembership(s.orgId, s.userId);
   if (!user || !org || !membership) return undefined;
+  // The demo store resets on its first request after 00:00 UTC (D-32).
+  if (isDemoOrg(org.key)) resetDemoIfDue();
   // A deactivated teammate keeps their login but loses this workspace.
   if (membership.access !== "owner" && findMemberByEmail(org.key, user.email)?.status === "deactivated") return undefined;
   return { user, org, access: membership.access, isSuperadmin: isSuperadminEmail(user.email) };

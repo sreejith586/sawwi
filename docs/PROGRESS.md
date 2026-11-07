@@ -13,18 +13,19 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors merged; demo data fill (D-31) in review |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors and demo data fill (D-31, #11) merged; public demo store (D-32) in review |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| One-click demo data for reconciliations (D-31) | `phase-6-demo-data` | (this PR) | Phase 6 session |
+| Public demo store with marketplace demo data, daily reset (D-32) | `phase-6-marketplace-demo-data` | (this PR) | Phase 6 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Demo data fill** (D-31, branch `phase-6-demo-data`, in review). In demo mode (`SAWWI_CONNECTOR_MOCK`), a run page offers **Fill with demo data**. It connects the mocked Business Central and Magento sources plus a new credential-free "Demo data" source (made-up gateway, Tabby, courier, warehouse and bank files), then imports every empty slot for October 2026. Eight templates fill completely and find their planted exceptions: orders vs gateway, BNPL, COD, refunds vs returns, courier freight, cash application, order → delivery → invoice and the three-way match. None of it is available in production. 11 new tests.
+- **Public demo store** (D-32, branch `phase-6-marketplace-demo-data`, in review). "Try the live demo" on the landing and login pages opens one shared workspace with invented data, no account needed. Demo data now exists only there: the developer switch `SAWWI_CONNECTOR_MOCK` is gone. **Marketplace demo data** was added: one invented seller, so all 8 marketplace templates fill and find their planted exceptions, 16 templates in total. In the demo, uploads are off, connections are read-only and no AI is called. It **resets every day at 00:00 UTC** on the first request after midnight, wiping only the demo's data. 17 new tests.
+- **Demo data fill** (D-31, #11, merged). In demo mode (`SAWWI_CONNECTOR_MOCK`), a run page offers **Fill with demo data**. It connects the mocked Business Central and Magento sources plus a new credential-free "Demo data" source (made-up gateway, Tabby, courier, warehouse and bank files), then imports every empty slot for October 2026. Eight templates fill completely and find their planted exceptions: orders vs gateway, BNPL, COD, refunds vs returns, courier freight, cash application, order → delivery → invoice and the three-way match. None of it is available in production. 11 new tests.
 - **Magento 2 connector** (D-30, #10, merged). Magento 2 / Adobe Commerce REST with an integration token. Three reports, all mapping by name:
   - orders, for orders vs gateway, COD and BNPL;
   - credit memo lines, for refunds vs returns;
@@ -62,6 +63,7 @@ _Updated in every commit. Newest first within each section._
 
 ## Open questions
 
+- **Demo store:** shared by all visitors (they can see each other's runs until the daily reset), with uploads and AI off. Do you want a private sandbox per visitor, or a small AI quota in the demo, instead?
 - **Job runner:** whether to add one (DB jobs table + cron, Inngest, or a worker) for scheduled pulls and emailed reminders.
 - **Shopify live test:** needs a store and a custom-app token from the user. Should Sawwi also get a public Shopify app (OAuth, one-click install)?
 - **Business Central live test:** needs the design partner's IT to register an Entra app and enable it in BC (D-29). Which environment (Sandbox first?) and company? Do they want customer/vendor ledger entries too? Those need a small AL extension (custom API page), since API v2.0 has none.

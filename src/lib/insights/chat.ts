@@ -1,3 +1,4 @@
+import { isDemoOrg } from "@/lib/demo/demo";
 import { llmAvailable } from "@/lib/mapping/llm";
 import type { ReconResult } from "@/lib/recon/match";
 import { loadRunDatasets } from "@/lib/runs/reconcile";
@@ -84,7 +85,7 @@ export async function narrativeFor(run: Run, generate: boolean): Promise<Narrati
   const cached = store.getNarrative<Narrative>(run.id, result.createdAt);
   if (cached) return { narrative: cached.body, source: cached.source === "ai" ? "ai" : "rules" };
   const rules: NarrativeView = { narrative: ruleNarrative(template, result), source: "rules" };
-  if (!generate || !llmAvailable() || result.totals.exceptions === 0) return rules;
+  if (!generate || !llmAvailable(run.orgKey) || result.totals.exceptions === 0) return rules;
 
   const key = `${run.id}:${result.createdAt}`;
   const pending =
@@ -168,7 +169,7 @@ async function emailTurn({ run, template, result }: Ctx, checkId: string, audien
 
   let email = ruleEmail(template, result, checkId, audience, company);
   let source: "ai" | "rules" = "rules";
-  if (llmAvailable()) {
+  if (llmAvailable(run.orgKey)) {
     try {
       const out = await draftEmail({ digest: digestText(template, result), facts: emailFacts(template, result, checkId), audience: label, company });
       store.logUsage(run.id, "email_draft", out.usage);
@@ -195,7 +196,7 @@ async function explainTurn({ run, template, result }: Ctx, index: number) {
 
   let text = ruleExplanation(template, result, index);
   let source: "ai" | "rules" = "rules";
-  if (llmAvailable()) {
+  if (llmAvailable(run.orgKey)) {
     const facts = exceptionFacts(template, result, index, loadRunDatasets(run));
     try {
       const out = await explainException(digestText(template, result), facts!);
@@ -216,11 +217,13 @@ async function askTurn({ run, template, result }: Ctx, raw: string) {
   const since = store.getMessages(run.id).filter((m) => m.payload);
   ask({ run }, question);
 
-  if (!llmAvailable()) {
+  if (!llmAvailable(run.orgKey)) {
     store.addMessage(
       run.id,
       "sawwi",
-      "Free-text questions need the AI assistant, which isn't switched on here (no API key). The one-click actions above work without it.",
+      isDemoOrg(run.orgKey)
+        ? "Free-text questions are switched off in the live demo. The one-click actions above work, and in your own workspace you can ask anything about your reconciliation."
+        : "Free-text questions need the AI assistant, which isn't switched on here (no API key). The one-click actions above work without it.",
       null,
       { type: "answer", source: "rules" },
     );

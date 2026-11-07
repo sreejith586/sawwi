@@ -3,7 +3,8 @@ import type { RunContext } from "@/lib/runs/engine";
 import { ingestFiles } from "@/lib/runs/engine";
 import type { Run } from "@/lib/runs/types";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { mockFetchFor } from "./mock";
+import { isDemoOrg } from "@/lib/demo/demo";
+import { demoDeps, demoSourceFor } from "./mock";
 import { assertPublicUrl } from "./net-guard";
 import { connectorById } from "./registry";
 import * as store from "./store";
@@ -13,11 +14,8 @@ import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
 // into a run slot. A pull becomes a CSV "upload", so mapping and matching are unchanged.
 
 export const liveDeps: ConnectorDeps = {
-  // In local demo mode a mocked provider answers in-process (never in production; see ./mock).
-  // Otherwise: https to public addresses only, and no redirects (D-30).
+  // https to public addresses only, and no redirects (D-30).
   fetch: async (url, init) => {
-    const mock = mockFetchFor(url);
-    if (mock) return mock(url, init);
     await assertPublicUrl(url);
     return fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000) });
   },
@@ -50,10 +48,15 @@ export async function pullIntoRun(
   ctx: RunContext,
   deps: ConnectorDeps = liveDeps,
 ): Promise<{ rows: number }> {
-  const connection = store.getConnection(run.orgKey, connectionId);
-  const sealed = store.getConnectionSecret(run.orgKey, connectionId);
-  const connector = connection && connectorById(connection.provider);
-  if (!connection || !sealed || !connector) throw new ConnectorError("That connection no longer exists.");
+  // The demo store's built-in sources (D-32) aren't saved connections and only work there.
+  const demo = demoSourceFor(connectionId);
+  if (demo && !isDemoOrg(run.orgKey)) throw new ConnectorError("That connection no longer exists.");
+  const connection = demo ? undefined : store.getConnection(run.orgKey, connectionId);
+  const sealed = demo ? undefined : store.getConnectionSecret(run.orgKey, connectionId);
+  const connector = connectorById(demo?.provider ?? connection?.provider ?? "");
+  if (!connector || (!demo && (!connection || !sealed))) throw new ConnectorError("That connection no longer exists.");
+  const provider = connector.id;
+  const accountLabel = demo?.accountLabel ?? connection!.accountLabel;
   if (!connector.reports.some((r) => r.id === report)) throw new ConnectorError("Unknown report.");
   if (!validWindow(window)) throw new ConnectorError("Pick a period of up to a year, start before end.");
 
@@ -66,18 +69,20 @@ export async function pullIntoRun(
 
   let table: Awaited<ReturnType<typeof connector.pull>>;
   try {
-    table = await connector.pull(decryptSecret(sealed, aad(run.orgKey, connection.provider)), report, window, deps);
+    table = demo
+      ? await connector.pull(demo.credentials, report, window, demoDeps)
+      : await connector.pull(decryptSecret(sealed!, aad(run.orgKey, provider)), report, window, deps);
   } catch (error) {
     // Auth, scope or provider problems: flag the connection so Settings shows it.
-    if (error instanceof ConnectorError) store.setConnectionStatus(run.orgKey, connectionId, "needs_attention", error.message);
+    if (error instanceof ConnectorError && !demo) store.setConnectionStatus(run.orgKey, connectionId, "needs_attention", error.message);
     return fail(error);
   }
-  store.setConnectionStatus(run.orgKey, connectionId, "connected", null, new Date().toISOString());
-  if (table.rows.length === 0) fail(new ConnectorError(`No ${report} in ${connection.accountLabel} between ${window.from} and ${window.to}.`));
+  if (!demo) store.setConnectionStatus(run.orgKey, connectionId, "connected", null, new Date().toISOString());
+  if (table.rows.length === 0) fail(new ConnectorError(`No ${report} in ${accountLabel} between ${window.from} and ${window.to}.`));
 
   const csv = Papa.unparse({ fields: table.headers, data: table.rows });
   try {
-    await ingestFiles(run, slotKey, [{ name: `${connection.provider}-${report}-${window.from}-to-${window.to}.csv`, data: new TextEncoder().encode(csv) }], ctx);
+    await ingestFiles(run, slotKey, [{ name: `${provider}-${report}-${window.from}-to-${window.to}.csv`, data: new TextEncoder().encode(csv) }], ctx);
   } catch (error) {
     fail(error);
   }

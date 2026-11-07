@@ -1,3 +1,4 @@
+import { isDemoOrg } from "@/lib/demo/demo";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
@@ -28,7 +29,9 @@ const MappingSchema = z.object({
   ),
 });
 
-export function llmAvailable(): boolean {
+/** The demo store never calls the AI (D-32): visitors can't run up token costs, rule-based text is used instead. */
+export function llmAvailable(orgKey?: string): boolean {
+  if (isDemoOrg(orgKey)) return false;
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 }
 

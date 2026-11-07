@@ -171,6 +171,15 @@ export function createOrg(name: string, trialDays: number, profile?: Profile): O
   return org;
 }
 
+/** The demo store's workspace (D-32): a fixed key that uniqueKey() can never produce. */
+export function createOrgWithKey(key: string, name: string, plan: PlanId, profile: Profile): Org {
+  const org: Org = { id: randomUUID(), key, name, profile, plan, status: "active", trialEndsAt: new Date(Date.now() + 3650 * DAY).toISOString(), createdAt: now() };
+  db()
+    .prepare("INSERT INTO orgs (id, key, name, profile_json, plan, status, trial_ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(org.id, org.key, org.name, JSON.stringify(profile), org.plan, org.status, org.trialEndsAt, org.createdAt);
+  return org;
+}
+
 export function getOrg(id: string): Org | undefined {
   const r = db().prepare("SELECT * FROM orgs WHERE id = ?").get(id) as Row | undefined;
   return r ? toOrg(r) : undefined;

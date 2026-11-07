@@ -9,7 +9,6 @@ import { buildRunView } from "@/lib/runs/view";
 import { BC_API_HOST, BC_REPORTS, businessCentral, deliveryNoteFor, normaliseTenant, pickCompany, windowFilter } from "./business-central";
 import { DEMO_BC_CREDENTIALS, mockBusinessCentral } from "./mock/business-central";
 import { num } from "./format";
-import { activeMocks } from "./mock";
 import { slotFit } from "./slot-fit";
 import { addConnection, pullIntoRun } from "./service";
 import * as store from "./store";
@@ -153,21 +152,6 @@ describe("Business Central reports", () => {
     expect(best("b2b-returns-vs-credit-notes", "credit_notes")).toBe("sales_credit_memos");
   });
 
-  it("is switched on only by SAWWI_CONNECTOR_MOCK and never in production", () => {
-    const env = process.env as Record<string, string | undefined>;
-    const before = { mock: env.SAWWI_CONNECTOR_MOCK, node: env.NODE_ENV };
-    try {
-      delete env.SAWWI_CONNECTOR_MOCK;
-      expect(activeMocks()).toHaveLength(0);
-      env.SAWWI_CONNECTOR_MOCK = "business-central";
-      expect(activeMocks().map((m) => m.id)).toEqual(["business-central"]);
-      env.NODE_ENV = "production";
-      expect(activeMocks()).toHaveLength(0);
-    } finally {
-      env.SAWWI_CONNECTOR_MOCK = before.mock;
-      env.NODE_ENV = before.node;
-    }
-  });
 });
 
 describe("Business Central data runs the B2B and purchasing reconciliations", () => {

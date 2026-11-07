@@ -6,6 +6,7 @@ import { connectorById } from "@/lib/connectors/registry";
 import { addConnection } from "@/lib/connectors/service";
 import { deleteConnection } from "@/lib/connectors/store";
 import { ConnectorError } from "@/lib/connectors/types";
+import { isDemoOrg } from "@/lib/demo/demo";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 
 // Connections hold credentials to other systems, so only owners and admins add or
@@ -17,6 +18,7 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
   const session = await getCurrentSession();
   if (!session || !canManageTeam(session.access)) return { error: "Only workspace owners and admins can add connections." };
   if (session.org.status === "suspended") return { error: "This workspace is suspended." };
+  if (isDemoOrg(session.org.key)) return { error: "The live demo uses its built-in sources only." };
   if (!connectorsEnabled()) return { error: "Connections aren't switched on for this server yet (SAWWI_CONNECTOR_KEY)." };
   const provider = String(form.get("provider") ?? "");
   const connector = connectorById(provider);
@@ -34,7 +36,7 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
 
 export async function removeConnectionAction(id: string) {
   const session = await getCurrentSession();
-  if (!session || !canManageTeam(session.access)) return;
+  if (!session || !canManageTeam(session.access) || isDemoOrg(session.org.key)) return;
   deleteConnection(session.org.key, id);
   refresh();
 }

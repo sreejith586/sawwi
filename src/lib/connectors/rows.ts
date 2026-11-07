@@ -1,3 +1,4 @@
+import { DEMO_SOURCES, demoConnectionId } from "./mock";
 import { connectorById } from "./registry";
 import { listConnections, listSyncs } from "./store";
 
@@ -17,7 +18,8 @@ export type SyncRow = {
 };
 
 export function syncRows(orgKey: string): SyncRow[] {
-  const connections = listConnections(orgKey);
+  // Real connections, plus the demo store's built-in sources (D-32).
+  const connections = [...listConnections(orgKey), ...DEMO_SOURCES.map((d) => ({ id: demoConnectionId(d.provider), provider: d.provider, accountLabel: d.accountLabel }))];
   const names = new Map(connections.map((c) => [c.id, `${connectorById(c.provider)?.label ?? c.provider}: ${c.accountLabel}`]));
   const reportLabel = (connectionId: string, report: string) => {
     const provider = connections.find((c) => c.id === connectionId)?.provider;

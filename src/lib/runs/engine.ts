@@ -65,7 +65,7 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   let usedAi = false;
   const pending = new Set(confirm.map((c) => c.field));
   const unresolved = slot.fields.filter((f) => !fields[f.key] && !pending.has(f.key));
-  if (unresolved.length > 0 && llmAvailable()) {
+  if (unresolved.length > 0 && llmAvailable(run.orgKey)) {
     const taken = new Set([...Object.values(fields).map((f) => f.column), ...confirm.map((c) => c.column)]);
     const available = profile.columns.filter((c) => !taken.has(c.name));
     try {

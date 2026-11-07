@@ -65,10 +65,10 @@ pnpm build
     ID and secret) or a Magento 2 store (integration access token), then use "Import from a connection" on a run's file slot to pull that period's data
     instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
     `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
-    **Demo without real accounts:** add `SAWWI_CONNECTOR_MOCK=business-central,magento` to `.env.local`
-    (dev only). Both are then simulated with invented data. Start a reconciliation and click **Fill with
-    demo data**: every file is imported for October 2026 (Business Central, Magento, plus made-up gateway,
-    courier, warehouse and bank files), then **Run reconciliation**. Or connect them yourself in Settings
-    with **Fill demo values** and use "Import from a connection" slot by slot.
+14. **Live demo store**: "Try the live demo" on the login and landing pages opens a shared workspace with
+    invented data (a Business Central company, a Magento store, a marketplace seller, and gateway,
+    courier, warehouse and bank files). Start any reconciliation, click **Fill with demo data**, then
+    **Run reconciliation**. No account needed; uploads and AI calls are off there, and it resets every
+    day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.
