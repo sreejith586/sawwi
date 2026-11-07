@@ -26,11 +26,11 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
   const session = await getCurrentSession();
   if (!session) return null;
   const { org } = session;
-  const settings = getSettings();
-  const state = billingState(org);
+  const settings = await getSettings();
+  const state = await billingState(org);
   const plan = planById(org.plan);
   const ent = entitlement(state, settings.paywallEnabled);
-  const request = openRequestForOrg(org.id);
+  const request = await openRequestForOrg(org.id);
   const subscribed = Boolean(org.subscriptionStatus && ["active", "trialing", "past_due"].includes(org.subscriptionStatus));
   const checkoutPlans = settings.paywallEnabled && !subscribed ? PAID_PLANS.filter((p) => checkoutReady(p)) : [];
   const canManage = canManageTeam(session.access);

@@ -37,8 +37,8 @@ export type LayoutRecipe = {
 };
 
 export interface LayoutMemory {
-  find(issuerKey: string): LayoutRecipe[];
-  save(recipe: LayoutRecipe): void;
+  find(issuerKey: string): LayoutRecipe[] | Promise<LayoutRecipe[]>;
+  save(recipe: LayoutRecipe): void | Promise<void>;
 }
 
 export type PdfKind = "statement" | "invoice" | "table";

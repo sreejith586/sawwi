@@ -29,7 +29,7 @@ export async function ensureCustomer(org: store.Org, user: store.User): Promise<
     name: org.name,
     metadata: { orgId: org.id, orgKey: org.key },
   });
-  store.setStripeCustomer(org.id, customer.id);
+  await store.setStripeCustomer(org.id, customer.id);
   return customer.id;
 }
 
@@ -39,19 +39,19 @@ export async function syncSubscription(subscriptionId: string): Promise<store.Or
   if (!stripe) return undefined;
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-  const org = (sub.metadata.orgId && store.getOrg(sub.metadata.orgId)) || store.getOrgByStripeCustomer(customerId);
+  const org = (sub.metadata.orgId && await store.getOrg(sub.metadata.orgId)) || await store.getOrgByStripeCustomer(customerId);
   if (!org) return undefined;
 
   const item = sub.items.data[0];
   const periodEnd = item?.current_period_end;
-  store.applySubscription(org.id, {
+  await store.applySubscription(org.id, {
     id: sub.id,
     status: sub.status,
     plan: planFromSubscription(sub.status, item?.price.id),
     currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : undefined,
   });
-  if (!org.stripeCustomerId) store.setStripeCustomer(org.id, customerId);
-  return store.getOrg(org.id);
+  if (!org.stripeCustomerId) await store.setStripeCustomer(org.id, customerId);
+  return await store.getOrg(org.id);
 }
 
 /** Where Stripe should send people back to. Prefers an explicit app URL over request headers. */

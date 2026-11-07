@@ -7,7 +7,7 @@ import { getCurrentSession } from "@/lib/saas/session";
 export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session) return Response.json({ error: "Log in first." }, { status: 401 });
-  const rows = applyQuery(syncRows(session.org.key), queryFromParams(new URL(request.url).searchParams, SYNC_FILTERS), [...SYNC_SEARCH]);
+  const rows = applyQuery(await syncRows(session.org.key), queryFromParams(new URL(request.url).searchParams, SYNC_FILTERS), [...SYNC_SEARCH]);
   const bytes = await tableWorkbook({
     sheetName: "Imports",
     columns: [

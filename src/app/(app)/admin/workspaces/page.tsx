@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Workspaces · Admin" };
 
 async function Workspaces() {
   await requireSuperadminPage();
-  return <WorkspacesTable rows={orgRows(listOrgsForAdmin())} />;
+  return <WorkspacesTable rows={orgRows(await listOrgsForAdmin())} />;
 }
 
 export default function AdminWorkspacesPage() {

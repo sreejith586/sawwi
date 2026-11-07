@@ -11,17 +11,17 @@ import { templateForRun } from "@/lib/runs/templates";
 export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/breakdown">) {
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
-  const result = owned && getResult(id);
-  const template = owned && templateForRun(owned.run);
+  const result = owned && await getResult(id);
+  const template = owned && await templateForRun(owned.run);
   if (!owned || !result || !template) return Response.json({ error: "Report not found." }, { status: 404 });
 
   const params = new URL(request.url).searchParams;
   const checkId = params.get("check") ?? "";
   const check = result.checks.find((c) => c.id === checkId);
-  const dim = check && dimensionsFor(owned.run, template, checkId).find((d) => d.key === params.get("by"));
+  const dim = check && (await dimensionsFor(owned.run, template, checkId)).find((d) => d.key === params.get("by"));
   if (!check || !dim) return Response.json({ error: "Unknown breakdown." }, { status: 400 });
 
-  const { rows } = breakdown(template, result, loadRunDatasets(owned.run), checkId, dim.key);
+  const { rows } = breakdown(template, result, await loadRunDatasets(owned.run), checkId, dim.key);
   const cur = result.currency ? ` (${result.currency})` : "";
   const bytes = await tableWorkbook({
     sheetName: `${check.label} by ${dim.label}`,

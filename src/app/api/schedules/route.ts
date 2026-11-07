@@ -8,7 +8,7 @@ import { scheduleRows } from "@/lib/schedules/view";
 export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session) return Response.json({ error: "Log in first." }, { status: 401 });
-  const rows = applyQuery(scheduleRows(session.org.key), queryFromParams(new URL(request.url).searchParams, SCHEDULE_FILTERS), [...SCHEDULE_SEARCH]);
+  const rows = applyQuery(await scheduleRows(session.org.key), queryFromParams(new URL(request.url).searchParams, SCHEDULE_FILTERS), [...SCHEDULE_SEARCH]);
   const bytes = await tableWorkbook({
     sheetName: "Schedules",
     columns: [

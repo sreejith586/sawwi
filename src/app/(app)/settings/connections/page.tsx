@@ -16,11 +16,11 @@ async function Connections() {
   if (!session) return null;
   const orgKey = session.org.key;
   const labels = Object.fromEntries(CONNECTORS.map((c) => [c.id, c.label]));
-  if (isDemoOrg(orgKey)) return <DemoConnections labels={labels} history={syncRows(orgKey)} />;
+  if (isDemoOrg(orgKey)) return <DemoConnections labels={labels} history={await syncRows(orgKey)} />;
   const canManage = canManageTeam(session.access);
   const enabled = connectorsEnabled();
   // Only what the browser needs: no secrets ever leave the server.
-  const items = listConnections(orgKey).map(({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }) => ({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }));
+  const items = (await listConnections(orgKey)).map(({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }) => ({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }));
   const connectors = availableConnectors().map(({ id, label, description, fields }) => ({ id, label, description, fields }));
 
   return (
@@ -57,7 +57,7 @@ async function Connections() {
       <section>
         <h2 className="text-sm font-semibold">Import history</h2>
         <div className="mt-3">
-          <SyncHistory rows={syncRows(orgKey)} />
+          <SyncHistory rows={await syncRows(orgKey)} />
         </div>
       </section>
     </div>
@@ -65,7 +65,7 @@ async function Connections() {
 }
 
 /** The demo store (D-32): its built-in sources, read-only. Visitors can't add real connections here. */
-function DemoConnections({ labels, history }: { labels: Record<string, string>; history: ReturnType<typeof syncRows> }) {
+function DemoConnections({ labels, history }: { labels: Record<string, string>; history: Awaited<ReturnType<typeof syncRows>> }) {
   return (
     <div className="space-y-10">
       <p className="text-sm text-muted">

@@ -31,10 +31,10 @@ afterAll(() => {
 });
 
 async function demoRun(templateId: string) {
-  const run = runStore.createRun(DEMO_ORG_KEY, templateId);
+  const run = await runStore.createRun(DEMO_ORG_KEY, templateId);
   const fill = await fillRunWithDemoData(run, { countries: ["AE"] });
-  const view = buildRunView(run.id)!;
-  const result = view.status === "ready" ? runReconciliation(runStore.getRun(run.id)!, ["AE"]) : undefined;
+  const view = (await buildRunView(run.id))!;
+  const result = view.status === "ready" ? await runReconciliation((await runStore.getRun(run.id))!, ["AE"]) : undefined;
   return { fill, view, found: result?.exceptions.map((e) => `${e.check}: ${e.key}`).sort() ?? [] };
 }
 
@@ -93,19 +93,19 @@ describe("Fill with demo data", () => {
   }
 
   it("only fills empty slots, from the built-in sources", async () => {
-    const run = runStore.createRun(DEMO_ORG_KEY, "web-orders-vs-gateway");
+    const run = await runStore.createRun(DEMO_ORG_KEY, "web-orders-vs-gateway");
     const first = await fillRunWithDemoData(run, { countries: ["AE"] });
     const again = await fillRunWithDemoData(run, { countries: ["AE"] });
     expect(first.filled).toHaveLength(2);
     expect(again.filled).toEqual([]);
-    expect(importSources(DEMO_ORG_KEY).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:magento", "demo:demo-data"]);
-    expect(runStore.getUsage(run.id).calls).toBe(0); // no AI calls
+    expect((await importSources(DEMO_ORG_KEY)).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:magento", "demo:demo-data"]);
+    expect((await runStore.getUsage(run.id)).calls).toBe(0); // no AI calls
   });
 
   it("is invisible and refused outside the demo store", async () => {
-    const run = runStore.createRun("acme", "web-bnpl");
+    const run = await runStore.createRun("acme", "web-bnpl");
     expect(availableConnectors().map((c) => c.id)).not.toContain("demo-data");
-    expect(importSources("acme")).toEqual([]);
+    expect(await importSources("acme")).toEqual([]);
     expect(() => demoData.parseCredentials({})).toThrow(/demo store/);
     await expect(fillRunWithDemoData(run, { countries: ["AE"] })).rejects.toThrow(/demo store/);
     await expect(pullIntoRun(run, "orders", "demo:magento", "orders", { from: "2026-10-01", to: "2026-10-31" }, { countries: ["AE"] })).rejects.toThrow(/no longer exists/);

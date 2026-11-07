@@ -50,17 +50,17 @@ describe("canned answers", () => {
 
 describe("asking a canned question in a run", () => {
   it("works before any file is uploaded, with no AI", async () => {
-    const run = store.createRun("acme", "web-orders-vs-gateway");
+    const run = await store.createRun("acme", "web-orders-vs-gateway");
     for (const q of ABOUT_QUESTIONS) await chat(run, { kind: "about", topic: q.topic }, "Acme");
-    const messages = store.getMessages(run.id);
+    const messages = await store.getMessages(run.id);
     expect(messages.map((m) => m.role)).toEqual(["user", "sawwi", "user", "sawwi", "user", "sawwi", "user", "sawwi"]);
     expect(messages[0]).toMatchObject({ body: "What files do I need?", payload: { type: "question" } });
     expect(messages[1].payload).toEqual({ type: "answer", source: "rules" });
-    expect(store.getUsage(run.id).calls).toBe(0);
+    expect((await store.getUsage(run.id)).calls).toBe(0);
   });
 
   it("refuses an unknown topic", async () => {
-    const run = store.createRun("acme", "web-bnpl");
+    const run = await store.createRun("acme", "web-bnpl");
     await expect(chat(run, { kind: "about", topic: "nonsense" as never }, "Acme")).rejects.toThrow(/suggested questions/);
   });
 });

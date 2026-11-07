@@ -137,33 +137,33 @@ describe("usage store", () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("scopes usage to the workspace and lists every workspace for admins", () => {
-    const a = createOrg("Acme Trading", 14);
-    const b = createOrg("Bravo Retail", 14);
-    const runA = store.createRun(a.key, "mkt-settlement-vs-sales");
-    const runB = store.createRun(b.key, "mkt-settlement-vs-sales");
-    store.logUsage(runA.id, "column_mapping", { model: "claude-haiku-5-5", inputTokens: 400, cacheReadTokens: 0, cacheWriteTokens: 3000, outputTokens: 120 });
-    store.logUsage(runA.id, "narrative", { model: "claude-sonnet-5-5", inputTokens: 200, cacheReadTokens: 2500, cacheWriteTokens: 0, outputTokens: 600 });
-    store.logUsage(runB.id, "chat", { model: "claude-haiku-5-5", inputTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 0, outputTokens: 80 });
-    store.addQuestion(runA.id, "orders", { kind: "currency", options: ["AED"] });
+  it("scopes usage to the workspace and lists every workspace for admins", async () => {
+    const a = await createOrg("Acme Trading", 14);
+    const b = await createOrg("Bravo Retail", 14);
+    const runA = await store.createRun(a.key, "mkt-settlement-vs-sales");
+    const runB = await store.createRun(b.key, "mkt-settlement-vs-sales");
+    await store.logUsage(runA.id, "column_mapping", { model: "claude-haiku-5-5", inputTokens: 400, cacheReadTokens: 0, cacheWriteTokens: 3000, outputTokens: 120 });
+    await store.logUsage(runA.id, "narrative", { model: "claude-sonnet-5-5", inputTokens: 200, cacheReadTokens: 2500, cacheWriteTokens: 0, outputTokens: 600 });
+    await store.logUsage(runB.id, "chat", { model: "claude-haiku-5-5", inputTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 0, outputTokens: 80 });
+    await store.addQuestion(runA.id, "orders", { kind: "currency", options: ["AED"] });
 
-    const mine = store.listUsageRecords(a.key);
+    const mine = await store.listUsageRecords(a.key);
     expect(mine.map((r) => r.purpose)).toEqual(["column_mapping", "narrative"]);
     expect(mine.every((r) => r.orgKey === a.key)).toBe(true);
-    expect(store.listUsageRecords(b.key)).toHaveLength(1);
-    const all = store.listUsageRecords(null);
+    expect(await store.listUsageRecords(b.key)).toHaveLength(1);
+    const all = await store.listUsageRecords(null);
     expect(all).toHaveLength(3);
     expect(new Set(all.map((r) => r.orgName))).toEqual(new Set(["Acme Trading", "Bravo Retail"]));
-    expect(store.listUsageRecords(a.key, "2999-01-01T00:00:00Z")).toHaveLength(0);
+    expect(await store.listUsageRecords(a.key, "2999-01-01T00:00:00Z")).toHaveLength(0);
 
-    const activity = store.listRunActivity(a.key);
+    const activity = await store.listRunActivity(a.key);
     expect(activity).toEqual([expect.objectContaining({ id: runA.id, questions: 1, mappingCalls: 1, hasResult: false })]);
 
-    const dash = dashboardData(a.key, "30");
+    const dash = await dashboardData(a.key, "30");
     expect(dash.totals.calls).toBe(2);
     expect(dash.rows.workspace).toEqual([]);
     expect(dash.rows.run[0]).toMatchObject({ id: runA.id, calls: 2 });
     expect(dash.rows.run[0].detail).not.toBe("mkt-settlement-vs-sales");
-    expect(dashboardData(null, "all").rows.workspace.map((r) => r.label).sort()).toEqual(["Acme Trading", "Bravo Retail"]);
+    expect((await dashboardData(null, "all")).rows.workspace.map((r) => r.label).sort()).toEqual(["Acme Trading", "Bravo Retail"]);
   });
 });

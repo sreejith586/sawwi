@@ -12,15 +12,15 @@ const TABLES: ExportTable[] = ["checks", "exceptions", "links", "all"];
 export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/export">) {
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
-  const result = owned && getResult(id);
-  const template = owned && templateForRun(owned.run);
+  const result = owned && await getResult(id);
+  const template = owned && await templateForRun(owned.run);
   if (!owned || !result || !template) return Response.json({ error: "Report not found." }, { status: 404 });
 
   const params = new URL(request.url).searchParams;
   const table = TABLES.find((t) => t === params.get("table")) ?? "all";
   const report = buildReport(template, result, Number.MAX_SAFE_INTEGER);
   const query = queryFromParams(params, table === "checks" ? ["severity", "status"] : ["check", "severity"]);
-  const datasets = table === "exceptions" || table === "all" ? loadRunDatasets(owned.run) : undefined;
+  const datasets = table === "exceptions" || table === "all" ? await loadRunDatasets(owned.run) : undefined;
   const bytes = await buildWorkbook(report, table, query, datasets);
 
   const name = `${template.id}-${table}-${result.asOf}.xlsx`;

@@ -19,7 +19,7 @@ async function Usage({ searchParams }: { searchParams: Promise<{ range?: string 
         What Sawwi&apos;s AI calls cost this workspace: column mapping, report analysis, email drafts and chat. Matching never uses AI, and repeat runs with
         remembered mappings make no calls before the report.
       </p>
-      <UsageDashboard admin={false} range={range} basePath="/settings/usage" exportPath="/api/usage" {...dashboardData(session.org.key, range)} />
+      <UsageDashboard admin={false} range={range} basePath="/settings/usage" exportPath="/api/usage" {...(await dashboardData(session.org.key, range))} />
     </div>
   );
 }

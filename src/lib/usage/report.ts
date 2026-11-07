@@ -7,18 +7,19 @@ import { dailyCost, day, groupUsage, rangeStart, runStats, totalsOf, type RangeI
 // Server-side: builds the usage dashboard for one workspace (orgKey) or, for the
 // superadmin console, all of them (null). The page and its Excel export share it.
 
-export function usageEvents(orgKey: string | null, range: RangeId): UsageEvent[] {
+export async function usageEvents(orgKey: string | null, range: RangeId): Promise<UsageEvent[]> {
+  const records = await listUsageRecords(orgKey, rangeStart(range));
+  // One template lookup per run, not per call.
   const titles = new Map<string, string>();
-  const title = (org: string, templateId: string, runId: string) => {
-    const k = `${org}\u0000${templateId}\u0000${runId}`;
-    if (!titles.has(k)) titles.set(k, templateFor(org, templateId, runId)?.title ?? templateId);
-    return titles.get(k)!;
-  };
-  return listUsageRecords(orgKey, rangeStart(range)).map((r) => ({
+  for (const r of records) {
+    if (!r.orgKey || !r.templateId || !r.runId || titles.has(r.runId)) continue;
+    titles.set(r.runId, (await templateFor(r.orgKey, r.templateId, r.runId))?.title ?? r.templateId);
+  }
+  return records.map((r) => ({
     runId: r.runId,
     orgKey: r.orgKey,
     workspace: r.orgName ?? r.orgKey ?? undefined,
-    template: r.orgKey && r.templateId && r.runId ? title(r.orgKey, r.templateId, r.runId) : undefined,
+    template: r.runId ? titles.get(r.runId) : undefined,
     runStartedAt: r.runStartedAt ?? undefined,
     purpose: r.purpose,
     model: r.model,
@@ -30,14 +31,14 @@ export function usageEvents(orgKey: string | null, range: RangeId): UsageEvent[]
   }));
 }
 
-export function usageReport(orgKey: string | null, range: RangeId, now = Date.now()) {
-  const events = usageEvents(orgKey, range);
+export async function usageReport(orgKey: string | null, range: RangeId, now = Date.now()) {
+  const events = await usageEvents(orgKey, range);
   const since = rangeStart(range, now);
   const today = new Date(now).toISOString().slice(0, 10);
   const first = since ? day(since) : events[0] ? day(events[0].createdAt) : today;
   return {
     totals: totalsOf(events),
-    runs: runStats(listRunActivity(orgKey), since),
+    runs: runStats(await listRunActivity(orgKey), since),
     daily: dailyCost(events, first, today),
     events,
   };
@@ -85,9 +86,9 @@ export function usageSheetColumns(view: UsageView, admin: boolean): SheetColumn[
 export { groupUsage };
 
 /** Everything the dashboard component shows, for one workspace or (null) all of them. */
-export function dashboardData(orgKey: string | null, range: RangeId) {
+export async function dashboardData(orgKey: string | null, range: RangeId) {
   const admin = orgKey === null;
-  const { totals, runs, daily, events } = usageReport(orgKey, range);
+  const { totals, runs, daily, events } = await usageReport(orgKey, range);
   const views = USAGE_VIEWS.filter((v) => admin || v !== "workspace");
   const rows = Object.fromEntries(USAGE_VIEWS.map((v) => [v, views.includes(v) ? groupUsage(events, v) : []])) as Record<UsageView, ReturnType<typeof groupUsage>>;
   return {

@@ -35,10 +35,10 @@ const ctx = { countries: ["AE" as const] };
 describe("run engine", () => {
   it("asks only what it can't infer, then remembers everything for the next run", async () => {
     const ids = ["100000101", "100000102", "100000103", "100000104", "100000105"];
-    const run = store.createRun("acme", "web-orders-vs-gateway");
+    const run = await store.createRun("acme", "web-orders-vs-gateway");
 
     await ingestFile(run, "orders", "orders.csv", orders(ids), ctx);
-    let view = buildRunView(run.id)!;
+    let view = (await buildRunView(run.id))!;
     expect(view.status).toBe("collecting");
     const orderFields = Object.fromEntries(view.slots[0].file!.fields.map((f) => [f.key, f.column]));
     expect(orderFields.order_id).toBe("ID");
@@ -48,35 +48,35 @@ describe("run engine", () => {
 
     // Answer whatever it asks, preferring Yes/Day-first/the first suggested column.
     for (let i = 0; i < 10; i++) {
-      view = buildRunView(run.id)!;
+      view = (await buildRunView(run.id))!;
       const q = view.openQuestions[0];
       if (!q) break;
       const pick = q.options.find((o) => o.value === "yes" || o.value === "DMY") ?? q.options[0];
-      answerQuestion(store.getRun(run.id)!, q.id, pick.value);
+      await answerQuestion((await store.getRun(run.id))!, q.id, pick.value);
     }
-    view = buildRunView(run.id)!;
+    view = (await buildRunView(run.id))!;
     expect(view.status).toBe("ready");
     expect(view.usage.calls).toBe(0);
 
-    const asked = store.getQuestions(run.id).map((q) => q.payload.kind);
+    const asked = (await store.getQuestions(run.id)).map((q) => q.payload.kind);
     expect(asked).toContain("date_format"); // 03/01/2026 could be either way round
     expect(asked).toContain("key_format"); // "#100000101" vs "100000101"
     expect(asked.length).toBeLessThanOrEqual(5);
 
     // Second run, same layouts, new data: nothing to ask.
     const ids2 = ["100000201", "100000202", "100000203", "100000204"];
-    const run2 = store.createRun("acme", "web-orders-vs-gateway");
+    const run2 = await store.createRun("acme", "web-orders-vs-gateway");
     await ingestFile(run2, "orders", "orders-nov.csv", orders(ids2), ctx);
     await ingestFile(run2, "gateway", "gateway-nov.csv", gateway(ids2), ctx);
-    const view2 = buildRunView(run2.id)!;
+    const view2 = (await buildRunView(run2.id))!;
     expect(view2.openQuestions).toEqual([]);
     expect(view2.status).toBe("ready");
     expect(view2.slots.every((s) => s.file?.remembered)).toBe(true);
   });
 
   it("keeps memory per company", async () => {
-    const run = store.createRun("other-co", "web-orders-vs-gateway");
+    const run = await store.createRun("other-co", "web-orders-vs-gateway");
     await ingestFile(run, "gateway", "gateway.csv", gateway(["1", "2", "3"]), ctx);
-    expect(buildRunView(run.id)!.slots.find((s) => s.key === "gateway")!.file!.remembered).toBe(false);
+    expect((await buildRunView(run.id))!.slots.find((s) => s.key === "gateway")!.file!.remembered).toBe(false);
   });
 });

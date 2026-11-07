@@ -16,12 +16,12 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const { id } = await params;
   const owned = await getOwnedRun(id);
-  const view = owned && buildRunView(id);
+  const view = owned && await buildRunView(id);
   if (!view) notFound();
   // Importing from a connection is new work on the run: offered to editors and up only.
   const session = await getCurrentSession();
   const editor = Boolean(session && canRun(session.access));
-  const sources = session && editor ? importSources(session.org.key) : [];
+  const sources = session && editor ? await importSources(session.org.key) : [];
   return <RunWorkspace initial={view} sources={sources} demo={editor && isDemoOrg(session?.org.key)} />;
 }
 

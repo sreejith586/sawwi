@@ -18,7 +18,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/runs/[id]/fi
   const { id, slot } = await ctx.params;
   const owned = await getOwnedRun(id);
   if (!owned) return Response.json({ error: "Run not found." }, { status: 404 });
-  const file = getRunFiles(id).find((f) => f.slotKey === slot);
+  const file = (await getRunFiles(id)).find((f) => f.slotKey === slot);
   if (!file) return Response.json({ error: "No file uploaded for this slot." }, { status: 404 });
 
   const parsed = Papa.parse<string[]>(readFileSync(file.storedPath, "utf8"), { skipEmptyLines: "greedy" });

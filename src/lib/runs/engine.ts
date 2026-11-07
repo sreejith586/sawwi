@@ -20,8 +20,8 @@ export type RunContext = { countries: Country[] };
 
 export class RunInputError extends Error {}
 
-function requireTemplate(run: Run): Template {
-  const t = templateForRun(run);
+async function requireTemplate(run: Run): Promise<Template> {
+  const t = await templateForRun(run);
   if (!t) throw new RunInputError("This run's template no longer exists.");
   return t;
 }
@@ -39,7 +39,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 type MappingResult = { mapping: SlotMapping; questions: QuestionPayload[]; usedAi: boolean; remembered: boolean };
 
 async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext, confirmColumns = false): Promise<MappingResult> {
-  const cached = store.getCachedMapping(run.orgKey, run.templateId, slot.key, profile.fingerprint);
+  const cached = await store.getCachedMapping(run.orgKey, run.templateId, slot.key, profile.fingerprint);
   if (cached) {
     const fields = Object.fromEntries(
       Object.entries(cached.fields).map(([k, v]) => [k, { ...v, source: "remembered" as const }]),
@@ -52,7 +52,7 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
   const candidates = scoreCandidates(slot.fields, profile.columns);
   const best = assign(candidates);
 
-  if (confirmColumns) return confirmEveryColumn(slot, profile, ctx, candidates);
+  if (confirmColumns) return await confirmEveryColumn(slot, profile, ctx, candidates);
 
   for (const field of slot.fields) {
     const c = best.get(field.key);
@@ -70,7 +70,7 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
     const available = profile.columns.filter((c) => !taken.has(c.name));
     try {
       const { suggestions, usage } = await suggestMappings({ sourceLabel: slot.label, fields: unresolved, columns: available });
-      store.logUsage(run.id, "column_mapping", usage);
+      await store.logUsage(run.id, "column_mapping", usage);
       usedAi = true;
       const usedByAi = new Set<string>();
       for (const s of suggestions) {
@@ -106,7 +106,7 @@ async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ct
  * a column stands out, otherwise "Which column holds the key?". Optional fields map only on a
  * strong name match.
  */
-function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, candidates: Candidate[]): MappingResult {
+async function confirmEveryColumn(slot: SourceSlot, profile: FileProfile, ctx: RunContext, candidates: Candidate[]): Promise<MappingResult> {
   const best = assign(genericCandidates(slot, profile, candidates));
   const fields: Record<string, FieldMapping> = {};
   const questions: QuestionPayload[] = [];
@@ -198,7 +198,7 @@ const LINE_FIELDS = new Set(["sku", "qty", "qty_invoiced", "unit_price", "line_a
 
 /** One or more files into a slot. Several files (e.g. a month of supplier invoice PDFs) become one table. */
 export async function ingestFiles(run: Run, slotKey: string, files: { name: string; data: Uint8Array }[], ctx: RunContext) {
-  const template = requireTemplate(run);
+  const template = await requireTemplate(run);
   const slot = requireSlot(template, slotKey);
   if (files.length === 0) throw new RunInputError("Choose a file to upload.");
 
@@ -226,9 +226,9 @@ export async function ingestFiles(run: Run, slotKey: string, files: { name: stri
   const profile = profileTable(table);
   const { mapping, questions, usedAi, remembered } = await buildMapping(run, slot, profile, ctx, template.confirmColumns);
 
-  store.deleteOpenQuestions(run.id, slotKey);
-  store.upsertRunFile(run.id, { slotKey, fileName, storedPath, profile, mapping });
-  store.setPdfInfo(run.id, slotKey, table.pdf ?? null);
+  await store.deleteOpenQuestions(run.id, slotKey);
+  await store.upsertRunFile(run.id, { slotKey, fileName, storedPath, profile, mapping });
+  await store.setPdfInfo(run.id, slotKey, table.pdf ?? null);
 
   const mappedCount = Object.values(mapping.fields).filter((f) => f.column).length;
   let summary = `I read ${fileName}: ${plural(profile.rowCount, "row")} and ${plural(profile.columns.length, "column")}. `;
@@ -238,23 +238,23 @@ export async function ingestFiles(run: Run, slotKey: string, files: { name: stri
     summary += questions.length ? ` and have ${plural(questions.length, "quick question")}.` : ".";
   }
   if (table.pdf) summary = `${pdfSummary(table.pdf)} ${summary}`;
-  store.addMessage(run.id, "sawwi", summary);
+  await store.addMessage(run.id, "sawwi", summary);
   // Failed balance or VAT checks come first: the rows may be wrong, so nothing runs silently.
   for (const pdf of table.pdf ?? []) {
     const failed = pdf.checks.filter((c) => !c.ok);
-    if (failed.length) store.addQuestion(run.id, slotKey, { kind: "pdf_check", fileName: pdf.fileName, detail: failed.map((c) => c.detail).join(" ") });
+    if (failed.length) await store.addQuestion(run.id, slotKey, { kind: "pdf_check", fileName: pdf.fileName, detail: failed.map((c) => c.detail).join(" ") });
     // OCR can misread digits; with no balance or VAT check to catch that, the user confirms the rows.
     else if (pdf.ocr && pdf.checks.length === 0) {
-      store.addQuestion(run.id, slotKey, {
+      await store.addQuestion(run.id, slotKey, {
         kind: "pdf_check",
         fileName: pdf.fileName,
         detail: "It's a scan read by OCR, and it has no balances or VAT totals I could check the rows against.",
       });
     }
   }
-  for (const q of questions) store.addQuestion(run.id, slotKey, q);
+  for (const q of questions) await store.addQuestion(run.id, slotKey, q);
 
-  afterChange(run, template);
+  await afterChange(run, template);
 }
 
 const KIND_LABEL: Record<PdfFileInfo["kind"], string> = { statement: "statement", invoice: "invoice", table: "table" };
@@ -298,37 +298,37 @@ function ocrNote(ocr: NonNullable<PdfFileInfo["ocr"]>): string {
 
 // ─── Answers ──────────────────────────────────────────────────────────────
 
-export function answerQuestion(run: Run, questionId: string, answer: string) {
-  const template = requireTemplate(run);
-  const question = store.getQuestions(run.id).find((q) => q.id === questionId);
+export async function answerQuestion(run: Run, questionId: string, answer: string) {
+  const template = await requireTemplate(run);
+  const question = (await store.getQuestions(run.id)).find((q) => q.id === questionId);
   if (!question || question.answer !== null) throw new RunInputError("That question was already answered.");
 
-  const view = presentQuestion(question.payload, template, question.slotKey, store.getRunFiles(run.id).find((f) => f.slotKey === question.slotKey));
+  const view = presentQuestion(question.payload, template, question.slotKey, (await store.getRunFiles(run.id)).find((f) => f.slotKey === question.slotKey));
   const option = view.options.find((o) => o.value === answer);
   if (!option) throw new RunInputError("Pick one of the offered answers.");
 
   const p = question.payload;
   if (p.kind === "pdf_check" && answer === "replace") {
     // Stays open: the slot only clears when the user continues or uploads a new file.
-    store.addMessage(run.id, "user", option.label, questionId);
-    store.addMessage(run.id, "sawwi", `OK. Drop a corrected ${p.fileName}, or a CSV/Excel export of it, on the same slot to replace it. Until then I'll hold the run.`);
+    await store.addMessage(run.id, "user", option.label, questionId);
+    await store.addMessage(run.id, "sawwi", `OK. Drop a corrected ${p.fileName}, or a CSV/Excel export of it, on the same slot to replace it. Until then I'll hold the run.`);
     return;
   }
 
-  store.setAnswer(questionId, answer);
-  store.addMessage(run.id, "user", option.label, questionId);
+  await store.setAnswer(questionId, answer);
+  await store.addMessage(run.id, "user", option.label, questionId);
 
   if (p.kind === "pdf_check") {
-    store.addMessage(run.id, "sawwi", "OK, I'll use the rows as read. You can still check them under Preview data.");
+    await store.addMessage(run.id, "sawwi", "OK, I'll use the rows as read. You can still check them under Preview data.");
   } else if (p.kind === "key_format") {
-    store.setRule(run.orgKey, run.templateId, keyRuleName(Math.floor(p.keyIndex / 100), p.keyIndex % 100), answer === "yes" ? p.normalizers : []);
-    store.addMessage(
+    await store.setRule(run.orgKey, run.templateId, keyRuleName(Math.floor(p.keyIndex / 100), p.keyIndex % 100), answer === "yes" ? p.normalizers : []);
+    await store.addMessage(
       run.id,
       "sawwi",
       answer === "yes" ? "Done. I'll ignore those differences when matching, now and on future runs." : "OK, I'll match them exactly as written.",
     );
   } else {
-    const file = store.getRunFiles(run.id).find((f) => f.slotKey === question.slotKey);
+    const file = (await store.getRunFiles(run.id)).find((f) => f.slotKey === question.slotKey);
     if (!file) throw new RunInputError("That file was replaced. Answer the newer questions instead.");
     const slot = requireSlot(template, file.slotKey);
     const mapping = file.mapping;
@@ -337,7 +337,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       if (answer === "yes") mapping.fields[p.field] = { column: p.column, source: "user", confidence: 1 };
       else {
         const field = slot.fields.find((f) => f.key === p.field)!;
-        store.addQuestion(run.id, file.slotKey, {
+        await store.addQuestion(run.id, file.slotKey, {
           kind: "choose_column",
           field: p.field,
           options: columnOptions(field, file.profile, mapping.fields, [p.column], template.confirmColumns),
@@ -347,7 +347,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       mapping.fields[p.field] = { column: answer === NONE_OPTION ? null : answer, source: "user", confidence: 1 };
       const field = slot.fields.find((f) => f.key === p.field)!;
       if (answer === NONE_OPTION && field.required) {
-        store.addMessage(
+        await store.addMessage(
           run.id,
           "sawwi",
           `I need ${field.label} to run this reconciliation. Upload a version of ${file.fileName} that includes it, or an export with more columns.`,
@@ -355,7 +355,7 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       } else if (answer !== NONE_OPTION) {
         // A newly mapped date column may need its format confirmed.
         for (const q of formatQuestions(slot, file.profile, mapping, { countries: [] }))
-          if (q.kind === "date_format") store.addQuestion(run.id, file.slotKey, q);
+          if (q.kind === "date_format") await store.addQuestion(run.id, file.slotKey, q);
       }
     } else if (p.kind === "date_format") {
       mapping.dateFormats[p.column] = answer as "DMY" | "MDY";
@@ -363,11 +363,11 @@ export function answerQuestion(run: Run, questionId: string, answer: string) {
       mapping.currency = answer;
     }
 
-    retargetStaleConfirms(run, template, file);
-    store.updateRunFileMapping(run.id, file.slotKey, mapping);
+    await retargetStaleConfirms(run, template, file);
+    await store.updateRunFileMapping(run.id, file.slotKey, mapping);
   }
 
-  afterChange(run, template);
+  await afterChange(run, template);
 }
 
 /** Columns already mapped to other fields of this file: a column holds one field only. */
@@ -385,16 +385,16 @@ export function takenColumns(file: RunFile | undefined, field: string): Set<stri
  * proposes ("Is Credit Amt the key?" after Credit Amt became the amount). Those become a fresh
  * "Which column…?" question instead of offering a column that's no longer free.
  */
-function retargetStaleConfirms(run: Run, template: Template, file: RunFile) {
+async function retargetStaleConfirms(run: Run, template: Template, file: RunFile) {
   const slot = requireSlot(template, file.slotKey);
-  for (const q of store.getQuestions(run.id)) {
+  for (const q of await store.getQuestions(run.id)) {
     if (q.answer !== null || q.slotKey !== file.slotKey || q.payload.kind !== "confirm_column") continue;
     const p = q.payload;
     if (!takenColumns(file, p.field).has(p.column)) continue;
     const field = slot.fields.find((f) => f.key === p.field);
-    store.deleteQuestion(q.id);
+    await store.deleteQuestion(q.id);
     if (field) {
-      store.addQuestion(run.id, file.slotKey, {
+      await store.addQuestion(run.id, file.slotKey, {
         kind: "choose_column",
         field: p.field,
         options: columnOptions(field, file.profile, file.mapping.fields, [p.column], template.confirmColumns),
@@ -404,47 +404,47 @@ function retargetStaleConfirms(run: Run, template: Template, file: RunFile) {
 }
 
 /** Lets the user correct any field from the mapping table. */
-export function overrideMapping(run: Run, slotKey: string, fieldKey: string, column: string | null) {
-  const template = requireTemplate(run);
+export async function overrideMapping(run: Run, slotKey: string, fieldKey: string, column: string | null) {
+  const template = await requireTemplate(run);
   const slot = requireSlot(template, slotKey);
-  const file = store.getRunFiles(run.id).find((f) => f.slotKey === slotKey);
+  const file = (await store.getRunFiles(run.id)).find((f) => f.slotKey === slotKey);
   if (!file || !slot.fields.some((f) => f.key === fieldKey)) throw new RunInputError("Unknown field.");
   if (column !== null && !file.profile.columns.some((c) => c.name === column)) throw new RunInputError("Unknown column.");
   for (const [k, v] of Object.entries(file.mapping.fields)) {
     if (k !== fieldKey && column !== null && v.column === column) file.mapping.fields[k] = { column: null, source: "user", confidence: 1 };
   }
   file.mapping.fields[fieldKey] = { column, source: "user", confidence: 1 };
-  store.updateRunFileMapping(run.id, slotKey, file.mapping);
-  afterChange(run, template);
+  await store.updateRunFileMapping(run.id, slotKey, file.mapping);
+  await afterChange(run, template);
 }
 
 // ─── After every change ───────────────────────────────────────────────────
 
-function afterChange(run: Run, template: Template) {
-  store.clearResult(run.id);
-  const files = store.getRunFiles(run.id);
-  const open = store.getQuestions(run.id).filter((q) => q.answer === null);
+async function afterChange(run: Run, template: Template) {
+  await store.clearResult(run.id);
+  const files = await store.getRunFiles(run.id);
+  const open = (await store.getQuestions(run.id)).filter((q) => q.answer === null);
 
   // A slot with no open questions is settled: remember its mapping for next time.
   for (const file of files) {
     if (open.some((q) => q.slotKey === file.slotKey)) continue;
     const wasRemembered = Object.values(file.mapping.fields).every((f) => f.source === "remembered");
-    store.saveCachedMapping(run.orgKey, run.templateId, file.slotKey, file.profile.fingerprint, file.mapping);
-    if (!wasRemembered && !store.getRunCheck(run.id, `saved_${file.slotKey}_${file.profile.fingerprint}`)) {
-      store.setRunCheck(run.id, `saved_${file.slotKey}_${file.profile.fingerprint}`, true);
+    await store.saveCachedMapping(run.orgKey, run.templateId, file.slotKey, file.profile.fingerprint, file.mapping);
+    if (!wasRemembered && !await store.getRunCheck(run.id, `saved_${file.slotKey}_${file.profile.fingerprint}`)) {
+      await store.setRunCheck(run.id, `saved_${file.slotKey}_${file.profile.fingerprint}`, true);
       if (Object.values(file.mapping.fields).some((f) => f.source === "user")) {
-        store.addMessage(run.id, "sawwi", `Got it. I'll remember how to read ${file.fileName}'s layout next time.`);
+        await store.addMessage(run.id, "sawwi", `Got it. I'll remember how to read ${file.fileName}'s layout next time.`);
       }
     }
   }
 
-  runKeyChecks(run, template, files);
+  await runKeyChecks(run, template, files);
 
-  const status = computeStatus(template, store.getRunFiles(run.id), store.getQuestions(run.id));
+  const status = computeStatus(template, await store.getRunFiles(run.id), await store.getQuestions(run.id));
   if (status !== run.status) {
-    store.setRunStatus(run.id, status);
+    await store.setRunStatus(run.id, status);
     if (status === "ready" && run.status !== "done") {
-      store.addMessage(run.id, "sawwi", "All set. I know how to read every file and how they connect. You can run the reconciliation when you're ready.");
+      await store.addMessage(run.id, "sawwi", "All set. I know how to read every file and how they connect. You can run the reconciliation when you're ready.");
     }
     run.status = status;
   }
@@ -455,25 +455,25 @@ function readColumn(file: RunFile, column: string): string[] {
   return parsed.data.map((r) => r[column] ?? "");
 }
 
-function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
-  const open = store.getQuestions(run.id).filter((q) => q.answer === null);
-  template.links.forEach((link, li) => {
+async function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
+  const open = (await store.getQuestions(run.id)).filter((q) => q.answer === null);
+  for (const [li, link] of template.links.entries()) {
     const left = files.find((f) => f.slotKey === link.left);
     const right = files.find((f) => f.slotKey === link.right);
-    if (!left || !right) return;
-    if (open.some((q) => q.slotKey === link.left || q.slotKey === link.right)) return;
+    if (!left || !right) continue;
+    if (open.some((q) => q.slotKey === link.left || q.slotKey === link.right)) continue;
 
-    link.keys.forEach((key, ki) => {
-      if (key.mode === "month") return;
+    for (const [ki, key] of link.keys.entries()) {
+      if (key.mode === "month") continue;
       const lc = left.mapping.fields[key.left]?.column;
       const rc = right.mapping.fields[key.right]?.column;
-      if (!lc || !rc) return;
-      if (getKeyRule(run.orgKey, run.templateId, li, ki)) return;
+      if (!lc || !rc) continue;
+      if (await getKeyRule(run.orgKey, run.templateId, li, ki)) continue;
 
       const checkKey = `key_${li}_${ki}`;
       const stamp = `${left.profile.fingerprint}:${left.fileName}|${right.profile.fingerprint}:${right.fileName}|${lc}|${rc}`;
-      if (store.getRunCheck<string>(run.id, checkKey) === stamp) return;
-      store.setRunCheck(run.id, checkKey, stamp);
+      if ((await store.getRunCheck<string>(run.id, checkKey)) === stamp) continue;
+      await store.setRunCheck(run.id, checkKey, stamp);
 
       const fieldLabel = requireSlot(template, link.left).fields.find((f) => f.key === key.left)?.label ?? key.left;
       const result =
@@ -481,7 +481,7 @@ function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
           ? { overlap: containmentOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []), suggestion: undefined }
           : checkKeyOverlap(readColumn(left, lc), readColumn(right, rc), key.normalize ?? []);
       if (result.suggestion) {
-        store.addQuestion(run.id, null, {
+        await store.addQuestion(run.id, null, {
           kind: "key_format",
           keyIndex: li * 100 + ki,
           fieldLabel,
@@ -490,14 +490,14 @@ function runKeyChecks(run: Run, template: Template, files: RunFile[]) {
           normalizers: result.suggestion.normalizers,
         });
       } else if (result.overlap < 0.2 && link.combine !== "or") {
-        store.addMessage(
+        await store.addMessage(
           run.id,
           "sawwi",
           `Heads up: only ${Math.round(result.overlap * 100)}% of ${fieldLabel} values appear in both files. Check that both files cover the same period. I'll still run, but expect many unmatched items.`,
         );
       }
-    });
-  });
+    }
+  }
 }
 
 /** Saved answer to "match ignoring symbols?" for a link key. Read by the matching engine too. */
@@ -506,10 +506,10 @@ export function keyRuleName(linkIndex: number, keyIndex: number) {
 }
 
 /** The saved key-format answer, including ones saved before links existed (`key_normalizers_<n>`). */
-export function getKeyRule(orgKey: string, templateId: string, linkIndex: number, keyIndex: number): KeyNormalizer[] | undefined {
+export async function getKeyRule(orgKey: string, templateId: string, linkIndex: number, keyIndex: number): Promise<KeyNormalizer[] | undefined> {
   return (
-    store.getRule<KeyNormalizer[]>(orgKey, templateId, keyRuleName(linkIndex, keyIndex)) ??
-    (linkIndex === 0 ? store.getRule<KeyNormalizer[]>(orgKey, templateId, `key_normalizers_${keyIndex}`) : undefined)
+    (await store.getRule<KeyNormalizer[]>(orgKey, templateId, keyRuleName(linkIndex, keyIndex))) ??
+    (linkIndex === 0 ? await store.getRule<KeyNormalizer[]>(orgKey, templateId, `key_normalizers_${keyIndex}`) : undefined)
   );
 }
 

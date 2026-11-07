@@ -17,15 +17,15 @@ export type SyncRow = {
   error: string;
 };
 
-export function syncRows(orgKey: string): SyncRow[] {
+export async function syncRows(orgKey: string): Promise<SyncRow[]> {
   // Real connections, plus the demo store's built-in sources (D-32).
-  const connections = [...listConnections(orgKey), ...DEMO_SOURCES.map((d) => ({ id: demoConnectionId(d.provider), provider: d.provider, accountLabel: d.accountLabel }))];
+  const connections = [...(await listConnections(orgKey)), ...DEMO_SOURCES.map((d) => ({ id: demoConnectionId(d.provider), provider: d.provider, accountLabel: d.accountLabel }))];
   const names = new Map(connections.map((c) => [c.id, `${connectorById(c.provider)?.label ?? c.provider}: ${c.accountLabel}`]));
   const reportLabel = (connectionId: string, report: string) => {
     const provider = connections.find((c) => c.id === connectionId)?.provider;
     return (provider && connectorById(provider)?.reports.find((r) => r.id === report)?.label) || report;
   };
-  return listSyncs(orgKey).map((s) => ({
+  return (await listSyncs(orgKey)).map((s) => ({
     id: String(s.id),
     at: s.createdAt,
     connection: names.get(s.connectionId) ?? "Removed connection",

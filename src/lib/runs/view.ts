@@ -128,14 +128,15 @@ export type InsightsView = {
   checks: { id: string; label: string; count: number; value: number; severity: Severity; dims: Dimension[] }[];
 };
 
-export function buildRunView(runId: string): RunView | undefined {
-  const run = store.getRun(runId);
-  const template = run && templateForRun(run);
+export async function buildRunView(runId: string): Promise<RunView | undefined> {
+  const run = await store.getRun(runId);
+  const template = run && await templateForRun(run);
   if (!run || !template) return undefined;
 
-  const files = store.getRunFiles(run.id);
-  const questions = store.getQuestions(run.id);
-  const result = store.getResult(run.id);
+  const files = await store.getRunFiles(run.id);
+  const questions = await store.getQuestions(run.id);
+  const result = await store.getResult(run.id);
+  const pdfInfo = new Map(await Promise.all(files.map(async (f) => [f.slotKey, await store.getPdfInfo(run.id, f.slotKey)] as const)));
 
   return {
     id: run.id,
@@ -156,7 +157,7 @@ export function buildRunView(runId: string): RunView | undefined {
             rowCount: file.profile.rowCount,
             columns: file.profile.columns.map((c) => c.name),
             remembered: Object.values(file.mapping.fields).every((f) => f.source === "remembered"),
-            pdf: store.getPdfInfo(run.id, slot.key),
+            pdf: pdfInfo.get(slot.key),
             fields: slot.fields.map((f) => ({
               key: f.key,
               label: f.label,
@@ -168,14 +169,14 @@ export function buildRunView(runId: string): RunView | undefined {
         }),
       };
     }),
-    messages: store.getMessages(run.id),
+    messages: await store.getMessages(run.id),
     openQuestions: questions
       .filter((q) => q.answer === null)
       .map((q) => ({ id: q.id, ...presentQuestion(q.payload, template, q.slotKey, files.find((f) => f.slotKey === q.slotKey)) })),
-    usage: store.getUsage(run.id),
+    usage: await store.getUsage(run.id),
     report: result ? buildReport(template, result) : undefined,
     insights: result ? buildInsights(template, result, files, run.orgKey) : undefined,
-    generic: run.templateId === GENERIC_TEMPLATE_ID ? genericSetupFor(run.id) : undefined,
+    generic: run.templateId === GENERIC_TEMPLATE_ID ? await genericSetupFor(run.id) : undefined,
     custom: isCustomId(run.templateId),
   };
 }

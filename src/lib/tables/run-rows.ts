@@ -22,9 +22,10 @@ export type RunRow = {
 const dateLabel = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
-export function runRows(runs: RunSummary[]): RunRow[] {
-  return runs.map((r) => {
-    const t = templateFor(r.orgKey, r.templateId, r.id);
+export async function runRows(runs: RunSummary[]): Promise<RunRow[]> {
+  const templates = await Promise.all(runs.map((r) => templateFor(r.orgKey, r.templateId, r.id)));
+  return runs.map((r, i) => {
+    const t = templates[i];
     return {
       id: r.id,
       template: t?.title ?? r.templateId,

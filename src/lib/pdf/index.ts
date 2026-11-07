@@ -119,7 +119,7 @@ async function fromLines(
 ): Promise<{ result: PdfTable; rowsAt?: { page: number; y: number }[] } | undefined> {
   // A saved layout for this issuer is used first.
   const issuer = issuerKey(lines);
-  const recipes = opts.layouts?.find(issuer) ?? [];
+  const recipes = (await opts.layouts?.find(issuer)) ?? [];
   const table = readTable(lines, { recipes });
   const isStatement = table?.columns.some((c) => c.role === "balance") && table.columns.some((c) => ["debit", "credit", "amount"].includes(c.role));
 
@@ -138,7 +138,7 @@ async function fromLines(
       }
     }
     const result = invoiceTable(fileName, doc, method, pdf.numPages, opts);
-    if (table) result.info.layout = remember(opts.layouts, issuer, table, "invoice");
+    if (table) result.info.layout = await remember(opts.layouts, issuer, table, "invoice");
     const perLine = (opts.grain ?? "invoice") === "line" && table && doc.lines.length === table.rows.length;
     return { result, rowsAt: perLine ? table.rows : undefined };
   }
@@ -157,7 +157,7 @@ async function fromLines(
           kind: "statement",
           method,
           pages: pdf.numPages,
-          layout: remember(opts.layouts, issuer, table, "statement"),
+          layout: await remember(opts.layouts, issuer, table, "statement"),
           meta: statementMetaRows(s.meta),
           checks: s.checks,
           skipped: s.skipped,
@@ -177,7 +177,7 @@ async function fromLines(
         kind: "table",
         method,
         pages: pdf.numPages,
-        layout: remember(opts.layouts, issuer, table, "table"),
+        layout: await remember(opts.layouts, issuer, table, "table"),
         meta: statementMetaRows(buildStatement(table).meta).filter((m) => m.label === "Issuer" || m.label === "Period" || m.label === "Currency"),
         checks: [],
         skipped: table.specials.length + table.repeatedHeaders,
@@ -186,10 +186,10 @@ async function fromLines(
   };
 }
 
-function remember(layouts: LayoutMemory | undefined, issuer: string, t: TableExtraction & { recipe?: LayoutRecipe }, kind: LayoutRecipe["kind"]) {
+async function remember(layouts: LayoutMemory | undefined, issuer: string, t: TableExtraction & { recipe?: LayoutRecipe }, kind: LayoutRecipe["kind"]) {
   if (!layouts) return undefined;
   const recipe: LayoutRecipe = { version: 1, issuerKey: issuer, fingerprint: layoutFingerprint(issuer, t), kind, headerTokens: t.headerTokens, columns: t.columns };
-  layouts.save(recipe);
+  await layouts.save(recipe);
   return t.recipe ? "remembered" : "learned";
 }
 

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const profile = await getProfile();
   if (!profile) return Response.json({ error: "Set up your profile first." }, { status: 401 });
   const params = new URL(request.url).searchParams;
-  const rows = applyQuery(runRows(listRuns(orgKeyFor(profile))), queryFromParams(params, RUN_FILTERS), [...RUN_SEARCH]);
+  const rows = applyQuery(await runRows(await listRuns(orgKeyFor(profile))), queryFromParams(params, RUN_FILTERS), [...RUN_SEARCH]);
   const bytes = await tableWorkbook({
     sheetName: "Reconciliations",
     columns: [
