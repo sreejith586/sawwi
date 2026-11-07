@@ -14,7 +14,7 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In progress: email foundation, reminders and notices (D-45, #25); password reset (D-46, this PR, based on #25); SEO pages (D-47) next |
+| 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
 
 ## In flight
@@ -22,12 +22,21 @@ _Updated in every commit. Newest first within each section._
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
 | Phase 8: email foundation, reminders, notices (D-44, D-45) | `feature/phase-8-email-reminders` | #25 | Phase 8 session |
-| Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | this PR | Phase 8 session |
+| Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | #26 | Phase 8 session |
+| Phase 8: SEO pages (D-47), based on #26 | `feature/phase-8-seo-pages` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Password reset** (D-46, Phase 8 PR 2, based on #25).
+- **SEO pages** (D-47, Phase 8 PR 3, based on #26).
+  - Nine public reconciliation pages: Magento 2, Dynamics 365 Business Central, Shopify, Amazon and Noon settlements, bank, payment gateway, COD and BNPL. Plus a hub at `/reconciliation` and a public template catalogue with a page per template, built from the seeded specs.
+  - Connector claims are checked in a test against each connector's report list. Pages say "connector" only where one exists and "upload" everywhere else. Checks not calculated yet are shown as "listed for review".
+  - `sitemap.xml`, `robots.txt`, canonical URLs on `sawwiapp.ai`, OpenGraph/Twitter cards with a generated preview image, and JSON-LD (`SoftwareApplication`, `BreadcrumbList`, `FAQPage`, `ItemList`).
+  - A shared footer links every public page; the landing page gets a "By system" row.
+  - 5 new tests.
+  - Checked in the browser with an audit script across 15 pages: one h1 each, no heading skips, no images without alt, titles ≤ 65 characters and descriptions ≤ 161, canonical, OG and Twitter on every page. A phone-width check showed no horizontal scroll. Unknown slugs return 404.
+  - **The user's part:** after merging, add `sawwiapp.ai` to Google Search Console and Bing Webmaster Tools (a DNS TXT record) and submit `https://sawwiapp.ai/sitemap.xml`.
+- **Password reset** (D-46, Phase 8 PR 2, #26, based on #25).
   - "Forgot your password?" on the login page opens `/forgot-password`. It always gives the same answer, so nobody learns whether an email has an account.
   - The emailed link holds a 256-bit token, stored only as a hash. It works once, for an hour.
   - Resetting signs the user out everywhere and voids their other links.
@@ -138,7 +147,7 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 8:** email (#25), password reset (D-46, this PR), then SEO pages (D-47). Merge in that order.
+0. **Phase 8:** email (#25), password reset (#26), SEO pages (D-47, this PR). Merge in that order. Then submit the sitemap in Google Search Console.
    - Resend: the key is in Vercel. Confirm `sawwiapp.ai` is verified in Resend, then redeploy after merging (docs/DEPLOY.md).
    - After merging, check Admin → Background jobs for `schedule_reminders` and `send_email`.
    - **Still open from Phase 7:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.
