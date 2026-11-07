@@ -14,17 +14,24 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Not defined yet: to be proposed in a new session | Next |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: scope (D-37) |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Demo data for the remaining 7 templates; Phase 6 closed (D-36) | `phase-6-remaining-demo-data` | (this PR) | Phase 6 session |
+| Phase 7 scope: go live on Vercel + Neon (D-37) | `phase-7-scope` | (this PR) | Phase 7 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Phase 7 scope: go live on Vercel + Neon** (D-37, branch `phase-7-scope`, in review). Six PRs, in order:
+  1. this scope;
+  2. Postgres everywhere (Neon in production, PGlite in dev and tests, async stores);
+  3. uploads in private Vercel Blob, sent from the browser straight to Blob (Vercel's 4.5 MB request cap);
+  4. a connector keyring with rotation;
+  5. Vercel deploy config, health check and runbook;
+  6. a jobs table + Vercel Cron.
 - **Demo data for every template; Phase 6 done** (D-36, branch `phase-6-remaining-demo-data`, in review). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
 - **Chat panel opens by default on run pages** (D-34, #14, merged).
   - Where the panel can dock (64rem and up), a reconciliation opens it. A direct visit opens it before first paint.
@@ -73,22 +80,28 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7:** propose its scope in a new session (nothing is defined yet). Candidates from the open questions below: a job runner (scheduled pulls, emailed reminders), the next connectors (Odoo, Amazon SP-API), production readiness (Postgres, KMS, deploy).
+0. **Phase 7 (D-37):** Postgres PR next (`phase-7-postgres`), then Blob uploads, connector keyring, Vercel deploy, jobs + cron.
+   - **The user's part, when the deploy PR is ready:**
+     - a Vercel Pro team with the project linked to the repo;
+     - Neon and a private Blob store added from the Storage tab;
+     - the DNS record for sawwi.hypermaxsolutions.com;
+     - production secrets entered in Vercel.
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.
 4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30).
-5. **User decision:** which job runner to allow for scheduled pulls and emailed reminders (D-26, D-27).
+5. Scheduled connector pulls and emailed reminders, on top of Phase 7's jobs table (D-26, D-27, D-37).
 
 ## Open questions
 
 - **Demo store:** shared by all visitors (they can see each other's runs until the daily reset), with uploads and AI off. Do you want a private sandbox per visitor, or a small AI quota in the demo, instead?
-- **Job runner:** whether to add one (DB jobs table + cron, Inngest, or a worker) for scheduled pulls and emailed reminders.
+- **Hosting region and data residency:** which Vercel and Neon region (closest to the GCC)? Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in (D-37).
+- **Email provider** for reminders, once the jobs table exists: Resend, Postmark or SES, plus DNS for a sending domain.
 - **Shopify live test:** needs a store and a custom-app token from the user. Should Sawwi also get a public Shopify app (OAuth, one-click install)?
 - **Business Central live test:** needs the design partner's IT to register an Entra app and enable it in BC (D-29). Which environment (Sandbox first?) and company? Do they want customer/vendor ledger entries too? Those need a small AL extension (custom API page), since API v2.0 has none.
 - **Magento live test:** which store? On 2.4.4+ the merchant must allow integration tokens as Bearer tokens (or we add OAuth 1.0a signing). Magento 1 stays upload-only.
 - **Next connector:** Odoo (easy, free trial) or Amazon SP-API (most valuable, needs a developer registration, which only the user can start).
-- **Production key management:** `SAWWI_CONNECTOR_KEY` from the environment for now; a KMS when deployed?
+- **Production key management:** D-37 uses a keyring of master keys in a sensitive Vercel environment variable, with rotation. Add a cloud KMS (AWS or GCP) later?
 - **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want? Emailed reminders need a job runner and an email provider: add them?
 - **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.
 - **Brand / trademark:** stay "Sawwi" or rename (see D-12)?
