@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonClass } from "@/components/ui";
 import { getCurrentSession } from "@/lib/saas/session";
+import { LogoLockup } from "@/components/brand/logo";
 
 const SECTIONS = [
   { href: "/#features", label: "Features" },
@@ -13,9 +14,8 @@ const SECTIONS = [
 
 export function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-      <span className="grid size-7 place-items-center rounded-lg bg-accent text-[13px] font-bold text-accent-foreground">S</span>
-      Sawwi
+    <Link href="/" className="flex items-center">
+      <LogoLockup />
     </Link>
   );
 }

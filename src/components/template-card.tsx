@@ -6,7 +6,7 @@ export function TemplateCard({ template, dimmed = false }: { template: Template;
     <Link
       href={`/templates/${template.id}`}
       className={
-        "group flex flex-col rounded-xl border border-border bg-surface p-5 transition hover:border-accent/60 hover:shadow-sm " +
+        "group flex flex-col rounded-xl border border-border bg-surface p-5 transition hover:border-brand/50 hover:shadow-sm " +
         (dimmed ? "opacity-75 hover:opacity-100" : "")
       }
     >

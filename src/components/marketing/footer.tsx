@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoLockup } from "@/components/brand/logo";
 import { SOLUTIONS } from "@/lib/seo/solutions";
 
 // The public footer: links to every reconciliation page and the template catalogue, so each
@@ -8,11 +9,8 @@ export function MarketingFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 text-sm sm:px-6 md:grid-cols-[1fr_2fr_1fr]">
         <div>
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <span aria-hidden className="grid size-6 place-items-center rounded-md bg-accent text-[11px] font-bold text-accent-foreground">
-              S
-            </span>
-            Sawwi
+          <Link href="/" className="flex items-center">
+            <LogoLockup size="sm" />
           </Link>
           <p className="mt-3 max-w-xs text-muted">Reconciliation for e-commerce sellers in the UAE, Saudi Arabia and the GCC.</p>
         </div>

@@ -10,7 +10,7 @@ import { toggleSidebar } from "@/lib/sidebar";
 export type MenuProfile = { company: string; role: string; initials: string; userName: string; userEmail: string; isSuperadmin: boolean };
 
 const rowClass =
-  "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-foreground transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30";
+  "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-foreground transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40";
 
 // Account + settings menu at the bottom of the sidebar. A disclosure (button + panel), not an
 // ARIA menu, so Tab moves through it naturally; Escape or a click outside closes it.
@@ -99,7 +99,7 @@ export function SettingsMenu({ profile }: { profile: MenuProfile }) {
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         aria-label={`Account and settings for ${profile.company}`}
-        className="group/item relative flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 collapsed:justify-center"
+        className="group/item relative flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 collapsed:justify-center"
       >
         <span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-surface-muted text-[11px] font-semibold text-muted">
           {profile.initials}

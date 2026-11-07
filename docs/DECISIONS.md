@@ -496,6 +496,37 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - `AggregateRating` or `Offer` in `SoftwareApplication`: there are no reviews, and prices depend on the paywall switch.
 - **Consequences:** new templates and connectors appear on the public pages automatically. A new connector also needs an entry in `coverage.ts`. The user should submit `https://sawwiapp.ai/sitemap.xml` in Google Search Console and Bing Webmaster Tools (verifying the domain needs a DNS TXT record).
 
+### D-48: Logo: two sheets, the front one ticked, with a "sawwiapp" wordmark
+- **Context:** the app showed a black square with an "S" as its logo, plus Next's default favicon. A Saudi company trades as "Sawwi" at sawwi.ai (D-12). Its logo is a blue four-point star, and its "Sawwi" wordmark draws the "ww" as one joined stroke. Our address is sawwiapp.ai (D-43), so the logo has to be clearly different from theirs.
+- **Decision:**
+  - **Mark:** two rounded sheets, with the front one ticked, standing for two files, reconciled. It sits on a rounded tile. Chosen by the user from several concepts.
+  - **Wordmark:** lowercase `sawwiapp` in Geist, with "app" in the brand colour, matching the domain. The letters are plain, with no stylised "ww".
+  - **Colour:** emerald (`#0e7c66` in light mode, `#2bbf95` in dark mode). It's a different shade from the success green, so it never reads as a status. Where else it appears is set in D-49.
+  - **Theme:** the mark's colours are tokens (`--brand`, `--logo-*` in `globals.css`). The tile is dark on light pages and light on dark pages.
+  - **Files:** `src/components/brand/logo.tsx` (`LogoMark`, `Wordmark`, `LogoLockup`) is used in the marketing header, the shared public footer (`marketing/footer.tsx`), auth and checkout pages, onboarding, sidebar and phone top bar. `src/app/icon.svg`, `apple-icon.png` and `favicon.ico` (16/32/48) use the dark tile. The link-preview image (`opengraph-image.tsx`) draws the same mark. Emails show `apple-icon.png` from the site, since mail clients don't render SVG, with the wordmark beside it and an emerald button.
+  - Product copy still says "Sawwi" ("Open Sawwi", "Ask Sawwi", page titles). Only the logo lockup says "sawwiapp".
+- **Rejected alternatives:**
+  - The shadda-check marks (the shadda of سوّي turning into a tick, "ww✓"): their "ww" stroke is too close to sawwi.ai's wordmark.
+  - Two overlapping rings with a filled middle: too close to Mastercard's logo.
+  - Balance tick and merge tick: offered; the user picked the two sheets.
+- **Consequences:** the two-sheet mark is close to generic "copy" and "done" icons, so the tile, colours and wordmark carry most of the recognition. Always show the mark on its tile. The trademark question in D-12 stays open; a distinct logo lowers the risk of confusion but doesn't settle it.
+
+### D-49: The brand emerald as a quiet accent across the app
+- **Context:** after D-48 the user asked for the brand colours to be used "smart and subtle" across the app pages. D-9 kept the chrome neutral (near-black and white) and kept colour for meaning (danger, warn, info, success).
+- **Decision:** emerald marks the main call to action, focus, selection and "where you are". It never marks a value or a status.
+  - Tokens: `--brand`, `--brand-strong` (hover), `--brand-soft` (a pale tint), `--on-brand` (text on the solid), with matching Tailwind colours.
+  - **Call-to-action buttons are emerald**, at the user's request: `buttonClass("primary")`, the sidebar's "New reconciliation" button and the chat's Send button. Secondary buttons stay neutral.
+  - Focus rings everywhere use `ring-brand/40` (they were `ring-foreground/30`). Text selection gets a light emerald tint.
+  - Selected chips (onboarding, settings) get an emerald outline, a soft tint and an emerald check (they were black).
+  - The active sidebar item gets the soft tint with an emerald icon.
+  - Progress markers use the solid: onboarding steps, "how it works" step numbers, and the tick on a filled file slot. Numbered next steps in the run analysis use the soft tint.
+  - Landing page: section eyebrows and feature icon tiles in emerald; template cards get an emerald border on hover.
+  - The landing page's bottom CTA band stays black (the user tried emerald and reverted it). The paywall banner and chat bubbles stay neutral too. Success green, amber, red and blue keep their meanings (D-9).
+- **Rejected alternatives:**
+  - Neutral (black) primary buttons: the user wanted the call to action in the brand colour. The risk is that an emerald button reads as "success". The brand emerald is bluer and darker than the success green, and success colour only appears on values and badges, never on buttons.
+  - Keeping the chrome fully neutral: the user asked for the brand to show in the app.
+- **Consequences:** D-9 still holds for values. New UI uses `brand` for the primary action and for focus, selection, active or progress states; it uses the semantic colours for meaning. Emerald doesn't fill large areas.
+
 ### D-50: An Anthropic key not scoped to a workspace needs ANTHROPIC_WORKSPACE_ID
 - **Context:** in production every AI call failed with a 400: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header". The key set in Vercel is an unscoped one. Users only saw the rule-based summary and "I couldn't answer that just now" in the chat.
 - **Decision:**

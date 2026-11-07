@@ -215,7 +215,7 @@ function FollowUps({ view, disabled, onIntent }: { view: RunView; disabled: bool
         <button
           type="submit"
           disabled={disabled || !text.trim()}
-          className="h-9 rounded-lg bg-accent px-3 text-sm font-medium text-accent-foreground shadow-sm hover:bg-accent-strong disabled:opacity-40"
+          className="h-9 rounded-lg bg-brand px-3 text-sm font-medium text-on-brand shadow-sm hover:bg-brand-strong disabled:opacity-40"
         >
           Send
         </button>

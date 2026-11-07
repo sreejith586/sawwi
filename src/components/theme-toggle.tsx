@@ -64,7 +64,7 @@ export function ThemeToggle() {
           title={o.value === "system" ? "Match system setting" : `${o.label} mode`}
           data-theme-option={o.value}
           onClick={() => setThemePreference(o.value)}
-          className="theme-option grid size-6 place-items-center rounded-md text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
+          className="theme-option grid size-6 place-items-center rounded-md text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           {o.icon}
         </button>

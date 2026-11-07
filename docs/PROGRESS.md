@@ -25,13 +25,19 @@ _Updated in every commit. Newest first within each section._
 | Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | #26 | Phase 8 session |
 | Phase 8: SEO pages (D-47), based on #26 | `feature/phase-8-seo-pages` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
-| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | — | Logo session |
+| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 
 ## Recent changes
 
 - **AI in production was failing** (D-50, `fix/anthropic-workspace-header`). Every summary, chat answer and AI column mapping returned a 400, because the API key isn't scoped to a workspace. Found by asking the chat a question on a test run in production.
   - All clients now come from `anthropicClient()`, which sends `anthropic-workspace-id` when `ANTHROPIC_WORKSPACE_ID` is set. 2 new tests.
   - **Done by the user (2026-11-07):** a new workspace-scoped key and `ANTHROPIC_WORKSPACE_ID` are set in Vercel, and production was redeployed. The chat now answers in production; checked with a question on a test run.
+- **New logo and app icons** (D-48, #27, merged).
+  - The mark is two sheets, with the front one ticked, on a theme-aware tile, next to a `sawwiapp` wordmark. It replaces the black "S" square in the marketing header, footer, auth, checkout, onboarding, sidebar and phone top bar.
+  - New `favicon.ico`, `icon.svg` and `apple-icon.png` replace Next's default favicon. The link-preview image and the email header use the new mark too, and the email button is emerald.
+  - The logo is kept clearly apart from sawwi.ai's blue star and joined "ww" wordmark.
+- **Dropdowns** (same branch): every select gets its own chevron, inset 10px from the right edge, with 32px of right padding so text never runs under it (`globals.css`).
+- **Brand emerald as a quiet accent** (D-49, same branch): focus rings, text selection, selected chips, the active sidebar item, progress markers, landing-page eyebrows and feature icons. Primary (call-to-action) buttons are emerald; the landing page's bottom CTA band stays black. Secondary buttons and status colours are unchanged.
 - **SEO pages** (D-47, Phase 8 PR 3, based on #26).
   - Nine public reconciliation pages: Magento 2, Dynamics 365 Business Central, Shopify, Amazon and Noon settlements, bank, payment gateway, COD and BNPL. Plus a hub at `/reconciliation` and a public template catalogue with a page per template, built from the seeded specs.
   - Connector claims are checked in a test against each connector's report list. Pages say "connector" only where one exists and "upload" everywhere else. Checks not calculated yet are shown as "listed for review".

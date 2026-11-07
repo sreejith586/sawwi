@@ -71,7 +71,7 @@ export function Analysis({ runId, ranAt, clean }: { runId: string; ranAt: string
                   <ol className="mt-2 space-y-2 text-sm">
                     {data.narrative.nextSteps.map((s, i) => (
                       <li key={s} className="flex gap-2.5">
-                        <span className="tabular grid size-5 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground">{i + 1}</span>
+                        <span className="tabular grid size-5 shrink-0 place-items-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand">{i + 1}</span>
                         <span className="leading-relaxed">{s}</span>
                       </li>
                     ))}

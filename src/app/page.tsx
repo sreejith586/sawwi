@@ -138,7 +138,7 @@ export default function LandingPage() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
               <div key={f.title} className="rounded-2xl border border-border bg-surface p-6">
-                <span className="grid size-9 place-items-center rounded-lg border border-border bg-surface-muted">
+                <span className="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand">
                   <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d={f.icon} />
                   </svg>
@@ -158,7 +158,7 @@ export default function LandingPage() {
           <ol className="mt-12 grid gap-6 md:grid-cols-3">
             {STEPS.map((s, i) => (
               <li key={s.title} className="relative rounded-2xl border border-border bg-background p-6">
-                <span className="tabular grid size-8 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">{i + 1}</span>
+                <span className="tabular grid size-8 place-items-center rounded-full bg-brand text-sm font-semibold text-on-brand">{i + 1}</span>
                 <h3 className="mt-4 font-semibold tracking-tight">{s.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
               </li>
@@ -267,7 +267,7 @@ export default function LandingPage() {
 function SectionHeading({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">{eyebrow}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand">{eyebrow}</p>
       <h2 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h2>
       {body && <p className="mt-3 text-muted">{body}</p>}
     </div>

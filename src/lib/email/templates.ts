@@ -37,9 +37,10 @@ const C = {
   text: "#18181b",
   muted: "#71717a",
   border: "#e4e4e7",
-  accent: "#18181b",
   onAccent: "#ffffff",
   tile: "#fafafa",
+  // The brand emerald (D-48, D-49): the wordmark and the call-to-action button.
+  brand: "#0e7c66",
   tones: { neutral: "#18181b", success: "#067647", danger: "#b42318", warn: "#dc6803" } satisfies Record<Tone, string>,
 };
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
@@ -70,7 +71,7 @@ function blockHtml(b: Block): string {
     case "button":
       return (
         `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px"><tr>` +
-        `<td style="border-radius:8px;background:${C.accent}">` +
+        `<td style="border-radius:8px;background:${C.brand}">` +
         `<a href="${esc(b.href)}" style="display:inline-block;padding:12px 20px;font-size:15px;line-height:20px;font-weight:600;color:${C.onAccent};text-decoration:none;border-radius:8px">${esc(b.label)}</a>` +
         `</td></tr></table>` +
         `<p style="margin:0 0 16px;font-size:13px;line-height:20px;color:${C.muted}">Or open this link: <a href="${esc(b.href)}" style="color:${C.muted};word-break:break-all">${esc(b.href)}</a></p>`
@@ -112,8 +113,8 @@ export function layout(e: Email): RenderedEmail {
 <tr><td style="padding:0 4px 20px">
 <a href="${esc(site)}" style="text-decoration:none;color:${C.text}">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td width="28" height="28" align="center" valign="middle" style="width:28px;height:28px;border-radius:8px;background:${C.accent};color:${C.onAccent};font-family:${FONT};font-size:14px;font-weight:700;line-height:28px">S</td>
-<td style="padding-left:8px;font-family:${FONT};font-size:16px;font-weight:600;color:${C.text};letter-spacing:-0.01em">Sawwi</td>
+<td width="28" height="28" valign="middle" style="width:28px;height:28px"><img src="${esc(site)}/apple-icon.png" width="28" height="28" alt="" style="display:block;width:28px;height:28px;border:0;border-radius:7px"></td>
+<td style="padding-left:8px;font-family:${FONT};font-size:16px;font-weight:600;color:${C.text};letter-spacing:-0.01em">sawwi<span style="color:${C.brand}">app</span></td>
 </tr></table>
 </a>
 </td></tr>

@@ -119,7 +119,7 @@ export function OnboardingWizard({
           <li key={s} className="flex items-center gap-1">
             {i > 0 && <span className="mx-1 h-px w-5 bg-border" aria-hidden />}
             <span className={`flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 ${i === index ? "bg-surface-muted text-foreground" : i < index ? "text-foreground" : "text-muted"}`}>
-              <span className={`tabular grid size-5 place-items-center rounded-full text-[11px] ${i <= index ? "bg-accent text-accent-foreground" : "border border-border"}`}>
+              <span className={`tabular grid size-5 place-items-center rounded-full text-[11px] ${i <= index ? "bg-brand text-on-brand" : "border border-border"}`}>
                 {i < index ? "✓" : i + 1}
               </span>
               {STEP_TITLES[s]}
