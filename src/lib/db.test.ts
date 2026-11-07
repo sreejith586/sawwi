@@ -10,7 +10,7 @@ describe("database layer (D-37)", () => {
   it("creates the schema once and records the migration", async () => {
     const db = getDb();
     const applied = await db.all<{ id: number }>("SELECT id FROM schema_migrations ORDER BY id");
-    expect(applied.map((m) => m.id)).toEqual([1, 2, 3]);
+    expect(applied.map((m) => m.id)).toEqual([1, 2, 3, 4]);
     const tables = await db.all<{ table_name: string }>("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()");
     expect(tables.map((t) => t.table_name)).toEqual(expect.arrayContaining(["runs", "orgs", "members", "connections", "demo_state", "jobs"]));
   });

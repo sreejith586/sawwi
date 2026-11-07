@@ -16,7 +16,7 @@ async function Prefs() {
     <div className="space-y-6">
       <p className="text-sm text-muted">
         What Sawwi emails you at <span className="font-medium text-foreground">{session.user.email}</span>. These are your own settings; teammates choose
-        theirs.
+        theirs. Password reset emails are always sent.
       </p>
       {demo && <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted">The demo store doesn&apos;t send email.</p>}
       {!demo && !emailEnabled() && (

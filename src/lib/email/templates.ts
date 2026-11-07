@@ -199,11 +199,31 @@ export function readyEmail(d: ReadyData): RenderedEmail {
   });
 }
 
+// ─── Password reset (D-46) ─────────────────────────────────────────────────
+
+export type ResetData = { name: string; url: string; minutes: number };
+
+export function resetEmail(d: ResetData): RenderedEmail {
+  return layout({
+    subject: "Reset your Sawwi password",
+    preheader: `This link works once, for the next ${d.minutes} minutes.`,
+    heading: "Reset your password",
+    blocks: [
+      { kind: "p", text: greeting(d.name) },
+      { kind: "p", text: `Someone asked to reset the password for your Sawwi account. Choose a new one with the button below. The link works once, for the next ${d.minutes} minutes.` },
+      { kind: "button", href: d.url, label: "Choose a new password" },
+      { kind: "note", text: "Didn't ask for this? Ignore this email: your password stays the same. Resetting it signs you out on every device." },
+    ],
+    footer: { text: "You get this email because a reset was requested for your account. It's sent whatever your email settings." },
+  });
+}
+
 // ─── By name, for the send_email job ───────────────────────────────────────
 
 const RENDERERS = {
   reminder: (d: Record<string, unknown>) => reminderEmail(d as ReminderData),
   ready: (d: Record<string, unknown>) => readyEmail(d as ReadyData),
+  reset: (d: Record<string, unknown>) => resetEmail(d as ResetData),
 } satisfies Record<string, (d: Record<string, unknown>) => RenderedEmail>;
 
 export type EmailTemplate = keyof typeof RENDERERS;

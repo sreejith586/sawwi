@@ -51,7 +51,7 @@ destination:
 ### Email (Resend)
 
 Emails are reminders when a schedule comes due, "ready to review" notices and password resets
-(D-45, D-46). The user does these steps; an agent never creates the account or handles the key.
+(D-45, D-46). Without Resend, "Forgot your password?" answers as usual but no email arrives. The user does these steps; an agent never creates the account or handles the key.
 
 1. **Account:** sign up at resend.com. Check the plan's daily and monthly sending limits against your team's size.
 2. **Domain:** Resend → Domains → Add domain → `sawwiapp.ai`, region **eu-west-1 (Ireland)**, the
