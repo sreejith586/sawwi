@@ -13,18 +13,20 @@ _Updated in every commit. Newest first within each section._
 | — | Purchasing: 3-way PO/GRN/invoice match, supplier statement, import landed cost | Done (65d80c0) |
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
-| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | In progress: usage dashboard (D-25, #5), scheduled runs (D-26, #6) and connectors plan (D-27, #7) and connector framework + Shopify (D-28, #8) merged; Business Central (D-29, #9) and Magento 2 (D-30, #10) connectors and demo data fill (D-31, #11) merged; public demo store (D-32, #12) merged |
+| 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#13, #14): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-34), chat sidebar (D-33). Live checks and open decisions below |
+| 7 | Not defined yet: to be proposed in a new session | Next |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Chat in a resizable right sidebar (D-33) | `ui-chat-sidebar-resizable` | (this PR) | Chat sidebar session (fork) |
+| Demo data for the remaining 7 templates; Phase 6 closed (D-34) | `phase-6-remaining-demo-data` | (this PR) | Phase 6 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
-- **Chat in a resizable right sidebar** (D-33, branch `ui-chat-sidebar-resizable`, in review).
+- **Demo data for every template; Phase 6 done** (D-34, branch `phase-6-remaining-demo-data`, in review). Made-up files for the last 7 templates: customer statement, supplier statement, price list, RMA log, post-dated cheque register and bank, payouts and bank, import shipments, customs and freight bills. They refer to the demo company's and demo store's own documents, so all 23 templates fill with one click in the demo store and find their planted exceptions. A test fails if a template is added without demo data. 8 new tests.
+- **Chat in a resizable right sidebar** (D-33, #13, merged).
   - "Ask Sawwi" is now a right-hand panel that mirrors the left nav: docked from 64rem, a drawer on narrow screens.
   - Drag its left border to resize it (300 to 720 px). Double-click resets the width, and arrow keys work too. The width and whether it's open are remembered.
   - On a reconciliation, that run's chat lives in the panel and the page uses the full width.
@@ -61,6 +63,7 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
+0. **Phase 7:** propose its scope in a new session (nothing is defined yet). Candidates from the open questions below: a job runner (scheduled pulls, emailed reminders), the next connectors (Odoo, Amazon SP-API), production readiness (Postgres, KMS, deploy).
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.

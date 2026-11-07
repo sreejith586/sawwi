@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
+import { TEMPLATES } from "@/lib/templates/catalog";
 import { DEMO_ORG_KEY } from "@/lib/demo/demo";
 import { demoData } from "./demo";
 import { fillRunWithDemoData } from "./demo-fill";
@@ -55,6 +56,21 @@ const EXPECTED: Record<string, string[]> = {
   "mkt-claims-vs-reimbursements": ["expiring: CASE-88101", "partial_paid: CASE-88102", "unpaid_claim: CASE-88101"],
   "mkt-ads-deductions": ["deducted_no_invoice: 2026-10"],
   "mkt-vat": ["fee_vat_unbacked: 2026-10", "rate_mismatch: row 11"], // row 11 is MP-1010, VAT 25.00 on 420.00
+  // Statements, prices, returns, cheques, payouts and imports (finance-files.ts).
+  "b2b-customer-statement": ["amount_diff: SI-3104", "missing_in_ours: DN-0045", "missing_in_theirs: SI-3105"],
+  // GLS-2291 is entered twice in our ledger, so its amount differs from the statement's too.
+  "p2p-supplier-statement": ["amount_diff: GLS-2291", "amount_diff: GLS-2307", "duplicate_bill: GLS-2291", "missing_in_ours: GLS-2315"],
+  "b2b-price-compliance": [
+    "expired_price: Marina Facilities Management / LED-40", "no_price: Desert Rose Contracting / CBL-25",
+    "overcharged: Al Waha Hotels / LED-40", "overcharged: Al Waha Hotels / LED-40", "undercharged: Marina Facilities Management / AC-18K",
+  ],
+  "b2b-returns-vs-credit-notes": ["return_no_cn: RMA-0091", "value_mismatch: RMA-0088"],
+  "b2b-pdc-clearing": ["amount_diff: 000416", "bounced: RETURNED CHEQUE INSUFFICIENT FUNDS", "due_not_deposited: 000414"],
+  "bank-payouts": ["fx_difference: po_1119", "not_credited: po_1126", "unidentified_credit: REF 99812"],
+  "p2p-import-landed-cost": [
+    "declaration_unknown: HLCU5555000", "declared_below_invoice: MAEU7654321", "duplicate_freight: Oasis Freight Forwarding / FWD-8812",
+    "freight_unknown: ONEY0000001", "no_declaration: 176-55512345", "no_freight_bill: 176-55512345",
+  ],
   "p2p-three-way-match": [
     "invoiced_not_received: LED-40", "no_po: LED-40", "overdue_po: PO-7004 / AC-18K", "price_above_po: PO-7003 / FAN-1200",
     "received_not_invoiced: PO-7002 / LED-40", "short_received: PO-7001 / AC-18K", "short_received: PO-7003 / FAN-1200",
@@ -62,6 +78,10 @@ const EXPECTED: Record<string, string[]> = {
 };
 
 describe("Fill with demo data", () => {
+  it("covers every template in the catalogue", () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual(TEMPLATES.map((t) => t.id).sort());
+  });
+
   for (const [templateId, expected] of Object.entries(EXPECTED)) {
     it(`${templateId}: fills every file, asks nothing, finds the planted exceptions`, async () => {
       const { fill, view, found } = await demoRun(templateId);

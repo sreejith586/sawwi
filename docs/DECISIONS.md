@@ -245,3 +245,17 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Width in React state:** it would flash the default width before hydration, and layouts would re-render while dragging.
 - **Consequences:** on a run page the chat is closed until the user opens it, unless a question is waiting, so it no longer takes 360 px by default. On narrow screens it covers the page while open.
 
+### D-34: Demo data for every template, and Phase 6 closed
+- **Context:** the user asked to "add demo data for the remaining templates" and to start the next phase in a new session if Phase 6 is then finished. Seven templates had no demo data: customer and supplier statements, price compliance, returns vs credit notes, post-dated cheques, bank vs payouts, and import landed cost.
+- **Decision:**
+  - Add made-up files for them (`src/lib/connectors/mock/finance-files.ts`), served by the demo store's Demo data source (D-31, D-32). They refer to the demo company's own documents, so each reconciliation lines up end to end:
+    - Business Central invoices and credit memos meet a customer's statement, a price list and an RMA log;
+    - its vendor bills meet a supplier statement;
+    - the demo store's card, Tabby and courier payouts meet a bank statement;
+    - its POs meet customs declarations and forwarder bills.
+
+    Each file plants exceptions. A test fills and reconciles all 23 templates and fails if a template is added without demo data.
+  - Phase 6 (usage dashboard, scheduled runs, connectors, plus the demo store and chat panel built along the way) is marked done. What's left is live checks and decisions that need the user or the design partner, listed in PROGRESS → Next and Open questions. The next phase starts in a new session, beginning with a scope proposal, because no Phase 7 is defined yet.
+- **Rejected alternative:** a future-dated cheque to show "Due within 30 days". A reconciliation's "as of" date is the latest date in its data, so a future cheque becomes the as-of date and reads as already due. The demo shows past-due cheques only.
+- **Consequences:** a planted duplicate shows up twice on purpose. A bill entered twice in the supplier ledger is flagged as a duplicate, and its total also differs from the statement. The same happens with the AWB billed twice in courier freight.
+

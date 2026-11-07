@@ -66,8 +66,8 @@ pnpm build
     instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
     `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
 14. **Live demo store**: "Try the live demo" on the login and landing pages opens a shared workspace with
-    invented data (a Business Central company, a Magento store, a marketplace seller, and gateway,
-    courier, warehouse and bank files). Start any reconciliation, click **Fill with demo data**, then
+    invented data for all 23 templates (a Business Central company, a Magento store, a marketplace seller,
+    and their gateway, courier, warehouse, bank, customs and statement files). Start any reconciliation, click **Fill with demo data**, then
     **Run reconciliation**. No account needed; uploads and AI calls are off there, and it resets every
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
 
