@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { MarketingFooter } from "@/components/marketing/footer";
 import { MarketingHeader } from "@/components/marketing/header";
+import { JsonLd } from "@/components/marketing/json-ld";
+import { softwareApplication } from "@/lib/seo/jsonld";
+import { SOLUTIONS } from "@/lib/seo/solutions";
 import { TryDemoButton } from "@/components/demo/try-demo";
 import { buttonClass } from "@/components/ui";
 import { demoEnabled } from "@/lib/demo/enabled";
@@ -10,15 +14,16 @@ import { PLANS } from "@/lib/saas/plans";
 import { getSettings } from "@/lib/saas/store";
 import { TEMPLATES } from "@/lib/templates/catalog";
 import { GROUP_LABELS, type TemplateGroup } from "@/lib/templates/types";
-import { LogoLockup } from "@/components/brand/logo";
 
 export const metadata: Metadata = {
   title: { absolute: "Sawwi · Reconciliation for GCC e-commerce sellers" },
-  description:
-    "Match marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices in minutes. Built for sellers in the UAE, Saudi Arabia and the GCC.",
+  description: "Match marketplace settlements, gateway payouts, COD remittances and B2B payments against your orders and invoices. For sellers in the UAE, KSA and the GCC.",
   alternates: { canonical: "/" },
   openGraph: { type: "website", siteName: "Sawwi", url: "/" },
+  twitter: { card: "summary_large_image" },
 };
+
+const DESCRIPTION = "Reconciliation for e-commerce sellers in the GCC: marketplace settlements, webstore orders, payment gateway, COD and BNPL payouts, ERP invoices and bank statements.";
 
 // Public intro page. Everything is static except the header's sign-in state and the
 // pricing block (which depends on whether the superadmin has switched the paywall on).
@@ -71,6 +76,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-dvh">
+      <JsonLd data={softwareApplication(DESCRIPTION)} />
       <MarketingHeader />
 
       {/* Hero */}
@@ -192,6 +198,27 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* By system: links to the public reconciliation pages (D-47) */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <SectionHeading eyebrow="By system" title="Reconciliation for the tools you already use" />
+          <ul className="mt-10 flex flex-wrap justify-center gap-2">
+            {SOLUTIONS.map((s) => (
+              <li key={s.slug}>
+                <Link href={`/reconciliation/${s.slug}`} className="inline-flex rounded-full border border-border bg-surface px-4 py-2 text-sm hover:border-foreground/30">
+                  {s.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-6 text-center text-sm text-muted">
+            <Link href="/reconciliation-templates" className="underline decoration-border underline-offset-4 hover:text-foreground hover:decoration-foreground">
+              Browse all {TEMPLATES.length} templates
+            </Link>
+          </p>
+        </div>
+      </section>
+
       {/* Trust */}
       <section className="border-y border-border bg-surface">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 sm:px-6 md:grid-cols-3">
@@ -232,24 +259,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
-          <span className="flex items-center">
-            <LogoLockup size="sm" />
-          </span>
-          <nav className="flex gap-5">
-            <a href="#features" className="hover:text-foreground">
-              Features
-            </a>
-            <a href="#pricing" className="hover:text-foreground">
-              Pricing
-            </a>
-            <Link href="/login" className="hover:text-foreground">
-              Log in
-            </Link>
-          </nav>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

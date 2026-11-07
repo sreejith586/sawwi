@@ -435,6 +435,67 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Dropping `sawwi.hypermaxsolutions.com`: links already shared would break.
 - **Consequences:** users signed in on the old address sign in once more on `sawwiapp.ai`. The domain redirects and `APP_URL` are set by the user in Vercel; the code default only matters where `APP_URL` is unset.
 
+### D-44: Phase 8 is email through Resend, and SEO for the reconciliations Sawwi covers
+- **Context:** Phase 7 is live at `sawwiapp.ai` (D-43). The jobs table (D-42) made background work possible, and D-26/D-27/D-42 left emailed reminders waiting on an email provider. The site had one public page, so search engines had nothing to find for "Magento reconciliation" or "Business Central reconciliation". The user chose Phase 8: Resend for email, and SEO that clearly covers Magento, Dynamics 365 Business Central and the other important reconciliations. Scheduled connector pulls were not chosen; they stay for later.
+- **Decision:** three PRs, stacked in this order so they merge without conflicts:
+  1. **Email foundation, reminders and notices** (D-45): an email module (Resend when `RESEND_API_KEY` is set, a log line otherwise), sending as `send_email` jobs with unique keys, an hourly sweep that emails owners, admins and editors when a schedule comes due, a "ready to review" email when a reconciliation finishes, and per-user switches in Settings → Email.
+  2. **Password reset** (D-46): `/forgot-password` with a signed, single-use token that expires within an hour, stored hashed, rate-limited, that never reveals whether an email has an account.
+  3. **SEO** (D-47): public pages for Magento 2, Business Central, Shopify, Amazon and Noon settlements, and bank, gateway, COD and BNPL reconciliation; a public template catalogue built from the seeded specs; sitemap, robots, metadata, canonical URLs, OpenGraph and JSON-LD.
+- **Rules for both:** agents never create the Resend account or enter keys; tests never call Resend. Public copy says only what the product does today: connectors are built but not yet checked against live accounts (PROGRESS), so the pages say "connector" for Shopify, Magento 2 and Business Central and "upload the export" for everything else. No reviews, ratings or customer logos.
+- **Rejected alternatives:** scheduled connector pulls (not chosen by the user); Postmark or SES (the user picked Resend, and has a key).
+- **Consequences:** the user sets up Resend (account, DNS records for `sawwiapp.ai`, `RESEND_API_KEY` and `EMAIL_FROM` in Vercel, docs/DEPLOY.md). Until then, emails are logged, not sent.
+
+### D-45: Email: Resend's REST API, one job per message, reminders hourly, notices right away
+- **Context:** D-44's first PR.
+- **Decision:**
+  - **Transport** (`src/lib/email/send.ts`, like `files/storage.ts`): with `RESEND_API_KEY`, a `POST` to Resend's `/emails` with `fetch`, no SDK. Without it, a log line (the body too, but only off Vercel, since a body can hold a single-use link). The sender is `EMAIL_FROM`, by default `Sawwi <sawwi@sawwiapp.ai>`. Resend's 429 and 5xx answers are retried; other errors (a refused address) fail the job at once.
+  - **One `send_email` job per message.** The job key is the message's identity (`email:reminder:<schedule>:<period>:<user>`, `email:ready:<run>:<user>`), so the same email is never queued twice, and it's also sent as Resend's `Idempotency-Key`, so a retry after a timeout isn't delivered twice. The job stores the template name and its data; the email is rendered when it's sent.
+  - **Right away when a person is waiting.** An email queued during a request is sent from `after()` once the response is out (`runJobsNow`, which claims only those keys). If that fails, the job stays queued and the cron tick retries it.
+  - **Reminders:** a periodic `schedule_reminders` job, hourly, looks at every workspace with a live schedule (not the demo store, not suspended workspaces). A schedule that is due with no run started for the period, and came due in the last 7 days, gets one email per owner, admin and editor. Viewers can't start a run, so they get none. Once someone starts the run, nobody is reminded again.
+  - **"Ready to review":** when someone runs a reconciliation, everyone else in the workspace (all roles) gets the exception count and value, rows matched, and a link to the report. The person who ran it is looking at it, so they're left out. It's sent once per run: re-running after a fix doesn't mail again.
+  - **Switches:** Settings → Email, per user, for reminders and for notices (`email_prefs`, migration 3; no row means both on). They're checked when the email is queued and again when it's sent. Deactivated teammates get nothing.
+  - **Design** (the user asked for designed emails, not plain text): a branded HTML layout in the app's palette, with the logo, a white card, a heading, figures in tiles (exceptions and value in the danger colour, green when clean), one button and a quiet footer. It's built from tables with inline styles, so Gmail, Outlook and Apple Mail render it alike, and it fits a phone. A plain-text copy goes along as the multipart alternative, for spam filters and text-only readers.
+  - **Copy:** short, with the workspace, the template, the numbers and one link, plus a footer linking to Settings → Email. Links use `APP_URL` (`https://sawwiapp.ai`).
+  - **Test send:** `scripts/send-test-email.ts`, run by a person with their own key, sends one of each email with made-up data.
+- **Rejected alternatives:**
+  - The `resend` npm package: one `fetch` does it, and tests mock `fetch` without a module mock.
+  - Sending inline from the action: a slow or failing Resend call would hold up the reconciliation, and nothing would retry it.
+  - A reminder for viewers: they can't act on it.
+  - "Ready to review" to the person who ran it: it's on their screen.
+- **Consequences:** with no Resend key, nothing is sent and the log shows what would have been. Reminders go out at most an hour after a schedule comes due (the sweep is hourly, the tick every 15 minutes). Preview deployments have no cron (D-42), so only emails sent from a request (notices, resets) go out there, and their links point at `APP_URL`.
+
+### D-46: Password reset: a hashed single-use token for an hour, the same answer for every email, rate-limited in the database
+- **Context:** D-44's second PR. Until now, a forgotten password needed a superadmin.
+- **Decision:**
+  - **`/forgot-password`** takes an email and always answers "If there's a Sawwi account for that email, we've sent it a link". The email goes out after the response (`sendSoon`), so the answer takes about the same time whether or not there's an account.
+  - **The link** is `/reset-password?token=…`, with 32 random bytes (256 bits). Only its SHA-256 hash is stored (`password_resets`, migration 4), the same way sessions are, so a copy of the database gives nobody a working link. It works for 60 minutes and once: using it is a single `UPDATE … WHERE used_at IS NULL AND expires_at > now RETURNING`, so two submits can't both succeed.
+  - **"Signed":** the brief asked for a signed token. A random token looked up by its hash gives what signing would: it can't be forged or guessed, and nothing is readable in it. It also needs no signing key to keep secret or rotate. So there's no HMAC over the token.
+  - **After a reset:** the new password is set, every other open link for that user stops working, and every session is deleted (signed out on every device). The person logs in again with the new password.
+  - **Rate limits** live in Postgres (`reset_requests`), not in memory, because Vercel runs many instances. They count by hashed email and hashed IP over the last hour. More than 3 requests for one email: the answer stays the same and nothing is sent, so nobody can flood an inbox and the answer gives nothing away. 10 requests from one address: "Too many reset requests from here", which says nothing about any account. Requests and old links are pruned after a day by `prune_jobs`.
+  - **The email** uses the same designed layout (D-45), is always sent whatever the user's switches, and its job payload (which holds the link) is cleared once it's sent. The reset page sends no referrer and isn't indexed.
+- **Rejected alternatives:**
+  - An HMAC-signed token with an expiry inside it: it's single-use only with a database row anyway, and it needs a new secret.
+  - Signing the person in straight after the reset: a link that signs someone in is worth more to an attacker. Logging in again is one step.
+  - An in-memory rate limit, as the login form has: it's per instance, so it does little on Vercel.
+- **Consequences:** reset emails need Resend (D-45). Without it, the link appears only in the server log (locally with the body). Links point at `APP_URL`, so on a preview without `APP_URL` they open production.
+
+### D-47: SEO: public reconciliation pages and a template catalogue, built from the specs and checked against the connectors
+- **Context:** D-44's third PR. The only public page was the landing page, and everything under `/templates` is behind login (`src/proxy.ts`). The user asked for pages that clearly cover Magento, Dynamics 365 Business Central and the other important reconciliations, with copy that matches what the product does.
+- **Decision:**
+  - **Nine reconciliation pages** at `/reconciliation/<slug>`: `magento-2`, `dynamics-365-business-central`, `shopify`, `amazon-settlement`, `noon-settlement`, `bank`, `payment-gateway`, `cash-on-delivery` and `bnpl`, plus a hub at `/reconciliation`. Each has a title, intro, "how your data gets in", the templates that apply, how it works, FAQs and related pages. The copy is in `src/lib/seo/solutions.ts`.
+  - **A public template catalogue** at `/reconciliation-templates`, with a page per seeded template (`/reconciliation-templates/<id>`). The files a template needs, what it checks and what it produces come straight from its spec, so the pages can't drift from the engine. Checks without a rule are shown as "listed for you to review (not calculated automatically yet)", not as automated checks.
+  - **Connector claims are checked in code.** `src/lib/seo/coverage.ts` maps each connector to the template slots it can fill, and a test checks every entry against that connector's real report list (`slotFit`). Pages say "connector" only for Shopify (orders), Magento 2 (orders, credit memo lines, shipments) and Business Central (eight sales and purchase reports). Everything else says "upload the export", and pages note there's no Amazon, Noon, Tabby, Tamara or bank-feed connector. Connector pages say the connector is new and offer the upload path, since live checks with real accounts are still to come.
+  - **Metadata:** each page has a title under ~60 characters and a description under 160 (tested), a canonical URL on `APP_URL` (`https://sawwiapp.ai`), OpenGraph and Twitter cards, and one shared preview image (`app/opengraph-image.tsx`). `pageMetadata()` names the image again, because a page's own `openGraph` replaces the root one.
+  - **JSON-LD:** `SoftwareApplication` (no offers or ratings: nothing we don't actually have), `BreadcrumbList` on every public page, `FAQPage` on reconciliation pages, and `ItemList` on the catalogue. It's escaped so it can't close its `<script>` tag.
+  - **`sitemap.xml`** lists every public page. **`robots.txt`** allows the public pages, keeps out the app (`/home`, `/runs`, `/templates`, `/settings`, `/admin`, `/api/` and so on) and the reset pages, and asks preview deployments not to be crawled at all.
+  - **Shared footer** with links to every reconciliation page and the catalogue, on the landing page too, so each public page is one click from the others. The landing page gets a "By system" row.
+  - The two `[slug]`/`[id]` pages are prerendered from `generateStaticParams` and set `instant = false`. They read `params` before rendering, so an unknown slug is a real 404. `dynamicParams` isn't allowed with `cacheComponents`.
+- **Rejected alternatives:**
+  - Opening `/templates` to the public: it's the signed-in gallery, shaped by the workspace profile, with run buttons.
+  - A blog or comparison pages: more copy to keep accurate. They can come later.
+  - `AggregateRating` or `Offer` in `SoftwareApplication`: there are no reviews, and prices depend on the paywall switch.
+- **Consequences:** new templates and connectors appear on the public pages automatically. A new connector also needs an entry in `coverage.ts`. The user should submit `https://sawwiapp.ai/sitemap.xml` in Google Search Console and Bing Webmaster Tools (verifying the domain needs a DNS TXT record).
+
 ### D-48: Logo: two sheets, the front one ticked, with a "sawwiapp" wordmark
 - **Context:** the app showed a black square with an "S" as its logo, plus Next's default favicon. A Saudi company trades as "Sawwi" at sawwi.ai (D-12). Its logo is a blue four-point star, and its "Sawwi" wordmark draws the "ww" as one joined stroke. Our address is sawwiapp.ai (D-43), so the logo has to be clearly different from theirs.
 - **Decision:**
@@ -442,7 +503,7 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Wordmark:** lowercase `sawwiapp` in Geist, with "app" in the brand colour, matching the domain. The letters are plain, with no stylised "ww".
   - **Colour:** emerald (`#0e7c66` in light mode, `#2bbf95` in dark mode). It's a different shade from the success green, so it never reads as a status. Where else it appears is set in D-49.
   - **Theme:** the mark's colours are tokens (`--brand`, `--logo-*` in `globals.css`). The tile is dark on light pages and light on dark pages.
-  - **Files:** `src/components/brand/logo.tsx` (`LogoMark`, `Wordmark`, `LogoLockup`) is used in the marketing header, footer, auth and checkout pages, onboarding, sidebar and phone top bar. `src/app/icon.svg`, `apple-icon.png` and `favicon.ico` (16/32/48) use the dark tile.
+  - **Files:** `src/components/brand/logo.tsx` (`LogoMark`, `Wordmark`, `LogoLockup`) is used in the marketing header, the shared public footer (`marketing/footer.tsx`), auth and checkout pages, onboarding, sidebar and phone top bar. `src/app/icon.svg`, `apple-icon.png` and `favicon.ico` (16/32/48) use the dark tile. The link-preview image (`opengraph-image.tsx`) draws the same mark. Emails show `apple-icon.png` from the site, since mail clients don't render SVG, with the wordmark beside it and an emerald button.
   - Product copy still says "Sawwi" ("Open Sawwi", "Ask Sawwi", page titles). Only the logo lockup says "sawwiapp".
 - **Rejected alternatives:**
   - The shadda-check marks (the shadda of سوّي turning into a tick, "ww✓"): their "ww" stroke is too close to sawwi.ai's wordmark.
