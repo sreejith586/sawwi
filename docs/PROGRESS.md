@@ -14,17 +14,24 @@ _Updated in every commit. Newest first within each section._
 | 4 | Sonnet narrative, follow-up chat with one-click actions, email drafts, "no template fits" generic reco and save-as-template | Done (#2, 285587a) |
 | 5 | PDF inputs: bank statements, invoices, settlement statements (ARCHITECTURE §8) | Done (#4, bd5c07c) |
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
-| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: live on sawwi.hypermaxsolutions.com. Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20). Left: jobs table + Vercel Cron |
+| 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy at sawwi.hypermaxsolutions.com, jobs table + Vercel Cron | In progress: live on sawwi.hypermaxsolutions.com. Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20). Last: jobs table + Vercel Cron (D-42) in review |
 
 ## In flight
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Docs: Phase 7 stack merged, production live | `phase-7-docs-merged` | (this PR) | Phase 7 session |
+| Docs: Phase 7 stack merged, production live | `phase-7-docs-merged` | #21 | Phase 7 session |
+| Background jobs: jobs table + Vercel Cron (D-42) | `phase-7-jobs-cron` | (this PR, stacked on #21) | Phase 7 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Background jobs** (D-42, branch `phase-7-jobs-cron`, in review).
+  - A `jobs` table, run every 15 minutes by Vercel Cron through `/api/cron/tick` (protected by `CRON_SECRET`).
+  - Jobs are queued once per key, claimed safely, retried with backoff, and listed in Admin.
+  - First jobs: the demo store's midnight reset, cleanup of abandoned uploads, and pruning old jobs.
+  - 6 new tests.
+  - **Needs** `CRON_SECRET` in Vercel (Secret).
 - **Production is live again** (2026-11-07). The user approved merging the Phase 7 stack (#16–#20) in this session. Before the merge, every production page failed, because `main` used SQLite and Vercel's disk is read-only.
   - Production `/api/health` reports the database ok, the files ok on Blob, and the region `fra1`.
   - The live demo reconciles end to end in production: 9 of 10 matched, 5 exceptions, AED 779.
@@ -110,13 +117,16 @@ _Updated in every commit. Newest first within each section._
 
 ## Next
 
-0. **Phase 7, last PR:** the jobs table + Vercel Cron (`phase-7-jobs-cron`). It needs `CRON_SECRET` in Vercel (Secret).
+0. **Phase 7, last PR:** jobs + cron (D-42) in review.
+   - Add `CRON_SECRET` in Vercel (Secret) before merging.
+   - After merging, check Admin → Background jobs.
+   - Phase 7 is then done.
    - **The user's live check:** sign in to a real account on production and upload a file over 4.5 MB. That's the one path not yet run against the real Blob store.
 1. Try Phase 4 with `ANTHROPIC_API_KEY` set. The AI path (analysis, emails, explain, free text) has only run against fallbacks so far.
 2. Test Phase 5 (PDF inputs) on real anonymised statements and invoices, text and scanned.
 3. **Live check of the Business Central connector** with the design partner's tenant: an Entra app registration + client secret, the app enabled in BC with a read-only permission set (D-29). Then the Shopify live check with the user's store.
 4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30).
-5. Scheduled connector pulls and emailed reminders, on top of Phase 7's jobs table (D-26, D-27, D-37).
+5. Scheduled connector pulls and emailed reminders, as new job kinds on the jobs table (D-26, D-27, D-42). Reminders need an email provider.
 
 ## Open questions
 
