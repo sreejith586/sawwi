@@ -19,7 +19,7 @@ _Updated in every commit. Newest first within each section._
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Chat panel open by default on run pages (D-34) | `ui-chat-open-on-run-pages` | (this PR) | Chat sidebar session (fork) |
+| Chat panel open by default on run pages, one header (D-34) | `ui-chat-open-on-run-pages` | (this PR) | Chat sidebar session (fork) |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
@@ -27,6 +27,7 @@ _Updated in every commit. Newest first within each section._
 - **Chat panel opens by default on run pages** (D-34, branch `ui-chat-open-on-run-pages`, in review).
   - Where the panel can dock (64rem and up), a reconciliation opens it. A direct visit opens it before first paint.
   - Leaving the run restores your own open/closed choice; narrow screens keep it closed.
+  - One header: the run's status ("Ask about this result", "AI off") sits under "Ask Sawwi" instead of in a second header.
   - Also fixes the run's chat sometimes not landing in the panel after a direct visit.
 - **Chat in a resizable right sidebar** (D-33, #13, merged).
   - "Ask Sawwi" is now a right-hand panel that mirrors the left nav: docked from 64rem, a drawer on narrow screens.

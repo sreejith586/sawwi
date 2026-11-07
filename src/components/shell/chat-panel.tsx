@@ -12,25 +12,29 @@ import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, currentChatWidth, isChatOpen, resetChat
 
 export const CHAT_SLOT_ID = "chat-panel-slot";
 
-// The slot element, announced by the panel when it mounts. Pages subscribe, so whichever of
-// the two renders first, the page's chat lands in the panel as soon as both are there.
-let slotElement: HTMLElement | null = null;
+// The panel's slots, announced when it mounts: "body" for a page's chat, "header" for that
+// chat's status line under the title. Pages subscribe, so whichever renders first, the page's
+// content lands in the panel as soon as both are there.
+type SlotName = "body" | "header";
+const slots: Record<SlotName, HTMLElement | null> = { body: null, header: null };
 const slotListeners = new Set<() => void>();
-function registerSlot(el: HTMLElement | null) {
-  if (el === slotElement) return;
-  slotElement = el;
+function setSlot(name: SlotName, el: HTMLElement | null) {
+  if (slots[name] === el) return;
+  slots[name] = el;
   for (const l of slotListeners) l();
 }
+const registerBody = (el: HTMLElement | null) => setSlot("body", el);
+const registerHeader = (el: HTMLElement | null) => setSlot("header", el);
 const subscribeSlot = (cb: () => void) => {
   slotListeners.add(cb);
   return () => slotListeners.delete(cb);
 };
 
-/** The element a page portals its chat into; null on the server and until the panel mounts. */
-export function useChatPanelSlot(): HTMLElement | null {
+/** An element a page portals into: its chat ("body") or its status line ("header"). Null on the server and until the panel mounts. */
+export function useChatPanelSlot(name: SlotName = "body"): HTMLElement | null {
   return useSyncExternalStore(
     subscribeSlot,
-    () => slotElement,
+    () => slots[name],
     () => null,
   );
 }
@@ -115,12 +119,16 @@ export function ChatPanel() {
       <aside id="chat-panel" aria-label="Ask Sawwi" className="app-chat fixed inset-y-0 right-0 z-50 flex-col border-l border-border bg-surface lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:shrink-0">
         <ResizeHandle />
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-          <ChatIcon className="size-4 text-muted" />
-          <h2 className="text-sm font-semibold">Ask Sawwi</h2>
+          <ChatIcon className="size-4 shrink-0 text-muted" />
+          <div className="min-w-0 flex-1 leading-tight">
+            <h2 className="text-sm font-semibold">Ask Sawwi</h2>
+            {/* A page's chat puts its status here ("Ask about this result", "AI off"…), so there's one header. */}
+            <div ref={registerHeader} className="empty:hidden" />
+          </div>
           <button
             type="button"
             onClick={() => setChatOpen(false)}
-            className="ml-auto grid size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
             aria-label="Close chat"
             title="Close chat"
           >
@@ -129,7 +137,7 @@ export function ChatPanel() {
         </div>
 
         {/* A page's own chat (a reconciliation's) is portalled in here; otherwise the general panel shows. */}
-        <div id={CHAT_SLOT_ID} ref={registerSlot} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
+        <div id={CHAT_SLOT_ID} ref={registerBody} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
         <div className="app-chat-fallback flex min-h-0 flex-1 flex-col">
           <div className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto p-4">
             <div className="rounded-xl bg-surface-muted px-3.5 py-3 text-sm">

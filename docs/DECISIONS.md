@@ -245,13 +245,14 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Width in React state:** it would flash the default width before hydration, and layouts would re-render while dragging.
 - **Consequences:** on a run page the chat is closed until the user opens it, unless a question is waiting, so it no longer takes 360 px by default. On narrow screens it covers the page while open.
 
-### D-34: Run pages open the chat panel by default
+### D-34: Run pages open the chat panel by default, under one header
 - **Context:** after D-33 the user asked: "open the chat panel by default on run pages". On a reconciliation, the chat is where setup questions are answered and the report's follow-ups happen, so it should be in view without a click.
 - **Decision:**
   - **Where it can dock** (64rem and up), a run page opens the panel. On a direct visit the inline script opens it before first paint, so it doesn't pop in late. On a click-through, the run page opens it when it mounts.
   - **Not saved as the user's choice.** Leaving the run restores the panel to how the user left it elsewhere. Only the top bar's button and the close button save a choice. Explain, the follow-ups and "Answer in the chat" also open it without saving.
   - **Narrow screens:** the panel stays closed, because it would cover the page. The chat button's dot still shows when a question is waiting.
-  - **Robustness fix:** the panel announces its slot when it mounts (`registerSlot`), and run pages subscribe to it. The run's chat therefore lands in the panel whichever of the two renders first. Before, a run page could miss the slot and never look again.
+  - **One header.** The user asked: "Do we need both the headers?" The panel header ("Ask Sawwi" and close) and the run chat's own header ("S · Sawwi · Ask about this result · AI off") are merged. The run's status and the AI off tag now sit under "Ask Sawwi", portalled into a second panel slot (`header`), and the run chat no longer has a header of its own.
+  - **Robustness fix:** the panel announces its slots when it mounts, and run pages subscribe to them. The run's chat therefore lands in the panel whichever of the two renders first. Before, a run page could miss the slot and never look again.
 - **Rejected alternatives:**
   - **Saving "open" when a run page opens it:** the panel would then stay open on every page afterwards, which the user didn't ask for.
   - **Opening it on narrow screens too:** it covers the whole page there.

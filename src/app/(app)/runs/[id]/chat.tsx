@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ChatIntent } from "@/lib/insights/chat";
 import { ExcelButton, SeverityDot } from "@/components/data-table";
+import { useChatPanelSlot } from "@/components/shell/chat-panel";
 import type { RunView } from "@/lib/runs/view";
 import type { ChatPayload, Message } from "@/lib/runs/types";
 
@@ -36,22 +38,24 @@ export function Chat({
   }, [view.messages.length, current?.id, thinking]);
 
   const followUps = Boolean(view.report && view.insights && !current);
+  const headerSlot = useChatPanelSlot("header");
 
   return (
     // Fills the right-hand chat panel (components/shell/chat-panel.tsx), which the run page portals it into.
     <section aria-label="Reconciliation chat" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
-        <span className="grid size-7 place-items-center rounded-full bg-accent text-xs font-bold text-accent-foreground">S</span>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="text-sm font-semibold">Sawwi</p>
-          <p className="text-xs text-muted">{thinking ? "Thinking…" : busy ? "Working…" : current ? "Waiting for your answer" : followUps ? "Ask about this result" : "Here to help"}</p>
-        </div>
-        {followUps && !view.insights!.ai && (
-          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-muted" title="No API key is set, so answers are written by Sawwi's rules.">
-            AI off
-          </span>
+      {/* The panel header already says "Ask Sawwi": this run's status goes into it, not a second header. */}
+      {headerSlot &&
+        createPortal(
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-xs text-muted">{thinking ? "Thinking…" : busy ? "Working…" : current ? "Waiting for your answer" : followUps ? "Ask about this result" : "Here to help"}</p>
+            {followUps && !view.insights!.ai && (
+              <span className="shrink-0 rounded-full bg-surface-muted px-1.5 py-px text-[10px] text-muted" title="Answers are written by Sawwi's rules, without AI.">
+                AI off
+              </span>
+            )}
+          </div>,
+          headerSlot,
         )}
-      </div>
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
         <Bubble role="sawwi">Upload each file on the left. I&apos;ll read them, match the columns, and only ask when something is unclear.</Bubble>
         {view.messages.map((m) => (
