@@ -30,6 +30,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-stock": { store_stock: "source_items" },
     "web-erp-prices": { store_prices: "product_prices" },
     "web-payouts-by-method": { method_sales: "payment_totals" },
+    "web-gift-cards": { gift_cards: "gift_card_balances", redemptions: "gift_card_redemptions" },
   },
   "business-central": {
     "mkt-settlement-vs-sales": { sales: "sales_invoices" },

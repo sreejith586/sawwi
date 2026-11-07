@@ -31,9 +31,16 @@ _Updated in every commit. Newest first within each section._
 | 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
 | 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | PR 3 | Magento↔BC session |
 | 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | PR 4 | Magento↔BC session |
-| 5: webstore sales by payment method vs. payouts and bank (D-56), based on PR 4 | `feature/magento-payouts-by-method` | this PR | Magento↔BC session |
+| 5: webstore sales by payment method vs. payouts and bank (D-56), based on PR 4 | `feature/magento-payouts-by-method` | #36 | Magento↔BC session |
+| 6: gift cards and store credit roll-forward, Adobe Commerce (D-57), based on PR 5 | `feature/magento-gift-cards` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Gift cards and store credit roll-forward** (D-57, `feature/magento-gift-cards`, PR 6 of the stack, based on #36; scenario 9, added by the user).
+  - New template `web-gift-cards` (Adobe Commerce only): each gift card and store credit balance should roll forward (opening + issued − redeemed − expired = closing) against the redemptions on orders. Flags breaks, over-redeemed and negative balances, and redemptions with no issuance.
+  - Magento connector: new `gift_card_balances` report (`/V1/giftcardaccounts`, from each account's balance history) and `gift_card_redemptions` report (gift cards and store credit used on orders). Store credit balances come from the admin's export; Adobe Commerce documents no REST list for them.
+  - Engine: `compare.unmatchedAsZero` and `row_match.key`/`value`.
+  - Demo: the template fills in one click and finds its 6 planted exceptions; other demo results are unchanged. 2 new tests.
 
 - **Webstore sales by payment method vs. payouts and bank** (D-56, `feature/magento-payouts-by-method`, PR 5 of the stack, based on PR 4).
   - New template `web-payouts-by-method`: Magento sales per payment provider (card, PayPal, Apple Pay, Tabby, COD…) against each provider's payouts before fees, and each payout against the bank. It shares the payouts file and payouts-to-bank link with "Bank statement vs. expected payouts", whose results are unchanged.
@@ -212,6 +219,8 @@ _Updated in every commit. Newest first within each section._
 5. Scheduled connector pulls, as a new job kind on the jobs table (D-26, D-27, D-42). Not chosen for Phase 8.
 
 ## Open questions
+
+- **Adobe Commerce gift cards (blocked on a live store):** confirm where Commerce's REST API returns a gift card account's balance history. Until then the gift card report stops with a clear message if it's missing, and store credit balances are uploaded (D-57). Does the design partner run Adobe Commerce or Magento Open Source?
 
 - **Business Central price lists:** the price template compares Magento with BC's item unit price. Checking promotions against BC price list lines needs a small custom API page (AL extension) in the tenant, since API v2.0 has none (D-55). Does the design partner want that?
 

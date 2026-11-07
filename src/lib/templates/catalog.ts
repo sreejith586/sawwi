@@ -1,4 +1,4 @@
-import type { CanonicalField, Link, SourceSlot, Template } from "./types";
+import type { CanonicalField, Check, Link, SourceSlot, Template, Where } from "./types";
 
 // Shared building blocks so the same concept has the same canonical key everywhere.
 const f = (key: string, label: string, type: CanonicalField["type"], required = false): CanonicalField => ({
@@ -102,6 +102,35 @@ const payoutsToBank: Link = {
   amount: { left: "amount", right: "credit", tolerance: 1 },
   dateWindowDays: 5,
 };
+
+/** Gift card and store credit balances: one row per account for the period (D-57). */
+const balanceFields = (accountLabel: string): CanonicalField[] => [
+  f("account", `Account (${accountLabel.toLowerCase()})`, "id", true),
+  f("opening_balance", "Opening balance", "money"),
+  f("issued", "Issued", "money"),
+  f("expired", "Expired", "money"),
+  f("closing_balance", "Closing balance", "money", true),
+];
+
+/** Opening + issued − expired − closing is what should have been redeemed on orders. */
+const balancesToRedemptions = (balances: string): Link => ({
+  left: balances,
+  right: "redemptions",
+  keys: [{ left: "account", right: "account", normalize: ["trim", "upper"] }],
+  cardinality: "one_to_many",
+  amount: { left: "opening_balance + issued - expired - closing_balance", right: "redeemed_amount", tolerance: 0.01 },
+});
+
+function rollForwardChecks(prefix: string, link: number, what: string, slot: string, typePattern: string): Check[] {
+  const right: Where = { field: "type", pattern: typePattern };
+  return [
+    { id: `${prefix}_rollforward`, label: `${cap(what)} balance doesn't roll forward`, description: `Opening + issued − redeemed − expired doesn't equal the closing balance: a ${what} movement is missing or a balance was changed by hand.`, rule: { kind: "compare", link, direction: "either", rightWhere: right, unmatchedAsZero: true } },
+    { id: `${prefix}_over_redeemed`, label: `${cap(what)} redeemed above its balance`, description: `More was spent than the ${what} held (opening + issued − expired).`, rule: { kind: "compare", link, direction: "right_higher", left: "opening_balance + issued - expired", right: "redeemed_amount", tolerance: 0.01, rightWhere: right } },
+    { id: `${prefix}_negative`, label: `Negative ${what} balance`, description: `A ${what} closed the period below zero.`, rule: { kind: "row_match", slot, where: { field: "closing_balance", pattern: "^-" }, key: "account", value: "abs(closing_balance)" } },
+    { id: `${prefix}_no_issuance`, label: `${cap(what)} redeemed with no issuance`, description: `An order used a ${what} that isn't in the balances: it was never issued, or the balances are incomplete.`, rule: { kind: "unmatched_right", link, where: right } },
+  ];
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const b2bInvoices: SourceSlot = {
   key: "invoices",
@@ -1462,6 +1491,45 @@ export const TEMPLATES: Template[] = [
       { id: "fx_difference", label: "FX / bank charge difference", description: "The amount differs because of currency conversion or bank charges.", rule: { kind: "compare", link: 0, direction: "either" } },
     ],
     outputs: ["Cash-in reconciliation by provider", "Unidentified credits", "FX and bank charge summary"],
+  },
+  {
+    id: "web-gift-cards",
+    title: "Gift cards and store credit roll-forward",
+    summary: "Adobe Commerce: check each gift card and store credit balance rolls forward (opening + issued − redeemed − expired = closing) against order redemptions.",
+    group: "webstore",
+    frequency: "monthly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "gift_cards",
+        label: "Gift card accounts",
+        description: "Each gift card's balance at the start and end of the period, with what was issued and expired. Gift card accounts are an Adobe Commerce feature, not part of Magento Open Source.",
+        examples: ["Adobe Commerce gift card accounts", "Gift card provider balance report"],
+        fields: balanceFields("Gift card code"),
+      },
+      {
+        key: "store_credit",
+        label: "Store credit balances",
+        description: "Each customer's store credit at the start and end of the period, with what was issued and expired. Store credit is an Adobe Commerce feature; export it from the admin.",
+        examples: ["Adobe Commerce store credit export", "Customer wallet balance report"],
+        optional: true,
+        fields: balanceFields("Customer e-mail"),
+      },
+      {
+        key: "redemptions",
+        label: "Redemptions on orders",
+        description: "Gift card and store credit amounts used on orders in the period, one row each, with the gift card code or the customer's e-mail.",
+        examples: ["Adobe Commerce orders (gift cards and store credit used)", "Order export with gift card columns"],
+        fields: [f("account", "Account", "id", true), f("type", "Type", "text", true), ORDER_ID, f("redemption_date", "Redemption date", "date", true), f("redeemed_amount", "Redeemed amount", "money", true), CURRENCY],
+      },
+    ],
+    links: [balancesToRedemptions("gift_cards"), balancesToRedemptions("store_credit")],
+    checks: [
+      ...rollForwardChecks("gc", 0, "gift card", "gift_cards", "gift"),
+      ...rollForwardChecks("sc", 1, "store credit", "store_credit", "store credit|credit"),
+    ],
+    outputs: ["Liability roll-forward per account", "Over-redeemed and negative balances", "Redemptions with no issuance"],
   },
   {
     id: "web-payouts-by-method",

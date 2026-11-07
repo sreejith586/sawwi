@@ -82,6 +82,11 @@ const EXPECTED: Record<string, string[]> = {
   "web-payouts-by-method": [
     "credit_difference: po_1119", "not_paid_out: Cash on delivery", "not_paid_out: Stripe", "not_paid_out: Tabby", "unidentified_credit: REF 99812",
   ],
+  // Adobe Commerce gift cards (mock store) and store credit (demo export).
+  "web-gift-cards": [
+    "gc_negative: GC-BBB2", "gc_no_issuance: GC-ZZZ9", "gc_over_redeemed: GC-BBB2", "gc_rollforward: GC-CCC3",
+    "sc_no_issuance: khalid.nasser@example.com", "sc_rollforward: omar.saleh@example.com",
+  ],
   "bank-payouts": ["fx_difference: po_1119", "not_credited: po_1126", "unidentified_credit: REF 99812"],
   "p2p-import-landed-cost": [
     "declaration_unknown: HLCU5555000", "declared_below_invoice: MAEU7654321", "duplicate_freight: Oasis Freight Forwarding / FWD-8812",

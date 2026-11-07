@@ -87,13 +87,17 @@ export type CheckRule =
       /** Money at risk when the compared figures aren't money (e.g. quantities): an expression
        *  over the matched records' fields, where `diff` is left minus right. Defaults to `diff`. */
       value?: string;
+      /** Also compare left rows with no match, as if the right side were zero (roll-forwards: an
+       *  account with no redemptions must still balance). Not for many_to_one lookups. */
+      unmatchedAsZero?: boolean;
     }
   /** Same key twice on one side. `by` overrides the link keys (e.g. supplier + invoice no.). */
   | { kind: "duplicate"; link: number; side: "left" | "right"; by?: string[] }
   | { kind: "multi_value"; link: number; side: "left" | "right"; field: string }
   | { kind: "older_than"; link: number; field: string; days: number; value?: string }
   | { kind: "due_within"; link: number; field: string; days: number; value?: string }
-  | { kind: "row_match"; slot: string; where: Where }
+  /** `key` names the field shown as the exception's key (default: the `where` field); `value` prices it. */
+  | { kind: "row_match"; slot: string; where: Where; key?: string; value?: string }
   | { kind: "pair_match"; link: number; leftWhere: Where; rightWhere: Where }
   /** `from` may be left out to flag only dates after `to`, e.g. a special price past its end date. */
   | { kind: "date_outside"; link: number; date: string; from?: string; to: string }

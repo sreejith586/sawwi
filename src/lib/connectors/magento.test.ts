@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PAYMENT_TOTAL_COLUMNS, MAGENTO_PRICE_COLUMNS, paymentProvider, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { giftCardRow, magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_GIFT_CARD_COLUMNS, MAGENTO_REDEMPTION_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PAYMENT_TOTAL_COLUMNS, MAGENTO_PRICE_COLUMNS, paymentProvider, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -178,6 +178,30 @@ describe("Magento reports", () => {
     expect(paymentProvider("checkoutcom_apple_pay", "Apple Pay")).toBe("Checkout.com");
     expect(paymentProvider("tamara_pay_by_instalments", "Tamara")).toBe("Tamara");
     expect(paymentProvider("my_local_gateway", "Network International")).toBe("Network International");
+  });
+
+  it("rolls gift card balances forward from their history, Adobe Commerce only (D-57)", async () => {
+    const t = await magento.pull(creds, "gift_card_balances", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_GIFT_CARD_COLUMNS]);
+    expect(t.rows.map((r) => r.slice(0, 8).join("|"))).toEqual([
+      "GC-AAA1|Active|2026-08-01|2027-12-31|500.00|0.00|0.00|380.00",
+      "GC-BBB2|Active|2026-10-03|2027-12-31|0.00|200.00|0.00|-50.00",
+      "GC-CCC3|Active|2026-06-01|2027-12-31|300.00|0.00|100.00|250.00",
+    ]); // GC-DDD4 was created in November
+    await expect(magento.pull(creds, "gift_card_balances", october, deps({ openSource: true }))).rejects.toThrow(/Adobe Commerce feature/);
+    expect(() => giftCardRow({ code: "GC-X", balance: 10 }, october)).toThrow(/doesn't return balance history/);
+  });
+
+  it("lists gift card and store credit redemptions on orders (D-57)", async () => {
+    const t = await magento.pull(creds, "gift_card_redemptions", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_REDEMPTION_COLUMNS]);
+    expect(t.rows.map((r) => `${r[0]} ${r[1]} ${r[2]} ${r[4]}`)).toEqual([
+      "GC-AAA1 Gift card 000000101 120.00",
+      "khalid.nasser@example.com Store credit 000000101 30.00",
+      "GC-BBB2 Gift card 000000104 250.00",
+      "mariam.fares@example.com Store credit 000000106 60.00",
+      "GC-ZZZ9 Gift card 000000108 40.00",
+    ]);
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {
