@@ -244,6 +244,17 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS jobs_due ON jobs (status, run_after);
 CREATE INDEX IF NOT EXISTS jobs_created ON jobs (created_at);`,
   },
+  {
+    id: 3,
+    name: "email preferences (D-45)",
+    sql: `
+CREATE TABLE IF NOT EXISTS email_prefs (
+  user_id TEXT PRIMARY KEY,
+  reminders INTEGER NOT NULL DEFAULT 1,
+  notices INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL
+);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

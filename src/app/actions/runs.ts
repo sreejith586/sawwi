@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/profile/session";
-import { runBlocker } from "@/lib/saas/session";
+import { queueReadyNotices } from "@/lib/email/notices";
+import { sendSoon } from "@/lib/email/queue";
+import { getCurrentSession, runBlocker } from "@/lib/saas/session";
 import { getOwnedRun, orgKeyFor } from "@/lib/runs/access";
 import { answerQuestion, overrideMapping, RunInputError } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
@@ -52,5 +54,10 @@ export async function setFieldColumn(runId: string, slotKey: string, fieldKey: s
 }
 
 export async function reconcileRun(runId: string): Promise<RunActionResult> {
-  return withRun(runId, (run, countries) => runReconciliation(run, countries));
+  return withRun(runId, async (run, countries) => {
+    const result = await runReconciliation(run, countries);
+    // "Ready to review" for the rest of the workspace (D-45), sent right after the response.
+    const session = await getCurrentSession();
+    if (session) sendSoon(await queueReadyNotices(run, result, { userId: session.user.id, name: session.user.name }));
+  });
 }

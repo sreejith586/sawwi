@@ -208,13 +208,24 @@ Vercel project `hypermax-solutions/sawwi`, functions in `fra1` (`vercel.json`) n
 - `jobs` table (migration 2): kind, unique key, payload, status (queued → running → done / failed), run-after time, attempts, lock expiry, result or last error.
 - `src/lib/jobs/store.ts`: queue by key (a duplicate key is a no-op), claim due jobs with `FOR UPDATE SKIP LOCKED` (a running job whose lock expired is taken again), finish, fail with retry, prune.
 - `src/lib/jobs/runner.ts`: `tick()` queues the periodic jobs for the current period (keys like `demo_reset:2026-11-07`, `cleanup_incoming:2026-11-07T10`), then runs due jobs in batches of 5 within a 45 s budget. Failures retry after 1 and 2 minutes, and fail for good after 3 attempts; an unknown kind fails at once. Handlers are idempotent.
-- Jobs: `demo_reset` (D-32, also still checked on each demo request), `cleanup_incoming` (raw uploads over an hour old, D-39), `prune_jobs` (done jobs over 30 days).
+- Jobs: `demo_reset` (D-32, also still checked on each demo request), `cleanup_incoming` (raw uploads over an hour old, D-39), `prune_jobs` (done jobs over 30 days), `schedule_reminders` (hourly, D-45) and `send_email` (one per message, D-45).
+- `runJobsNow(keys)` claims and runs only those jobs; a request uses it from `after()` to send an email it just queued without waiting for the next tick. A handler error with `retryable: false` fails the job at once.
 - `/api/cron/tick` is called every 15 minutes by Vercel Cron (`vercel.json`), with `Authorization: Bearer $CRON_SECRET` checked in constant time. Admin shows the last 15 jobs.
-- Next on this: scheduled connector pulls and emailed reminders (D-26, D-27) as new job kinds.
+- Next on this: scheduled connector pulls (D-27) as a new job kind.
+
+## 6f. Email (Phase 8, D-44, D-45)
+
+- **Transport.** `src/lib/email/send.ts`: Resend's REST API with `RESEND_API_KEY`, a log line without it (with the body only off Vercel). Sender `EMAIL_FROM`, default `Sawwi <sawwi@sawwiapp.ai>`. Each request carries the job key as `Idempotency-Key`. 429/5xx are retryable; other errors aren't.
+- **Design.** `templates.ts` renders every email into one HTML layout (`layout()`: logo, card, heading, paragraphs, figure tiles, a button, footer; tables and inline styles, light palette from `globals.css`) plus a plain-text copy. `scripts/send-test-email.ts` sends one of each to an address, run by hand with a key.
+- **Queue.** `src/lib/email/queue.ts`: `queueEmail(key, payload)` adds a `send_email` job (template name, data, recipient, and the user and topic to re-check). `sendSoon(keys)` sends them from `after()`. `deliver.ts` re-checks the recipient's switch, renders (`templates.ts`, pure) and sends.
+- **Who gets what.** `src/lib/email/store.ts` holds the SQL: `email_prefs` (migration 3: reminders, notices; no row = on) and `recipients(orgKey, roles, topic)`, which leaves out suspended workspaces, deactivated teammates and anyone with that topic off.
+- **Reminders** (`reminders.ts`): the hourly `schedule_reminders` job reads each workspace's schedule rows (`schedules/view.ts`, the same due maths as the Schedules page) and queues one email per due period (no run yet, due in the last 7 days) for each owner, admin and editor: key `email:reminder:<schedule>:<period>:<user>`. The demo store is skipped.
+- **"Ready to review"** (`notices.ts`): `reconcileRun` queues one email per other member of the workspace, any role (key `email:ready:<run>:<user>`), with the exception count and value, rows matched and the report link, and sends them right after the response.
+- **Settings → Email** (`/settings/email`): each person's own switches, any role. The demo store sends nothing.
 
 ## 7. Build phases
 
-Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–6 done (Phase 6: usage dashboard §5, scheduled runs, connectors and the demo store §9, chat panel). Phase 7 (D-37) is in progress: go live on Vercel + Neon (Postgres everywhere with PGlite in dev and tests, private Blob uploads, connector keyring, deploy, jobs table + Vercel Cron). Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
+Status: see `docs/PROGRESS.md` (kept current) and `docs/DECISIONS.md`. Phases 1–7 done (Phase 6: usage dashboard §5, scheduled runs, connectors and the demo store §9, chat panel; Phase 7, D-37: live on Vercel + Neon with Postgres everywhere, private Blob uploads, a connector key ring and the jobs table). Phase 8 (D-44) is in progress: email through Resend (§6f: reminders, "ready to review" notices, password reset) and public SEO pages for the reconciliations Sawwi covers. Phase 3 = deterministic matching engine (`src/lib/recon/`) running each template's links and check rules, report UI with sort/filter, Excel export of every table. Phase 4 (PR #2) is merged; its notes follow. PDF inputs (§8, PR #4) are merged.
 
 Phase 4 (`src/lib/insights/`):
 - **Analysis above the report.** Claude Sonnet 5.5 writes a headline, up to four findings and three next steps from a digest (`digestText`: totals, per-check counts/values and the 8 largest exceptions by key, never rows). Fetched after the report renders, then cached per result in `run_narratives`, so re-opening a run costs nothing. No API key, or a viewer opening an uncached run: the rule-based summary (`ruleNarrative`), not cached so a later key still writes one.
@@ -229,7 +240,7 @@ Phase 6, scheduled runs (D-26, `src/lib/schedules/`):
 - Due state is computed when a page loads (`due.ts`, pure). There is no job runner. The first due date is the first occurrence on or after creation. A schedule is due when its latest occurrence has no run, in progress when that period's run has no report yet, and up to date once it has one. Paused schedules are never due.
 - **Due now** (Home, and `/schedules` in the sidebar) lists due schedules. Start (`startScheduledRun`) checks `runBlocker()`, creates an ordinary run tagged with `runs.schedule_id` and `runs.schedule_period`, and opens it; a second click opens the same run. The mapping cache makes a repeat with the same exports ask nothing. Runs are created only on Start, so they count toward the plan's monthly runs only when used.
 - Pause, resume and delete need edit rights. Viewers see schedules and the Excel export (`/api/schedules`).
-- Later: emailed reminders and connector-triggered runs (a pulled file goes into the period's run) need a job runner; see D-26.
+- Emailed reminders (D-45, §6f): the hourly sweep mails owners, admins and editors once per due period. Later: connector-triggered runs (a pulled file goes into the period's run).
 
 Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Uploads are capped at 25 MB (~200k rows), which in-memory joins handle in well under a second, and it avoids a native binary in deployment. Revisit DuckDB if volumes grow.
 
@@ -242,6 +253,7 @@ Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Up
 6. PDF inputs: bank statements, invoices and settlement statements as PDF (§8)
 7. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
 8. Go live: Postgres (Neon), object storage (Vercel Blob), key management, deploy (Vercel), job runner (D-37; the repo's Phase 7)
+9. Email (Resend: reminders, notices, password reset) and SEO pages (D-44; the repo's Phase 8)
 
 ## 8. PDF inputs
 
