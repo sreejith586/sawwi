@@ -9,6 +9,8 @@ export type CredentialField = {
   label: string;
   /** Secret fields are never sent back to the browser or shown again. */
   secret: boolean;
+  /** May be left empty. */
+  optional?: boolean;
   placeholder?: string;
   help?: string;
 };
@@ -17,7 +19,8 @@ export type ConnectorReport = {
   id: string;
   label: string;
   description: string;
-  /** Template slot keys this report usually fills; only a hint for the UI. */
+  /** Slots this report usually fills: "slot" for any template, or "template/slot" when the
+   *  same slot key means different data in different templates. Only a hint for the UI. */
   slots: string[];
 };
 

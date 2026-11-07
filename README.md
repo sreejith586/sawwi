@@ -60,9 +60,13 @@ pnpm build
 12. **Schedules:** set a template to come due weekly or monthly. When it's due it appears under
     "Due now" on Home and on the Schedules page; Start opens that period's run, and saved mappings
     make a repeat ask nothing. No background jobs: due dates are worked out when the page loads.
-13. **Connections** (Settings → Connections, owners and admins): connect a Shopify store with a
-    read-only Admin API token, then use "Import from a connection" on a run's file slot to pull that
-    period's orders instead of uploading a file. Tokens are encrypted at rest with `SAWWI_CONNECTOR_KEY`
-    (set it in `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
+13. **Connections** (Settings → Connections, owners and admins): connect a Shopify store (read-only
+    Admin API token) or Microsoft Dynamics 365 Business Central (Entra app: tenant, environment, client
+    ID and secret), then use "Import from a connection" on a run's file slot to pull that period's data
+    instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
+    `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
+    **Demo without a tenant:** add `SAWWI_CONNECTOR_MOCK=business-central` to `.env.local` (dev only).
+    Business Central is then simulated with an invented company; click **Fill demo values**, connect,
+    and import October 2026 into e.g. the three-way match.
 
 Local data (SQLite database and uploaded files) lives in `.data/`, which is git-ignored.

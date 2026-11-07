@@ -16,15 +16,25 @@ const field = "h-9 w-full rounded-lg border border-border bg-surface px-3 text-s
 export type ConnectorOption = { id: string; label: string; description: string; fields: CredentialField[] };
 export type ConnectionItem = { id: string; provider: string; accountLabel: string; status: string; lastError: string | null; lastSyncAt: string | null; createdAt: string };
 
-export function AddConnection({ connectors }: { connectors: ConnectorOption[] }) {
+export function AddConnection({ connectors, demoValues = {} }: { connectors: ConnectorOption[]; demoValues?: Record<string, Record<string, string>> }) {
   const [provider, setProvider] = useState(connectors[0]?.id ?? "");
+  const [values, setValues] = useState<Record<string, string>>({});
   const [state, action, pending] = useActionState<ConnectionActionState, FormData>(addConnectionAction, {});
   const c = connectors.find((x) => x.id === provider);
+  const demo = demoValues[provider];
   return (
     <form action={action} autoComplete="off" className="space-y-4 rounded-xl border border-border bg-surface p-5">
       <label className="block text-sm">
         <span className="font-medium">Source</span>
-        <select name="provider" value={provider} onChange={(e) => setProvider(e.target.value)} className={`${field} mt-1.5`}>
+        <select
+          name="provider"
+          value={provider}
+          onChange={(e) => {
+            setProvider(e.target.value);
+            setValues({});
+          }}
+          className={`${field} mt-1.5`}
+        >
           {connectors.map((x) => (
             <option key={x.id} value={x.id}>
               {x.label}
@@ -33,10 +43,33 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
         </select>
         {c && <span className="mt-1 block text-xs text-muted">{c.description}</span>}
       </label>
+      {demo && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-background px-3 py-2 text-xs text-muted">
+          <span className="min-w-0 flex-1">
+            Demo mode: {c?.label} is simulated on this server with an invented company (<code>SAWWI_CONNECTOR_MOCK</code>). Nothing is sent to the real service.
+          </span>
+          <button type="button" onClick={() => setValues(demo)} className={`${buttonClass("secondary")} h-7 text-xs`}>
+            Fill demo values
+          </button>
+        </div>
+      )}
       {c?.fields.map((f) => (
         <label key={`${provider}-${f.key}`} className="block text-sm">
-          <span className="font-medium">{f.label}</span>
-          <input name={f.key} type={f.secret ? "password" : "text"} placeholder={f.placeholder} required autoComplete="off" spellCheck={false} className={`${field} mt-1.5`} />
+          <span className="font-medium">
+            {f.label}
+            {f.optional && <span className="font-normal text-muted"> (optional)</span>}
+          </span>
+          <input
+            name={f.key}
+            type={f.secret ? "password" : "text"}
+            placeholder={f.placeholder}
+            required={!f.optional}
+            value={values[f.key] ?? ""}
+            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+            autoComplete="off"
+            spellCheck={false}
+            className={`${field} mt-1.5`}
+          />
           {f.help && <span className="mt-1 block text-xs text-muted">{f.help}</span>}
         </label>
       ))}
@@ -44,7 +77,7 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
         <button type="submit" disabled={pending || !c} className={buttonClass("primary")}>
           {pending ? "Checking…" : "Test and connect"}
         </button>
-        <span className="text-xs text-muted">Sawwi checks the token with one read-only call, then stores it encrypted. It is never shown again.</span>
+        <span className="text-xs text-muted">Sawwi checks the credentials with a read-only call, then stores them encrypted. Secrets are never shown again.</span>
       </div>
       {state.error && (
         <p role="alert" className="text-sm text-danger">
@@ -60,7 +93,7 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
   );
 }
 
-export function ConnectionList({ items, canManage }: { items: ConnectionItem[]; canManage: boolean }) {
+export function ConnectionList({ items, canManage, labels = {} }: { items: ConnectionItem[]; canManage: boolean; labels?: Record<string, string> }) {
   const [pending, start] = useTransition();
   if (items.length === 0) return <p className="text-sm text-muted">No connections yet.</p>;
   return (
@@ -70,7 +103,7 @@ export function ConnectionList({ items, canManage }: { items: ConnectionItem[]; 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{c.accountLabel}</p>
             <p className="text-xs text-muted">
-              {c.provider === "shopify" ? "Shopify" : c.provider} · connected {when(c.createdAt)}
+              {labels[c.provider] ?? c.provider} · connected {when(c.createdAt)}
               {c.lastSyncAt ? ` · last import ${when(c.lastSyncAt)}` : " · not used yet"}
             </p>
             {c.lastError && <p className="mt-1 text-xs text-danger">{c.lastError}</p>}
@@ -81,7 +114,7 @@ export function ConnectionList({ items, canManage }: { items: ConnectionItem[]; 
               type="button"
               disabled={pending}
               onClick={() => {
-                if (confirm("Remove this connection? Sawwi deletes its stored token. Files already imported stay in their runs.")) start(() => removeConnectionAction(c.id));
+                if (confirm("Remove this connection? Sawwi deletes its stored credentials. Files already imported stay in their runs.")) start(() => removeConnectionAction(c.id));
               }}
               className="text-sm text-muted hover:text-danger disabled:opacity-40"
             >
@@ -97,7 +130,7 @@ export function ConnectionList({ items, canManage }: { items: ConnectionItem[]; 
 const syncColumns: QueryColumn<SyncRow>[] = [
   { key: "at", header: "When", render: (r) => <span className="whitespace-nowrap text-muted">{when(r.at)}</span> },
   { key: "connection", header: "Connection" },
-  { key: "report", header: "Report", cellClass: () => "capitalize" },
+  { key: "report", header: "Report" },
   { key: "from", header: "Period", render: (r) => <span className="whitespace-nowrap">{r.from} → {r.to}</span> },
   { key: "rows", header: "Rows", align: "right", render: (r) => r.rows.toLocaleString("en-US") },
   {

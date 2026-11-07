@@ -17,12 +17,17 @@ export type SyncRow = {
 };
 
 export function syncRows(orgKey: string): SyncRow[] {
-  const names = new Map(listConnections(orgKey).map((c) => [c.id, `${connectorById(c.provider)?.label ?? c.provider}: ${c.accountLabel}`]));
+  const connections = listConnections(orgKey);
+  const names = new Map(connections.map((c) => [c.id, `${connectorById(c.provider)?.label ?? c.provider}: ${c.accountLabel}`]));
+  const reportLabel = (connectionId: string, report: string) => {
+    const provider = connections.find((c) => c.id === connectionId)?.provider;
+    return (provider && connectorById(provider)?.reports.find((r) => r.id === report)?.label) || report;
+  };
   return listSyncs(orgKey).map((s) => ({
     id: String(s.id),
     at: s.createdAt,
     connection: names.get(s.connectionId) ?? "Removed connection",
-    report: s.report,
+    report: reportLabel(s.connectionId, s.report),
     from: s.from,
     to: s.to,
     rows: s.rows,

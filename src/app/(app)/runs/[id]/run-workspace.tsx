@@ -72,6 +72,7 @@ export function RunWorkspace({ initial, sources = [] }: { initial: RunView; sour
               index={i + 1}
               slot={slot}
               runId={view.id}
+              templateId={view.templateId}
               sources={sources}
               onView={update}
               onError={setError}
@@ -136,6 +137,7 @@ function SlotCard(props: {
   index: number;
   slot: SlotView;
   runId: string;
+  templateId: string;
   sources: ImportSource[];
   onView: (v: RunView) => void;
   onError: (e?: string) => void;
@@ -263,7 +265,7 @@ function SlotCard(props: {
               )}
             </label>
           )}
-          <ImportFromConnection runId={props.runId} slotKey={slot.key} sources={props.sources} onView={props.onView} onError={props.onError} />
+          <ImportFromConnection runId={props.runId} templateId={props.templateId} slotKey={slot.key} sources={props.sources} onView={props.onView} onError={props.onError} />
         </div>
       </div>
 

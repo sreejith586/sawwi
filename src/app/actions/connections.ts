@@ -28,7 +28,7 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
     return { added: c.accountLabel };
   } catch (error) {
     if (error instanceof ConnectorError) return { error: error.message };
-    return { error: `Couldn't reach ${connector.label}. Check the address and try again.` };
+    return { error: `Couldn't reach ${connector.label}. Check the details and try again.` };
   }
 }
 
