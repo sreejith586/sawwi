@@ -19,7 +19,7 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
   if (!session || !canManageTeam(session.access)) return { error: "Only workspace owners and admins can add connections." };
   if (session.org.status === "suspended") return { error: "This workspace is suspended." };
   if (isDemoOrg(session.org.key)) return { error: "The live demo uses its built-in sources only." };
-  if (!connectorsEnabled()) return { error: "Connections aren't switched on for this server yet (SAWWI_CONNECTOR_KEY)." };
+  if (!connectorsEnabled()) return { error: "Connections aren't switched on for this server yet (SAWWI_CONNECTOR_KEYS)." };
   const provider = String(form.get("provider") ?? "");
   const connector = connectorById(provider);
   if (!connector) return { error: "Pick a source." };

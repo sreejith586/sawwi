@@ -70,3 +70,12 @@ export async function declineRequest(requestId: string) {
   await store.setRequestStatus(requestId, "declined");
   refresh();
 }
+
+/** Re-seals connection secrets under the active connector key (D-40). */
+export async function rewrapConnectorSecrets(): Promise<{ rewrapped: number; failed: number }> {
+  await requireSuperadmin();
+  const { rewrapAll } = await import("@/lib/connectors/keyring");
+  const result = await rewrapAll();
+  refresh();
+  return result;
+}

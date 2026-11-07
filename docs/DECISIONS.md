@@ -369,3 +369,21 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - A raw upload abandoned between the two requests (the tab closed) stays in `incoming/` until the jobs runner (PR 6) cleans the folder.
   - The direct-upload path needs a real Blob store to run, so it is tested with a mocked SDK, and checked on a preview deploy.
   - **Found on the first preview deploy:** the connected store came with `BLOB_STORE_ID` (OIDC) and no read-write token, so Blob stayed off and the demo reset failed. Blob is now on with either credential, and deleting an empty list needs no store.
+
+### D-40: Connector secrets: envelope encryption under a named, rotatable key ring
+- **Context:** D-37's fourth PR. Connection tokens were sealed straight under one key, `SAWWI_CONNECTOR_KEY`. That key had no name, and changing it made every stored token unreadable. D-37 ruled out a cloud KMS for now, since there's no AWS or GCP account.
+- **Decision:**
+  - **Envelope encryption** (format `v2`). Each secret is sealed with its own random 256-bit data key (AES-256-GCM, workspace and provider as associated data). The data key is wrapped by a master key whose id is stored with the secret.
+  - **Master keys** come from `SAWWI_CONNECTOR_KEYS`, a list of `id:key` entries with the active key first. In production this is a sensitive Vercel variable. A malformed ring switches connections off rather than half-working. The old single `SAWWI_CONNECTOR_KEY` still works as key `k0`, and `v1` secrets still open, so nothing breaks on deploy.
+  - **Rotation:**
+    1. Add the new key in front of the old one and redeploy.
+    2. In Admin → Connection secrets, re-encrypt: every secret gets a fresh data key under the active key, written only if it hasn't changed since it was read.
+    3. Remove the old key once that page shows no secrets left under it.
+
+    Secrets that no key on the server opens are counted, never overwritten. It's a superadmin action rather than a script because Vercel has no shell.
+  - The design leaves room for a cloud KMS later: it would wrap and unwrap the data keys instead of the environment keys, with no change to the stored format beyond the key id.
+- **Rejected alternatives:**
+  - A cloud KMS now: a second cloud account, which D-37 ruled out.
+  - Re-encrypting with one new key and no ids: a deploy gap would leave secrets unreadable.
+  - A command-line rotation script: there's no shell on Vercel.
+- **Consequences:** env-held master keys are only as safe as the Vercel project's environment settings, so production keys must be marked Sensitive. Losing every key that a secret is sealed under means those connections must be re-added.

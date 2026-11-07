@@ -63,8 +63,9 @@ pnpm build
 13. **Connections** (Settings → Connections, owners and admins): connect a Shopify store (read-only
     Admin API token), Microsoft Dynamics 365 Business Central (Entra app: tenant, environment, client
     ID and secret) or a Magento 2 store (integration access token), then use "Import from a connection" on a run's file slot to pull that period's data
-    instead of uploading a file. Secrets are encrypted at rest with `SAWWI_CONNECTOR_KEY` (set it in
-    `.env.local`: `openssl rand -base64 32`); without it, connections are switched off.
+    instead of uploading a file. Secrets are encrypted at rest under a key ring, `SAWWI_CONNECTOR_KEYS`
+    (in `.env.local`: `SAWWI_CONNECTOR_KEYS=k1:` followed by the output of `openssl rand -base64 32`), rotated from
+    Admin → Connection secrets (D-40); without it, connections are switched off.
 14. **Live demo store**: "Try the live demo" on the login and landing pages opens a shared workspace with
     invented data for all 23 templates (a Business Central company, a Magento store, a marketplace seller,
     and their gateway, courier, warehouse, bank, customs and statement files). Start any reconciliation, click **Fill with demo data**, then

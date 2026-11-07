@@ -94,3 +94,17 @@ export async function listSyncs(orgKey: string, limit = 500): Promise<SyncRecord
     createdAt: String(r.created_at),
   }));
 }
+
+// ─── Key rotation (D-40): every workspace's sealed secrets, superadmin only ─────────
+
+export type SealedSecret = { id: string; orgKey: string; provider: string; secretEnc: string };
+
+export async function listAllSealedSecrets(): Promise<SealedSecret[]> {
+  const rows = await getDb().all<Row>("SELECT id, org_key, provider, secret_enc FROM connections ORDER BY created_at");
+  return rows.map((r) => ({ id: String(r.id), orgKey: String(r.org_key), provider: String(r.provider), secretEnc: String(r.secret_enc) }));
+}
+
+/** Replaces a secret only if it hasn't changed since it was read. */
+export async function replaceSealedSecret(id: string, previous: string, next: string): Promise<boolean> {
+  return (await getDb().run("UPDATE connections SET secret_enc = ? WHERE id = ? AND secret_enc = ?", next, id, previous)).changes === 1;
+}
