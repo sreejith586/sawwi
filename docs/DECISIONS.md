@@ -48,6 +48,7 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Context:** a rename to "Sawwina" (e96ff7c) was made because a Saudi company trades as "Sawwi" (sawwi.ai).
 - **Decision:** the rename was reverted (1deb94f). The public address is `sawwi.hypermaxsolutions.com` (cddff64).
 - **Consequences:** the trademark question is still open. See PROGRESS → Open questions.
+- **Update:** the public address moved to `sawwiapp.ai` (D-43).
 
 ### D-13: 3-way matching is cumulative per PO line
 - **Decision:** PO, GRN and supplier invoice are matched on PO number + SKU, so partial deliveries and split invoices add up. The accepted quantity is received minus rejected. Price is checked per invoice line against the PO price through a lookup link. Row-level rules can take a `value` expression, because GRNs carry no prices.
@@ -403,3 +404,15 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Gulf users get roughly 100 ms extra latency per page.
   - Neon Free's limits (storage, compute hours, short restore window) mean upgrading before real customer data.
   - Production stays broken until this PR stack (#16–#20) is merged, because `main` still uses SQLite.
+
+### D-43: The public address is sawwiapp.ai; every other domain redirects to it
+- **Context:** the user registered `sawwiapp.com` and `sawwiapp.ai` and pointed both at the Vercel project. Both served the app directly, next to `sawwi.hypermaxsolutions.com` (D-12). Several addresses serving the same app split sign-in cookies (a session on one domain isn't sent to another), can't all be the Stripe webhook URL, and split search ranking.
+- **Decision:**
+  - `sawwiapp.ai` is the primary domain, chosen by the user. `DEFAULT_APP_URL` (`src/lib/site.ts`) and the documented `APP_URL` are `https://sawwiapp.ai`.
+  - `sawwiapp.com`, the `www` hosts and `sawwi.hypermaxsolutions.com` are set in Vercel to redirect (308) to `sawwiapp.ai`, so old links keep working.
+  - The Stripe webhook points at `https://sawwiapp.ai/api/stripe/webhook`, and the runbook (`docs/DEPLOY.md`) spells out the event destination settings.
+- **Rejected alternatives:**
+  - `sawwiapp.com` as primary: the user's choice was `.ai`.
+  - Serving every domain without redirects: split cookies and duplicate content.
+  - Dropping `sawwi.hypermaxsolutions.com`: links already shared would break.
+- **Consequences:** users signed in on the old address sign in once more on `sawwiapp.ai`. The domain redirects and `APP_URL` are set by the user in Vercel; the code default only matters where `APP_URL` is unset.

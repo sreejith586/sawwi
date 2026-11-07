@@ -25,10 +25,15 @@ _Updated in every commit. Newest first within each section._
 | Files in private Vercel Blob, direct browser uploads (D-39) | `phase-7-blob-uploads` | #18 (stacked on #17) | Phase 7 session |
 | Connector key ring: envelope encryption, rotation (D-40) | `phase-7-connector-keyring` | #19 (stacked on #18) | Phase 7 session |
 | Vercel deploy: fra1, health check, runbook (D-41) | `phase-7-vercel-deploy` | (this PR, stacked on #19) | Phase 7 session |
+| Primary domain sawwiapp.ai, others redirect (D-43) | `chore/domain-sawwiapp-ai` | (this PR) | Stripe setup session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 
 ## Recent changes
 
+- **Primary domain `sawwiapp.ai`** (D-43, branch `chore/domain-sawwiapp-ai`, in review).
+  - `DEFAULT_APP_URL`, `.env.example` and `docs/DEPLOY.md` use `https://sawwiapp.ai`.
+  - The runbook now covers the Stripe webhook destination (Your account, Snapshot, eight events).
+  - **The user's part:** in Vercel, set `sawwiapp.com`, the `www` hosts and `sawwi.hypermaxsolutions.com` to redirect to `sawwiapp.ai`; set `APP_URL=https://sawwiapp.ai`; point the Stripe webhook at `https://sawwiapp.ai/api/stripe/webhook`; redeploy.
 - **Vercel deploy** (D-41, branch `phase-7-vercel-deploy`, in review).
   - Functions are pinned to `fra1`, next to Neon.
   - `/api/health` checks the database and the file store.
