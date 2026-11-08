@@ -25,6 +25,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-bnpl": { orders: "orders" },
     "web-refunds-vs-returns": { refunds: "credit_memo_lines" },
     "web-courier-freight": { shipments: "shipment_tracks" },
+    "web-erp-invoices": { store_invoices: "invoices" },
   },
   "business-central": {
     "mkt-settlement-vs-sales": { sales: "sales_invoices" },
@@ -34,6 +35,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "b2b-price-compliance": { invoice_lines: "sales_invoice_lines" },
     "b2b-returns-vs-credit-notes": { credit_notes: "sales_credit_memos" },
     "p2p-three-way-match": { po: "purchase_order_lines", grn: "purchase_receipt_lines", invoices: "purchase_invoice_lines" },
+    "web-erp-invoices": { erp_invoices: "web_sales_invoices" },
   },
 };
 

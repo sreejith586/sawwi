@@ -1,6 +1,6 @@
 // A small, made-up Magento 2 store for tests and local demos (D-30). Everything is invented:
 // "Sawwi Demo Store", AED, 5% VAT included in prices, October 2026, times in UTC. It covers
-// card (Stripe), cash on delivery and BNPL (Tabby) orders, a cancelled order, a partial and a
+// card (Stripe), cash on delivery and BNPL (Tabby) orders, invoices for paid and delivered orders, a cancelled order, a partial and a
 // full refund, a shipment with two tracking numbers and one with none, and two orders just
 // outside the month so window filters are exercised.
 
@@ -18,8 +18,16 @@ const PRODUCTS: Record<string, { name: string; price: number; weight: number }> 
 
 const PAYMENTS: Record<string, string> = { stripe_payments: "Credit Card (Stripe)", cashondelivery: "Cash On Delivery", tabby_installments: "Tabby: Pay in 4" };
 
+// Invented shoppers, at the reserved example.com domain.
+const SHOPPERS: [first: string, last: string][] = [["Layla", "Haddad"], ["Omar", "Saleh"], ["Noura", "Al Amiri"], ["Yousef", "Karim"], ["Mariam", "Fares"], ["Khalid", "Nasser"]];
+
 type Line = [sku: string, qty: number];
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+function shopper(entity: number): Doc {
+  const [first, last] = SHOPPERS[entity % SHOPPERS.length];
+  return { customer_firstname: first, customer_lastname: last, customer_email: `${first}.${last.replace(/\s+/g, "")}@example.com`.toLowerCase() };
+}
 
 function order(entity: number, inc: string, created: string, status: string, method: string, lines: Line[], extra: Doc = {}): Doc {
   const subtotalIncl = lines.reduce((a, [sku, qty]) => a + PRODUCTS[sku].price * qty, 0);
@@ -30,7 +38,7 @@ function order(entity: number, inc: string, created: string, status: string, met
   const paid = status === "canceled" || (method === "cashondelivery" && status !== "complete") ? 0 : grand;
   return {
     entity_id: entity, increment_id: inc, created_at: created, updated_at: created, status, state: status === "canceled" ? "canceled" : status,
-    store_id: 1, store_name: STORE_NAME, order_currency_code: "AED", base_currency_code: "AED",
+    store_id: 1, store_name: STORE_NAME, ...shopper(entity), order_currency_code: "AED", base_currency_code: "AED",
     subtotal: r2(subtotalIncl - (subtotalIncl * 5) / 105), discount_amount: 0, shipping_amount: shipping + cod, tax_amount: tax, grand_total: grand, total_paid: paid,
     payment: { method, additional_information: [PAYMENTS[method]] },
     items: lines.map(([sku, qty], i) => ({ item_id: entity * 10 + i, sku, name: PRODUCTS[sku].name, qty_ordered: qty, price: PRODUCTS[sku].price, weight: PRODUCTS[sku].weight })),
@@ -51,6 +59,26 @@ export const DEMO_ORDERS: Doc[] = [
   order(109, "000000109", "2026-10-26 20:20:20", "processing", "tabby_installments", [["OUD-50", 1], ["SND-42", 1]]),
   order(110, "000000110", "2026-10-31 23:59:00", "pending", "stripe_payments", [["MAT-01", 1]]),
   order(111, "000000111", "2026-11-01 00:10:00", "pending", "cashondelivery", [["SND-42", 1]]),
+];
+
+/** Invoices: card and Tabby orders are invoiced when paid, COD orders when delivered. */
+function invoice(entity: number, inc: string, orderId: number, created: string): Doc {
+  const o = DEMO_ORDERS.find((x) => x.entity_id === orderId)!;
+  return {
+    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, state: 2, order_currency_code: "AED",
+    subtotal: o.subtotal, shipping_amount: o.shipping_amount, discount_amount: 0, tax_amount: o.tax_amount, grand_total: o.grand_total,
+  };
+}
+
+export const DEMO_INVOICES: Doc[] = [
+  invoice(400, "000000400", 100, "2026-09-30 23:31:00"), // September, outside the month
+  invoice(401, "000000401", 101, "2026-10-01 08:13:02"),
+  invoice(402, "000000402", 102, "2026-10-04 12:00:00"), // COD, invoiced on delivery
+  invoice(403, "000000403", 103, "2026-10-04 11:06:10"),
+  invoice(404, "000000404", 104, "2026-10-07 21:19:00"),
+  invoice(406, "000000406", 106, "2026-10-12 09:56:00"),
+  invoice(408, "000000408", 108, "2026-10-21 12:48:00"),
+  // 107 (COD, not delivered), 109 (Tabby, not captured) and 110 (pending) have no invoice yet.
 ];
 
 function memo(entity: number, inc: string, orderId: number, created: string, lines: Line[], adjustment = 0): Doc {

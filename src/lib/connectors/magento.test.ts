@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { magento, MAGENTO_INVOICE_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -96,6 +96,19 @@ describe("Magento reports", () => {
       ["000000103", "000000501", "2026-10-08T10:00:00Z", "OUD-50", "Oud perfume 50 ml", "1.00", "285.00", "305.00", "AED"],
       ["000000106", "000000502", "2026-10-19T15:45:00Z", "SND-42", "Leather sandals, 42", "1.00", "199.00", "199.00", "AED"],
     ]);
+  });
+
+  it("gives one row per invoice with the order number and the customer's e-mail (D-52)", async () => {
+    const log: { method: string; url: string }[] = [];
+    const t = await magento.pull(creds, "invoices", october, deps({ log }));
+    expect(t.headers).toEqual([...MAGENTO_INVOICE_COLUMNS]);
+    expect(t.rows.map((r) => r[0])).toEqual(["000000101", "000000102", "000000103", "000000104", "000000106", "000000108"]); // 100's invoice is September's
+    expect(t.rows[0]).toEqual(["000000101", "000000401", "2026-10-01T08:13:02Z", "khalid.nasser@example.com", "Khalid Nasser", "471.43", "0.00", "0.00", "23.57", "495.00", "AED"]);
+    // One lookup for all the orders, asking only for the fields it needs.
+    const lookups = log.filter((l) => l.url.includes("/orders?")).map((l) => decodeURIComponent(l.url));
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]).toContain("fields=items[entity_id,increment_id,customer_email,customer_firstname,customer_lastname]");
+    await expect(magento.pull(creds, "invoices", october, deps({ deny: ["Magento_Sales::sales_invoice"] }))).rejects.toThrow(/Magento_Sales::sales_invoice/);
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {

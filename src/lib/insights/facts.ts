@@ -58,6 +58,7 @@ export function fixAction(t: Template, check: Check): string {
     pair_match: `Check each pair and agree the treatment with the other party.`,
     date_outside: `Confirm the right price or rate applied on those dates and raise a correction if not.`,
     vat_rate: `Correct the VAT on these lines before the return is filed.`,
+    text_mismatch: `Check which side is right and correct the other, so both systems agree.`,
   };
   return actions[rule.kind];
 }

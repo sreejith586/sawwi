@@ -69,7 +69,7 @@ function DemoConnections({ labels, history }: { labels: Record<string, string>; 
   return (
     <div className="space-y-10">
       <p className="text-sm text-muted">
-        This live demo has three built-in sources with invented data: a Business Central company, a Magento store, and demo files for the other side of
+        This live demo has built-in sources with invented data: two Business Central companies (a trading company and the web store&rsquo;s books), a Magento store, and demo files for the other side of
         each reconciliation (marketplace, gateway, courier, warehouse, bank). On a reconciliation, click <strong>Fill with demo data</strong>, or use
         “Import from a connection” on a file. In your own workspace you connect your real systems here.
       </p>
@@ -77,7 +77,7 @@ function DemoConnections({ labels, history }: { labels: Record<string, string>; 
         <h2 className="text-sm font-semibold">Demo sources</h2>
         <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
           {DEMO_SOURCES.map((d) => (
-            <li key={d.provider} className="px-4 py-3">
+            <li key={d.id} className="px-4 py-3">
               <p className="text-sm font-medium">{d.accountLabel}</p>
               <p className="text-xs text-muted">{labels[d.provider] ?? d.provider} · built into the demo</p>
             </li>
