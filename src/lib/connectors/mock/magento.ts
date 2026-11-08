@@ -1,10 +1,10 @@
 import type { FetchLike } from "../types";
-import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS, DEMO_PRODUCTS, DEMO_SOURCE_ITEMS, DEMO_SHIPMENTS, DEMO_STORE_CONFIGS } from "./magento-data";
+import { DEMO_CREDIT_MEMOS, DEMO_GIFT_CARDS, DEMO_INVOICES, DEMO_ORDERS, DEMO_PRODUCTS, DEMO_SOURCE_ITEMS, DEMO_STORE_VIEWS, DEMO_SHIPMENTS, DEMO_STORE_CONFIGS } from "./magento-data";
 
 // An in-process stand-in for a Magento 2 store's REST API (D-30), for one invented store at a
 // reserved .example address. It answers the same paths and JSON shapes for GET orders,
-// invoices, creditmemos, shipments, products, inventory/source-items (searchCriteria filters, `in`, paging that repeats the last page past
-// the end, as Magento does) and store/storeConfigs, so tests and local demos run the real
+// invoices, creditmemos, shipments, products, giftcardaccounts (Adobe Commerce), inventory/source-items (searchCriteria filters, `in`, paging that repeats the last page past
+// the end, as Magento does) store/storeConfigs and store/storeViews, so tests and local demos run the real
 // connector with no network and no real token.
 
 /** Made-up values for the demo store. They work only against this mock. */
@@ -26,6 +26,7 @@ const COLLECTIONS: Record<string, { rows: Doc[]; resource: string }> = {
   invoices: { rows: DEMO_INVOICES, resource: "Magento_Sales::sales_invoice" },
   creditmemos: { rows: DEMO_CREDIT_MEMOS, resource: "Magento_Sales::sales_creditmemo" },
   shipments: { rows: DEMO_SHIPMENTS, resource: "Magento_Sales::shipment" },
+  giftcardaccounts: { rows: DEMO_GIFT_CARDS, resource: "Magento_GiftCardAccount::giftcardaccount" },
   products: { rows: DEMO_PRODUCTS, resource: "Magento_Catalog::products" },
   "inventory/source-items": { rows: DEMO_SOURCE_ITEMS, resource: "Magento_InventoryApi::source" },
 };
@@ -51,6 +52,8 @@ function matches(d: Doc, f: Filter): boolean {
 export type MockMagentoOptions = {
   /** Answer 404 for the inventory API, like a store without Multi-Source Inventory. */
   noMsi?: boolean;
+  /** Answer 404 for gift card accounts, like Magento Open Source (no Adobe Commerce modules). */
+  openSource?: boolean;
   log?: { method: string; url: string }[];
   /** Resources the integration lacks, e.g. "Magento_Sales::shipment", to test permission errors. */
   deny?: string[];
@@ -67,7 +70,9 @@ export function mockMagento(opts: MockMagentoOptions = {}): FetchLike {
 
     const u = new URL(url);
     const path = u.pathname.slice(new URL(ROOT).pathname.length);
+    if (path === "store/storeViews") return reply(opts.deny?.includes("Magento_Backend::store") ? denied("Magento_Backend::store") : { status: 200, body: DEMO_STORE_VIEWS });
     if (path === "store/storeConfigs") return reply(opts.deny?.includes("Magento_Backend::store") ? denied("Magento_Backend::store") : { status: 200, body: DEMO_STORE_CONFIGS });
+    if (opts.openSource && path.startsWith("giftcardaccounts")) return reply({ status: 404, body: { message: "Request does not match any route." } });
     if (opts.noMsi && path.startsWith("inventory/")) return reply({ status: 404, body: { message: "Request does not match any route." } });
     const collection = COLLECTIONS[path];
     if (!collection) return reply({ status: 404, body: { message: "Request does not match any route." } });

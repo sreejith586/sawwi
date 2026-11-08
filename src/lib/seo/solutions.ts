@@ -39,14 +39,16 @@ export const SOLUTIONS: Solution[] = [
       heading: "Connect Magento 2, or upload the exports",
       connector: "magento",
       paragraphs: [
-        "Sawwi's Magento 2 connector reads seven reports through the Magento REST API with an integration token: orders, invoices, credit memos (totals), credit memo lines (refunded items), shipment tracking numbers with weights, stock per SKU and source (Multi-Source Inventory), and product prices with special prices and their dates. It only reads; Sawwi never writes to your store.",
+        "Sawwi's Magento 2 connector reads eleven reports through the Magento REST API with an integration token: orders, sales by payment method, invoices, invoices by store view and currency, credit memos (totals), credit memo lines (refunded items), shipment tracking numbers with weights, stock per SKU and source (Multi-Source Inventory), product prices with special prices and their dates, and, on Adobe Commerce only, gift card accounts and gift card and store credit redemptions. It only reads; Sawwi never writes to your store.",
         "Run Magento with Microsoft Dynamics 365 Business Central? Sawwi checks that every Magento invoice and refund was posted in Business Central once, with the same total, VAT and customer, and that Magento's stock and prices match Business Central's inventory and unit prices, reading both sides through their connectors.",
         "The connector is new. If it doesn't suit your setup yet, export the same data from the Magento admin and upload it. Magento 1 stores work through uploads of the order grid and credit memo exports.",
       ],
     },
-    templates: ["web-orders-vs-gateway", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "web-cod-remittance", "web-bnpl", "web-refunds-vs-returns", "web-courier-freight", "bank-payouts"],
+    templates: ["web-orders-vs-gateway", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "web-cod-remittance", "web-bnpl", "web-refunds-vs-returns", "web-courier-freight", "web-erp-fx", "web-payouts-by-method", "web-gift-cards", "bank-payouts"],
     faqs: [
       { q: "Which Magento versions does Sawwi work with?", a: "The connector works with Magento 2 and Adobe Commerce through the REST API. On Magento 2.4.4 and later, the store must allow integration tokens to be used as bearer tokens. Magento 1 stores can upload their order and credit memo exports instead." },
+      { q: "Does Sawwi handle several store views and currencies?", a: "Yes. Sawwi reads each invoice's store view, order currency, base currency and the exchange rate Magento recorded, and checks Business Central booked it in the same currency and at the same local-currency value, within a tolerance. Stores whose invoices never reach Business Central are flagged too." },
+      { q: "Can Sawwi reconcile gift cards and store credit?", a: "Yes, on Adobe Commerce, where gift cards and store credit are built in; Magento Open Source doesn't have them. Sawwi checks each balance rolls forward (opening + issued − redeemed − expired = closing) against the redemptions on orders, and flags cards redeemed above their balance, negative balances and redemptions with no issuance. Store credit balances come from an admin export." },
       { q: "Does Sawwi change anything in my Magento store?", a: "No. The connector only reads orders, invoices, credit memos, shipments, stock and prices, with a token you create for Sawwi and can revoke at any time. The token is stored encrypted." },
       { q: "Which payment gateways can I reconcile Magento orders against?", a: "Any gateway whose settlement or transaction report you can download, for example Checkout.com, Tap, PayTabs, Telr or Stripe. Sawwi matches each order to its captures, refunds and chargebacks by the order reference." },
       { q: "Does AI decide which orders match?", a: "No. Matching is done by a deterministic engine on order references, amounts and dates, with tolerances you can see. AI is only used to help read column headers." },
@@ -64,11 +66,11 @@ export const SOLUTIONS: Solution[] = [
       heading: "Connect Business Central, or upload the exports",
       connector: "business-central",
       paragraphs: [
-        "Sawwi's Business Central connector signs in with a Microsoft Entra app registration (client credentials) and reads eleven reports through the Business Central API v2.0: sales invoices, sales invoice lines, sales credit memos, open sales order lines, sales shipment lines, open purchase order lines, purchase receipt lines, purchase invoice lines, posted sales invoices and credit memos for web orders (those carrying a store order number in External Document No.), and items with their inventory and unit price. It only reads.",
+        "Sawwi's Business Central connector signs in with a Microsoft Entra app registration (client credentials) and reads twelve reports through the Business Central API v2.0: sales invoices, sales invoice lines, sales credit memos, open sales order lines, sales shipment lines, open purchase order lines, purchase receipt lines, purchase invoice lines, posted sales invoices and credit memos for web orders (those carrying a store order number in External Document No.), the same invoices in document and local currency, and items with their inventory and unit price. It only reads.",
         "It works with Business Central online. The reports come in with fixed column names, so they map onto the templates without questions. The connector is new; you can always export the same lists to Excel and upload them instead.",
       ],
     },
-    templates: ["b2b-cash-application", "b2b-order-delivery-invoice", "p2p-three-way-match", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "b2b-returns-vs-credit-notes", "b2b-price-compliance", "mkt-settlement-vs-sales", "mkt-b2b-payment-release", "b2b-customer-statement", "p2p-supplier-statement"],
+    templates: ["b2b-cash-application", "b2b-order-delivery-invoice", "p2p-three-way-match", "web-erp-invoices", "web-erp-credit-memos", "web-erp-stock", "web-erp-prices", "web-erp-fx", "b2b-returns-vs-credit-notes", "b2b-price-compliance", "mkt-settlement-vs-sales", "mkt-b2b-payment-release", "b2b-customer-statement", "p2p-supplier-statement"],
     faqs: [
       { q: "What does Sawwi need to connect to Business Central?", a: "Your IT admin registers an app in Microsoft Entra, gives it a client secret, and enables it in Business Central with a read-only permission set. You then enter the tenant, environment, client ID and secret in Sawwi. The secret is stored encrypted." },
       { q: "Does it work with Business Central on-premises?", a: "The connector uses the Business Central online API. For on-premises installations, export the same lists to Excel and upload them." },
@@ -160,7 +162,7 @@ export const SOLUTIONS: Solution[] = [
         "There is no live bank feed yet: statements are uploaded. " + UPLOAD_ANY,
       ],
     },
-    templates: ["bank-payouts", "b2b-cash-application", "b2b-pdc-clearing"],
+    templates: ["bank-payouts", "web-payouts-by-method", "b2b-cash-application", "b2b-pdc-clearing"],
     faqs: [
       { q: "Can I upload a PDF bank statement?", a: "Yes. Sawwi reads the statement table from the PDF, including multi-page tables and wrapped descriptions, and checks the running balance before it matches anything. Scanned statements are read with OCR on Sawwi's server; nothing is sent to an outside service." },
       { q: "Does Sawwi connect to my bank?", a: "Not yet. Statements are uploaded. A bank feed through a licensed open-banking provider is planned, not built." },

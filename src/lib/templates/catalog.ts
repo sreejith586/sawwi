@@ -1,4 +1,4 @@
-import type { CanonicalField, SourceSlot, Template } from "./types";
+import type { CanonicalField, Check, Link, SourceSlot, Template, Where } from "./types";
 
 // Shared building blocks so the same concept has the same canonical key everywhere.
 const f = (key: string, label: string, type: CanonicalField["type"], required = false): CanonicalField => ({
@@ -83,6 +83,54 @@ const bankStatement: SourceSlot = {
     CURRENCY,
   ],
 };
+
+/** Payout batches from payment providers; shared by the bank payouts templates (D-56). */
+const providerPayouts: SourceSlot = {
+  key: "payouts",
+  label: "Expected payouts",
+  description: "Payout batches from one or more providers (marketplace, gateway, BNPL, courier).",
+  examples: ["Marketplace disbursement summary", "Gateway payouts list", "Courier remittance summary"],
+  fields: [f("payout_id", "Payout / batch ID", "id", true), f("provider", "Provider", "text", true), f("payout_date", "Payout date", "date", true), f("amount", "Payout amount", "money", true), f("fees", "Fees deducted", "money"), CURRENCY],
+};
+
+/** Payouts to bank: the same link and checks wherever payouts meet the bank statement. */
+const payoutsToBank: Link = {
+  left: "payouts",
+  right: "bank",
+  keys: [{ left: "payout_id", right: "reference", normalize: ["upper", "strip_non_alnum"], mode: "contains" }],
+  cardinality: "one_to_one",
+  amount: { left: "amount", right: "credit", tolerance: 1 },
+  dateWindowDays: 5,
+};
+
+/** Gift card and store credit balances: one row per account for the period (D-57). */
+const balanceFields = (accountLabel: string): CanonicalField[] => [
+  f("account", `Account (${accountLabel.toLowerCase()})`, "id", true),
+  f("opening_balance", "Opening balance", "money"),
+  f("issued", "Issued", "money"),
+  f("expired", "Expired", "money"),
+  f("closing_balance", "Closing balance", "money", true),
+];
+
+/** Opening + issued − expired − closing is what should have been redeemed on orders. */
+const balancesToRedemptions = (balances: string): Link => ({
+  left: balances,
+  right: "redemptions",
+  keys: [{ left: "account", right: "account", normalize: ["trim", "upper"] }],
+  cardinality: "one_to_many",
+  amount: { left: "opening_balance + issued - expired - closing_balance", right: "redeemed_amount", tolerance: 0.01 },
+});
+
+function rollForwardChecks(prefix: string, link: number, what: string, slot: string, typePattern: string): Check[] {
+  const right: Where = { field: "type", pattern: typePattern };
+  return [
+    { id: `${prefix}_rollforward`, label: `${cap(what)} balance doesn't roll forward`, description: `Opening + issued − redeemed − expired doesn't equal the closing balance: a ${what} movement is missing or a balance was changed by hand.`, rule: { kind: "compare", link, direction: "either", rightWhere: right, unmatchedAsZero: true } },
+    { id: `${prefix}_over_redeemed`, label: `${cap(what)} redeemed above its balance`, description: `More was spent than the ${what} held (opening + issued − expired).`, rule: { kind: "compare", link, direction: "right_higher", left: "opening_balance + issued - expired", right: "redeemed_amount", tolerance: 0.01, rightWhere: right } },
+    { id: `${prefix}_negative`, label: `Negative ${what} balance`, description: `A ${what} closed the period below zero.`, rule: { kind: "row_match", slot, where: { field: "closing_balance", pattern: "^-" }, key: "account", value: "abs(closing_balance)" } },
+    { id: `${prefix}_no_issuance`, label: `${cap(what)} redeemed with no issuance`, description: `An order used a ${what} that isn't in the balances: it was never issued, or the balances are incomplete.`, rule: { kind: "unmatched_right", link, where: right } },
+  ];
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const b2bInvoices: SourceSlot = {
   key: "invoices",
@@ -196,7 +244,7 @@ export const TEMPLATES: Template[] = [
   {
     id: "mkt-returns-vs-invoiced",
     title: "Returns vs. invoiced items",
-    summary: "Match customer returns and failed deliveries to the original invoice line. Check you got the item back, issued the right credit, and the right amount was deducted.",
+    summary: "Match customer returns and failed deliveries to the invoice line. Check you got the item back, issued the right credit, and the right amount was deducted.",
     group: "marketplace",
     frequency: "weekly",
     appliesTo: { channels: ["marketplace"] },
@@ -923,6 +971,70 @@ export const TEMPLATES: Template[] = [
     ],
     outputs: ["Price differences to correct", "Stale special prices", "SKUs missing from the ERP"],
   },
+  {
+    id: "web-erp-fx",
+    title: "Multi-currency store invoices vs. ERP",
+    summary: "For each store view and currency, check the ERP booked every invoice in the right currency and at the base value Magento recorded, within an FX tolerance.",
+    group: "webstore",
+    frequency: "monthly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "store_invoices",
+        label: "Webstore invoices by store and currency",
+        description: "Invoices from every store view in the period, with the order currency, the base currency total and the exchange rate the store recorded.",
+        examples: ["Magento 2 invoices with base and order currency", "Shopify Markets orders export (shop and presentment currency)"],
+        fields: [
+          ORDER_ID,
+          f("invoice_date", "Invoice date", "date", true),
+          f("store_code", "Store code", "id"),
+          f("order_currency", "Order currency", "text", true),
+          f("invoice_total_fcy", "Invoice total (FCY)", "money", true),
+          f("base_total", "Invoice total (base)", "money", true),
+          f("currency", "Base currency", "text"),
+        ],
+      },
+      {
+        key: "erp_invoices",
+        label: "ERP posted invoices in two currencies",
+        description: "Posted sales invoices for web orders with their currency, the amount in that currency and in your local currency, and the store they belong to (a dimension).",
+        examples: ["Business Central posted sales invoices with currency and dimension", "ERP sales register with FCY and LCY amounts"],
+        fields: [
+          f("erp_invoice_no", "Posted invoice no.", "id", true),
+          f("order_ref", "Store order no. (external document no.)", "id", true),
+          f("posting_date", "Posting date", "date", true),
+          f("store_dim", "Store (dimension 1)", "id"),
+          f("erp_currency", "Invoice currency", "text", true),
+          f("amount_fcy", "Amount incl. VAT (FCY)", "money"),
+          f("amount_lcy", "Amount incl. VAT (LCY)", "money", true),
+        ],
+      },
+    ],
+    links: [
+      {
+        left: "store_invoices",
+        right: "erp_invoices",
+        keys: [{ left: "order_id", right: "order_ref", normalize: ["trim", "upper", "strip_leading_zeros"] }],
+        cardinality: "many_to_many",
+        amount: { left: "base_total", right: "amount_lcy", tolerance: 1 },
+        dateWindowDays: 7,
+      },
+      {
+        left: "store_invoices",
+        right: "erp_invoices",
+        keys: [{ left: "store_code", right: "store_dim", normalize: ["trim", "upper"] }],
+        cardinality: "many_to_many",
+      },
+    ],
+    checks: [
+      { id: "fx_difference", label: "FX difference above tolerance", description: "The ERP's local-currency amount differs from the base value the store recorded by more than 1.00: a different rate, or a different amount.", rule: { kind: "compare", link: 0, direction: "either" } },
+      { id: "wrong_currency", label: "Posted in the wrong currency", description: "The ERP invoice is in another currency than the store order.", rule: { kind: "text_mismatch", link: 0, left: "order_currency", right: "erp_currency" } },
+      { id: "not_posted", label: "Not posted in the ERP", description: "A store invoice with no posted ERP invoice.", rule: { kind: "unmatched_left", link: 0 } },
+      { id: "store_missing", label: "Store missing from the ERP", description: "No ERP invoice carries this store's code in its dimension: the store isn't connected to the ERP, or its dimension isn't set.", rule: { kind: "unmatched_left", link: 1, where: { field: "store_code", pattern: "\\S" }, value: "base_total" } },
+    ],
+    outputs: ["FX differences by store and currency", "Invoices in the wrong currency", "Stores not reaching the ERP"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",
@@ -1433,31 +1545,105 @@ export const TEMPLATES: Template[] = [
     appliesTo: { channels: ["marketplace", "webstore"] },
     roles: ["finance", "receivables", "owner"],
     sources: [
-      {
-        key: "payouts",
-        label: "Expected payouts",
-        description: "Payout batches from one or more providers (marketplace, gateway, BNPL, courier).",
-        examples: ["Marketplace disbursement summary", "Gateway payouts list", "Courier remittance summary"],
-        fields: [f("payout_id", "Payout / batch ID", "id", true), f("provider", "Provider", "text", true), f("payout_date", "Payout date", "date", true), f("amount", "Payout amount", "money", true), CURRENCY],
-      },
+      providerPayouts,
       bankStatement,
     ],
-    links: [
-      {
-        left: "payouts",
-        right: "bank",
-        keys: [{ left: "payout_id", right: "reference", normalize: ["upper", "strip_non_alnum"], mode: "contains" }],
-        cardinality: "one_to_one",
-        amount: { left: "amount", right: "credit", tolerance: 1 },
-        dateWindowDays: 5,
-      },
-    ],
+    links: [payoutsToBank],
     checks: [
       { id: "not_credited", label: "Payout not credited", description: "Provider says paid, but the bank shows no credit.", rule: { kind: "unmatched_left", link: 0 } },
       { id: "unidentified_credit", label: "Unidentified bank credit", description: "Bank credit not linked to any payout.", rule: { kind: "unmatched_right", link: 0, where: { field: "credit", pattern: "[1-9]" } } },
       { id: "fx_difference", label: "FX / bank charge difference", description: "The amount differs because of currency conversion or bank charges.", rule: { kind: "compare", link: 0, direction: "either" } },
     ],
     outputs: ["Cash-in reconciliation by provider", "Unidentified credits", "FX and bank charge summary"],
+  },
+  {
+    id: "web-gift-cards",
+    title: "Gift cards and store credit roll-forward",
+    summary: "Adobe Commerce: check each gift card and store credit balance rolls forward (opening + issued − redeemed − expired = closing) against order redemptions.",
+    group: "webstore",
+    frequency: "monthly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "gift_cards",
+        label: "Gift card accounts",
+        description: "Each gift card's balance at the start and end of the period, with what was issued and expired. Gift card accounts are an Adobe Commerce feature, not part of Magento Open Source.",
+        examples: ["Adobe Commerce gift card accounts", "Gift card provider balance report"],
+        fields: balanceFields("Gift card code"),
+      },
+      {
+        key: "store_credit",
+        label: "Store credit balances",
+        description: "Each customer's store credit at the start and end of the period, with what was issued and expired. Store credit is an Adobe Commerce feature; export it from the admin.",
+        examples: ["Adobe Commerce store credit export", "Customer wallet balance report"],
+        optional: true,
+        fields: balanceFields("Customer e-mail"),
+      },
+      {
+        key: "redemptions",
+        label: "Redemptions on orders",
+        description: "Gift card and store credit amounts used on orders in the period, one row each, with the gift card code or the customer's e-mail.",
+        examples: ["Adobe Commerce orders (gift cards and store credit used)", "Order export with gift card columns"],
+        fields: [f("account", "Account", "id", true), f("type", "Type", "text", true), ORDER_ID, f("redemption_date", "Redemption date", "date", true), f("redeemed_amount", "Redeemed amount", "money", true), CURRENCY],
+      },
+    ],
+    links: [balancesToRedemptions("gift_cards"), balancesToRedemptions("store_credit")],
+    checks: [
+      ...rollForwardChecks("gc", 0, "gift card", "gift_cards", "gift"),
+      ...rollForwardChecks("sc", 1, "store credit", "store_credit", "store credit|credit"),
+    ],
+    outputs: ["Liability roll-forward per account", "Over-redeemed and negative balances", "Redemptions with no issuance"],
+  },
+  {
+    id: "web-payouts-by-method",
+    title: "Webstore sales by payment method vs. payouts and bank",
+    summary: "Total webstore sales per payment provider (card, PayPal, Apple Pay, Tabby, COD), check each paid out what you sold, and that every payout reached the bank.",
+    group: "payouts",
+    frequency: "monthly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "receivables", "owner"],
+    sources: [
+      {
+        key: "method_sales",
+        label: "Webstore sales by payment method",
+        description: "What the store sold in the period per payment provider and method, net of refunds paid back through the provider.",
+        examples: ["Magento 2 sales by payment method", "Shopify sales by payment gateway report", "WooCommerce payment gateway totals"],
+        fields: [
+          f("provider", "Payment provider", "text", true),
+          f("payment_method", "Payment method", "text"),
+          f("orders", "Orders", "number"),
+          f("expected_amount", "Expected to receive", "money", true),
+          f("period_to", "Period to", "date"),
+          CURRENCY,
+        ],
+      },
+      { ...providerPayouts, description: "Payout batches from each provider, with the fees it kept. Name each provider as in the store's sales report (e.g. Stripe, PayPal, Tabby, Cash on delivery)." },
+      bankStatement,
+    ],
+    links: [
+      {
+        left: "method_sales",
+        right: "payouts",
+        keys: [
+          { left: "provider", right: "provider", normalize: ["trim", "upper", "strip_non_alnum"] },
+          { left: "currency", right: "currency", normalize: ["trim", "upper"] },
+        ],
+        cardinality: "many_to_many",
+        amount: { left: "expected_amount", right: "amount + fees", tolerance: 1 },
+      },
+      payoutsToBank,
+    ],
+    checks: [
+      { id: "not_paid_out", label: "Sold, not yet paid out", description: "The provider paid out less (before its fees) than the store sold through it: payouts still to come, or money missing.", rule: { kind: "compare", link: 0, direction: "left_higher" } },
+      { id: "overpaid", label: "Paid out more than sold", description: "The provider paid out more than the store sold through it: orders missing from the store export, or another period's sales.", rule: { kind: "compare", link: 0, direction: "right_higher" } },
+      { id: "no_payouts", label: "No payouts from this provider", description: "The store sold through a provider that sent no payout in the period.", rule: { kind: "unmatched_left", link: 0, where: { field: "expected_amount", pattern: "[1-9]" } } },
+      { id: "unknown_provider", label: "Payouts from a provider with no sales", description: "A payout from a provider the store's report doesn't name. Check the provider's name matches.", rule: { kind: "unmatched_right", link: 0 } },
+      { id: "not_credited", label: "Payout not credited", description: "Provider says paid, but the bank shows no credit.", rule: { kind: "unmatched_left", link: 1 } },
+      { id: "credit_difference", label: "Bank credit differs from the payout", description: "The amount differs because of currency conversion or bank charges.", rule: { kind: "compare", link: 1, direction: "either" } },
+      { id: "unidentified_credit", label: "Unidentified bank credit", description: "Bank credit not linked to any payout.", rule: { kind: "unmatched_right", link: 1, where: { field: "credit", pattern: "[1-9]" } } },
+    ],
+    outputs: ["Sales vs. payouts by provider", "Payouts missing from the bank", "Unidentified credits"],
   },
 ];
 

@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PRICE_COLUMNS, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { giftCardRow, magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_CURRENCY_COLUMNS, MAGENTO_GIFT_CARD_COLUMNS, MAGENTO_REDEMPTION_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_PAYMENT_TOTAL_COLUMNS, MAGENTO_PRICE_COLUMNS, paymentProvider, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -84,8 +84,9 @@ describe("Magento reports", () => {
     const log: { method: string; url: string }[] = [];
     const t = await magento.pull(creds, "orders", october, deps({ maxPageSize: 4, log }));
     expect(t.headers).toEqual([...MAGENTO_ORDER_COLUMNS]);
-    expect(log).toHaveLength(3); // 10 orders, 4 a page
-    expect(t.rows.map((r) => r[0])).toEqual(["000000101", "000000102", "000000103", "000000104", "000000105", "000000106", "000000107", "000000108", "000000109", "000000110"]);
+    expect(log).toHaveLength(4); // 14 orders, 4 a page
+    expect(t.rows.map((r) => r[0])).toEqual(["000000101", "000000102", "000000103", "000000104", "000000105", "000000106", "000000107", "000000108", "000000109", "000000110", "000000120", "000000121", "000000122", "000000123"]);
+    expect(t.rows[10].slice(8, 9).concat(t.rows[10].slice(13))).toEqual(["SAR", "Sawwi Demo Store KSA"]);
     expect(t.rows[0]).toEqual(["000000101", "2026-10-01T08:12:44Z", "complete", "stripe_payments", "Credit Card (Stripe)", "495.00", "0.00", "0.00", "AED", "471.43", "0.00", "23.57", "495.00", "Sawwi Demo Store"]);
     expect(t.rows[1].slice(3, 8)).toEqual(["cashondelivery", "Cash On Delivery", "229.00", "0.00", "30.00"]); // 199 + 20 shipping + 10 COD fee
   });
@@ -102,7 +103,7 @@ describe("Magento reports", () => {
     const log: { method: string; url: string }[] = [];
     const t = await magento.pull(creds, "invoices", october, deps({ log }));
     expect(t.headers).toEqual([...MAGENTO_INVOICE_COLUMNS]);
-    expect(t.rows.map((r) => r[0])).toEqual(["000000101", "000000102", "000000103", "000000104", "000000106", "000000108"]); // 100's invoice is September's
+    expect(t.rows.map((r) => r[0])).toEqual(["000000101", "000000102", "000000103", "000000104", "000000106", "000000108", "000000120", "000000121", "000000122", "000000123"]); // 100's invoice is September's
     expect(t.rows[0]).toEqual(["000000101", "000000401", "2026-10-01T08:13:02Z", "khalid.nasser@example.com", "Khalid Nasser", "471.43", "0.00", "0.00", "23.57", "495.00", "AED"]);
     // One lookup for all the orders, asking only for the fields it needs.
     const lookups = log.filter((l) => l.url.includes("/orders?")).map((l) => decodeURIComponent(l.url));
@@ -160,6 +161,64 @@ describe("Magento reports", () => {
     // A period that hasn't ended yet is checked as of today.
     const today = new Date().toISOString().slice(0, 10);
     expect((await magento.pull(creds, "product_prices", { from: "2099-01-01", to: "2099-01-31" }, deps())).rows[0][8]).toBe(today);
+  });
+
+  it("totals payable orders per payment provider and method, net of online refunds (D-56)", async () => {
+    const t = await magento.pull(creds, "payment_totals", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_PAYMENT_TOTAL_COLUMNS]);
+    expect(t.rows).toEqual([
+      // 102 complete, 107 processing; 105 cancelled is left out.
+      ["Cash on delivery", "Cash On Delivery", "cashondelivery", "2.00", "659.00", "0.00", "659.00", "AED", "2026-10-01", "2026-10-31"],
+      // The Oman and KSA stores, in their own currencies (D-58).
+      ["Cash on delivery", "Cash On Delivery", "cashondelivery", "1.00", "52.40", "0.00", "52.40", "OMR", "2026-10-01", "2026-10-31"],
+      ["Cash on delivery", "Cash On Delivery", "cashondelivery", "3.00", "3573.50", "0.00", "3573.50", "SAR", "2026-10-01", "2026-10-31"],
+      // 101, 103 (refunded 305), 106 (refunded 199), 108 (15.00 refunded offline as store credit); 110 is pending.
+      ["Stripe", "Credit Card (Stripe)", "stripe_payments", "4.00", "1529.00", "504.00", "1025.00", "AED", "2026-10-01", "2026-10-31"],
+      ["Tabby", "Tabby: Pay in 4", "tabby_installments", "2.00", "1324.00", "0.00", "1324.00", "AED", "2026-10-01", "2026-10-31"],
+    ]);
+    expect(paymentProvider("stripe_payments", "Apple Pay (Stripe)")).toBe("Stripe");
+    expect(paymentProvider("paypal_express", "PayPal Express Checkout")).toBe("PayPal");
+    expect(paymentProvider("braintree_paypal", "PayPal (Braintree)")).toBe("PayPal");
+    expect(paymentProvider("checkoutcom_apple_pay", "Apple Pay")).toBe("Checkout.com");
+    expect(paymentProvider("tamara_pay_by_instalments", "Tamara")).toBe("Tamara");
+    expect(paymentProvider("my_local_gateway", "Network International")).toBe("Network International");
+  });
+
+  it("rolls gift card balances forward from their history, Adobe Commerce only (D-57)", async () => {
+    const t = await magento.pull(creds, "gift_card_balances", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_GIFT_CARD_COLUMNS]);
+    expect(t.rows.map((r) => r.slice(0, 8).join("|"))).toEqual([
+      "GC-AAA1|Active|2026-08-01|2027-12-31|500.00|0.00|0.00|380.00",
+      "GC-BBB2|Active|2026-10-03|2027-12-31|0.00|200.00|0.00|-50.00",
+      "GC-CCC3|Active|2026-06-01|2027-12-31|300.00|0.00|100.00|250.00",
+    ]); // GC-DDD4 was created in November
+    await expect(magento.pull(creds, "gift_card_balances", october, deps({ openSource: true }))).rejects.toThrow(/Adobe Commerce feature/);
+    expect(() => giftCardRow({ code: "GC-X", balance: 10 }, october)).toThrow(/doesn't return balance history/);
+  });
+
+  it("lists gift card and store credit redemptions on orders (D-57)", async () => {
+    const t = await magento.pull(creds, "gift_card_redemptions", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_REDEMPTION_COLUMNS]);
+    expect(t.rows.map((r) => `${r[0]} ${r[1]} ${r[2]} ${r[4]}`)).toEqual([
+      "GC-AAA1 Gift card 000000101 120.00",
+      "khalid.nasser@example.com Store credit 000000101 30.00",
+      "GC-BBB2 Gift card 000000104 250.00",
+      "mariam.fares@example.com Store credit 000000106 60.00",
+      "GC-ZZZ9 Gift card 000000108 40.00",
+    ]);
+  });
+
+  it("gives each invoice's store view, currencies and the rate Magento recorded (D-58)", async () => {
+    const t = await magento.pull(creds, "invoice_currencies", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_INVOICE_CURRENCY_COLUMNS]);
+    expect(t.rows.filter((r) => ["000000101", "000000120", "000000123"].includes(r[0])).map((r) => [r[0], ...r.slice(3)])).toEqual([
+      ["000000101", "uae_en", "Sawwi Demo Store", "AED", "495.00", "AED", "495.00", "1.00", "495.00"],
+      ["000000120", "ksa_ar", "Sawwi Demo Store KSA", "SAR", "1021.00", "AED", "1000.00", "1.021", "1000.00"],
+      ["000000123", "omn_en", "Sawwi Demo Store Oman", "OMR", "52.40", "AED", "500.00", "0.1048", "500.00"],
+    ]);
+    // Without Stores → Settings the store ID stands in for the code.
+    const noViews = await magento.pull(creds, "invoice_currencies", october, deps({ deny: ["Magento_Backend::store"] }));
+    expect(noViews.rows.find((r) => r[0] === "000000120")![3]).toBe("2");
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {
