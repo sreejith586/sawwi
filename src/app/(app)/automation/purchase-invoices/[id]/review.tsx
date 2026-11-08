@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
-import { approveAction, discardAction, erpDuplicatesAction, pushAction, saveDraftAction, unapproveAction } from "@/app/actions/automation";
+import { approveAction, discardAction, erpDuplicatesAction, pushAction, rereadWithAiAction, saveDraftAction, unapproveAction } from "@/app/actions/automation";
 import { reviewDraft, type Draft, type DraftLine } from "@/lib/automation/purchase-invoices/draft";
 
 // One invoice: the supplier's PDF (text or scan) next to everything Sawwi read from it, editable,
@@ -18,7 +18,15 @@ type View = {
   draft: Draft;
   hash: string;
   duplicates: { id: string; invoiceNumber: string; fileName: string; exact: boolean }[];
-  source: { method: string; pages: number; layout?: string; ocr?: { pages: number; confidence: number }; checks: { label: string; ok: boolean; detail: string }[]; sample?: boolean };
+  source: {
+    method: string;
+    pages: number;
+    layout?: string;
+    ocr?: { pages: number; confidence: number };
+    checks: { label: string; ok: boolean; detail: string }[];
+    sample?: boolean;
+    ai?: { model: string; used: "ai" | "rules"; reasons: string[] };
+  };
   erp: { company: string; number: string; erpTotal: number | null; pushedAt: string } | null;
   approvedAt: string | null;
   serverBlockers: string[];
@@ -58,7 +66,7 @@ function NumberInput(props: { value: number | null; onChange: (n: number | null)
   );
 }
 
-export function Review({ view, target, master, canEdit }: { view: View; target: { connectionId: string; label: string } | null; master: Master | null; canEdit: boolean }) {
+export function Review({ view, target, master, canEdit, aiAvailable }: { view: View; target: { connectionId: string; label: string } | null; master: Master | null; canEdit: boolean; aiAvailable: boolean }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(view.draft);
   const [dirty, setDirty] = useState(false);
@@ -146,6 +154,17 @@ export function Review({ view, target, master, canEdit }: { view: View; target: 
       router.refresh();
     });
 
+  const onReread = () =>
+    start(async () => {
+      if (dirty && !confirm("Reading again with AI replaces your unsaved changes. Continue?")) return;
+      setError(null);
+      setNotice({ title: "Reading the invoice with AI…", results: [] });
+      const res = await rereadWithAiAction(view.id);
+      setNotice(null);
+      if (res.error) return setError(res.error);
+      router.refresh();
+    });
+
   const onDelete = () =>
     start(async () => {
       if (!confirm(`Delete the draft for ${draft.invoiceNumber || view.fileName}? The PDF is deleted too.`)) return;
@@ -164,7 +183,8 @@ export function Review({ view, target, master, canEdit }: { view: View; target: 
         {dirty && <span className="text-xs text-warn">Unsaved changes</span>}
       </div>
       <p className="mt-1 text-sm text-muted">
-        {draft.supplierName || "Unknown supplier"} · read from {METHOD[view.source.method] ?? view.source.method}
+        {draft.supplierName || "Unknown supplier"} · read from{" "}
+        {view.source.ai?.used === "ai" ? "the PDF by AI (the text reader fell short)" : (METHOD[view.source.method] ?? view.source.method)}
         {view.source.ocr ? ` (${view.source.ocr.confidence}% confidence: check the figures against the scan)` : ""}
         {view.source.layout === "remembered" ? " · this supplier's layout was remembered" : view.source.layout === "learned" ? " · layout learned for next time" : ""}
       </p>
@@ -443,6 +463,11 @@ export function Review({ view, target, master, canEdit }: { view: View; target: 
               Download CSV
             </a>
             {view.approvedAt && view.status === "approved" && <span className="text-xs text-muted">Approved {new Date(view.approvedAt).toLocaleString()}</span>}
+            {canEdit && aiAvailable && view.status !== "pushed" && view.status !== "pushing" && (
+              <button type="button" className={buttonClass("secondary")} onClick={onReread} disabled={busy} title="Claude reads the PDF again; you review the result before approving.">
+                Read again with AI
+              </button>
+            )}
             {canEdit && view.status !== "pushed" && view.status !== "pushing" && (
               <button type="button" className="ml-auto text-sm text-muted hover:text-danger" onClick={onDelete} disabled={busy}>
                 Delete draft

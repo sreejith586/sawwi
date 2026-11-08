@@ -212,9 +212,10 @@ export async function setRunCheck(runId: string, checkKey: string, value: unknow
        ON CONFLICT (run_id, check_key) DO UPDATE SET value_json = excluded.value_json`, runId, checkKey, JSON.stringify(value)));
 }
 
-export async function logUsage(runId: string | null, purpose: string, usage: LlmUsage) {
-  (await getDb().run(`INSERT INTO llm_usage (run_id, purpose, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, runId, purpose, usage.model, usage.inputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.outputTokens, now()));
+/** One LLM call. Calls outside a run (e.g. invoice capture, D-69) name their workspace instead. */
+export async function logUsage(runId: string | null, purpose: string, usage: LlmUsage, orgKey: string | null = null) {
+  (await getDb().run(`INSERT INTO llm_usage (run_id, org_key, purpose, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, runId, orgKey, purpose, usage.model, usage.inputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.outputTokens, now()));
 }
 
 export type UsageSummary = { calls: number; inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number };
@@ -283,25 +284,25 @@ export type UsageRecord = {
 
 /**
  * Every logged LLM call, oldest first, for one workspace (orgKey) or all of them (null,
- * superadmin only). A call belongs to the workspace of its run. Only the all-workspaces
+ * superadmin only). A call belongs to the workspace of its run, or the one it names (D-69). Only the all-workspaces
  * query joins `orgs` (created by the SaaS store), for the workspace name.
  */
 export async function listUsageRecords(orgKey: string | null, since?: string): Promise<UsageRecord[]> {
   const where: string[] = [];
   const args: string[] = [];
   if (orgKey !== null) {
-    where.push("r.org_key = ?");
+    where.push("COALESCE(r.org_key, u.org_key) = ?");
     args.push(orgKey);
   }
   if (since) {
     where.push("u.created_at >= ?");
     args.push(since);
   }
-  const rows = (await getDb().all(`SELECT u.run_id, r.org_key, ${orgKey !== null ? "NULL" : "o.name"} AS org_name, r.template_id, r.created_at AS run_started_at,
+  const rows = (await getDb().all(`SELECT u.run_id, COALESCE(r.org_key, u.org_key) AS org_key, ${orgKey !== null ? "NULL" : "o.name"} AS org_name, r.template_id, r.created_at AS run_started_at,
               u.purpose, u.model, u.input_tokens, u.cache_read_tokens, u.cache_write_tokens, u.output_tokens, u.created_at
        FROM llm_usage u
-       ${orgKey !== null ? "JOIN" : "LEFT JOIN"} runs r ON r.id = u.run_id
-       ${orgKey !== null ? "" : "LEFT JOIN orgs o ON o.key = r.org_key"}
+       LEFT JOIN runs r ON r.id = u.run_id
+       ${orgKey !== null ? "" : "LEFT JOIN orgs o ON o.key = COALESCE(r.org_key, u.org_key)"}
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY u.created_at, u.id`, ...args)) as Row[];
   const str = (v: string | number | null) => (v === null ? null : String(v));

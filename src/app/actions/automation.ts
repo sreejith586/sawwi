@@ -118,6 +118,19 @@ export async function erpDuplicatesAction(id: string): Promise<{ refs?: { number
   }
 }
 
+/** "Read again with AI" (D-69): new work, so it goes through runBlocker() like a capture. */
+export async function rereadWithAiAction(id: string): Promise<Partial<Fail>> {
+  const who = await editor();
+  if ("error" in who) return who;
+  try {
+    await service.rereadWithAi(who.orgKey, id, { countries: (await getProfile())?.countries });
+    refresh();
+    return {};
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
 export async function discardAction(id: string): Promise<Partial<Fail>> {
   const session = await getCurrentSession();
   if (!session || !canRun(session.access)) return { error: "Viewers can't delete invoices." };
