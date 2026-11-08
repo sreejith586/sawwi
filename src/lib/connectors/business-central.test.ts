@@ -121,7 +121,7 @@ describe("Business Central reports", () => {
       web_sales_invoices: 1, // SI-3106 carries the customer's reference in External Document No.
       web_sales_credit_memos: 1, // SCM-501 carries the RMA number
       web_sales_invoices_fx: 1,
-      items: 0, // the trading company's items aren't in the mock
+      items: 4, // the trading company's items, for purchase invoice matching (D-62)
       sales_order_lines: 5,
       sales_shipment_lines: 6,
       purchase_order_lines: 4,

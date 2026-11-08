@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { CalendarIcon, CloseIcon, HomeIcon, PanelIcon, PlusIcon, RunsIcon, TemplatesIcon } from "@/components/icons";
+import { AutomationIcon, CalendarIcon, CloseIcon, HomeIcon, PanelIcon, PlusIcon, RunsIcon, TemplatesIcon } from "@/components/icons";
 import { toggleSidebar } from "@/lib/sidebar";
 import { LogoLockup } from "@/components/brand/logo";
 
@@ -16,12 +16,22 @@ export function setNavOpen(open: boolean) {
   else delete document.documentElement.dataset.navOpen;
 }
 
-const NAV = [
-  { href: "/home", label: "Home", icon: HomeIcon },
-  { href: "/runs", label: "Reconciliations", icon: RunsIcon },
-  { href: "/templates", label: "Templates", icon: TemplatesIcon },
-  { href: "/schedules", label: "Schedules", icon: CalendarIcon },
-] as const;
+type NavItem = { href: string; label: string; icon: (p: { className?: string }) => ReactNode };
+
+// Reconcile and Automate are peers (D-60): each has its own group.
+const GROUPS: { heading: string; items: NavItem[] }[] = [
+  { heading: "Workspace", items: [{ href: "/home", label: "Home", icon: HomeIcon }] },
+  {
+    heading: "Reconcile",
+    items: [
+      { href: "/runs", label: "Reconciliations", icon: RunsIcon },
+      { href: "/templates", label: "Templates", icon: TemplatesIcon },
+      { href: "/schedules", label: "Schedules", icon: CalendarIcon },
+    ],
+  },
+  { heading: "Automate", items: [{ href: "/automation", label: "Automation", icon: AutomationIcon }] },
+];
+const NAV = GROUPS.flatMap((g) => g.items);
 
 /** Tooltip shown next to an icon while the sidebar is collapsed (the label itself is sr-only then). */
 function RailTip({ children }: { children: ReactNode }) {
@@ -41,24 +51,31 @@ const itemClass =
 /** Plain markup, so it can render as the Suspense fallback before the pathname is known. */
 export function NavItems({ active }: { active?: string | null }) {
   return (
-    <ul className="space-y-0.5">
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const on = active === href;
-        return (
-          <li key={href}>
-            <Link
-              href={href}
-              aria-current={on ? "page" : undefined}
-              className={`${itemClass} ${on ? "bg-brand-soft font-medium text-foreground [&>svg]:text-brand" : "text-muted hover:bg-surface-muted/60 hover:text-foreground"}`}
-            >
-              <Icon />
-              <span className="truncate collapsed:sr-only">{label}</span>
-              <RailTip>{label}</RailTip>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="space-y-4">
+      {GROUPS.map((group) => (
+        <div key={group.heading}>
+          <p className="mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-wide text-muted collapsed:sr-only">{group.heading}</p>
+          <ul className="space-y-0.5">
+            {group.items.map(({ href, label, icon: Icon }) => {
+              const on = active === href;
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    aria-current={on ? "page" : undefined}
+                    className={`${itemClass} ${on ? "bg-brand-soft font-medium text-foreground [&>svg]:text-brand" : "text-muted hover:bg-surface-muted/60 hover:text-foreground"}`}
+                  >
+                    <Icon />
+                    <span className="truncate collapsed:sr-only">{label}</span>
+                    <RailTip>{label}</RailTip>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -128,7 +145,6 @@ export function Sidebar({ nav, footer }: { nav: ReactNode; footer: ReactNode }) 
         </div>
 
         <nav className="mt-5 px-3 collapsed:px-2.5" aria-label="Sections">
-          <p className="mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-wide text-muted collapsed:sr-only">Workspace</p>
           {nav}
         </nav>
 

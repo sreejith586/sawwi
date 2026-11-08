@@ -1,5 +1,5 @@
 import { num, str } from "./format";
-import { ConnectorError, type Connector, type ConnectorDeps, type PullWindow } from "./types";
+import { ConnectorError, type Connector, type ConnectorDeps, type ErpDocumentRef, type ErpMasterData, type ErpPurchaseInvoice, type PullWindow, type PurchaseInvoiceWriter } from "./types";
 
 // Microsoft Dynamics 365 Business Central (online), standard API v2.0 (D-29).
 //
@@ -383,10 +383,111 @@ async function exchangeRates(s: Session, companyId: string): Promise<Rate[]> {
   return out;
 }
 
+// ─── Writes: draft purchase invoices (D-64) ──────────────────────────────────
+//
+// The only write. Sawwi creates an unposted purchase invoice and its lines, reads it back for
+// BC's own total, and deletes it again (by id, only that one) if a line fails. It never posts,
+// releases, or changes any other document. URLs are built on the fixed API host only, and live
+// requests go through liveDeps (assertPublicUrl, no redirects).
+
+const WRITE_FORBIDDEN =
+  "Business Central didn't let the app create a purchase invoice. In Business Central, give the app (on “Microsoft Entra Applications”) a permission set that can create purchase documents, such as D365 PURCH DOC, EDIT, next to D365 READ.";
+
+async function sendJson(s: Session, method: "POST" | "DELETE", url: string, body?: unknown): Promise<Doc> {
+  if (!url.startsWith(`${BC_API_HOST}/`)) throw new ConnectorError("Refused to write outside Business Central's API host.");
+  const headers: Record<string, string> = { Authorization: `Bearer ${s.token}`, Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (method === "DELETE") headers["If-Match"] = "*";
+  for (let attempt = 1; ; attempt++) {
+    const res = await s.deps.fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    if (res.status === 401) throw new ConnectorError("Business Central rejected the app. Check it's enabled on “Microsoft Entra Applications”.");
+    if (res.status === 403) throw new ConnectorError(WRITE_FORBIDDEN);
+    // Only "too many requests" is retried: it wasn't processed. A 5xx on a POST may have been, so it isn't.
+    if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+      const after = Number(res.headers.get("Retry-After"));
+      await s.deps.sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * attempt);
+      continue;
+    }
+    const json = (await res.json().catch(() => ({}))) as Doc & { error?: { message?: string } };
+    if (!res.ok) throw new ConnectorError(`Business Central: ${json.error?.message ?? `HTTP ${res.status}`}`);
+    return json;
+  }
+}
+
+/** An OData string literal: single quotes doubled. */
+const odataString = (v: string) => `'${v.replace(/'/g, "''")}'`;
+
+async function companyContext(s: Session) {
+  const c = await company(s);
+  const info = await getJson(s, `${apiRoot(s.creds)}/companies(${c.id})/companyInformation`);
+  return { c, root: `${apiRoot(s.creds)}/companies(${c.id})`, lcy: str(info.value?.[0]?.currencyCode), name: c.displayName || c.name };
+}
+
+async function collect(s: Session, url: string): Promise<Doc[]> {
+  const out: Doc[] = [];
+  for await (const page of allPages(s, url)) {
+    out.push(...page);
+    if (out.length > MAX_ROWS) throw new ConnectorError("More than 200,000 records; Sawwi stopped reading.");
+  }
+  return out;
+}
+
+export const bcPurchaseInvoices: PurchaseInvoiceWriter<BusinessCentralCredentials> = {
+  async masterData(creds, deps): Promise<ErpMasterData> {
+    const s = await openSession(creds, deps);
+    const { root, lcy, name } = await companyContext(s);
+    const open = (d: Doc) => !d.blocked || d.blocked === " " || d.blocked === "_x0020_";
+    const [vendors, items, accounts] = await Promise.all([collect(s, `${root}/vendors`), collect(s, `${root}/items`), collect(s, `${root}/accounts`)]);
+    return {
+      company: name,
+      lcy,
+      vendors: vendors.filter(open).map((v) => ({ number: str(v.number), name: str(v.displayName), trn: str(v.taxRegistrationNumber), currency: str(v.currencyCode) })),
+      items: items.filter(open).map((i) => ({ number: str(i.number), name: str(i.displayName), gtin: str(i.gtin) })),
+      accounts: accounts
+        .filter((a) => open(a) && a.directPosting !== false && (a.accountType ?? "Posting") === "Posting")
+        .map((a) => ({ number: str(a.number), name: str(a.displayName) })),
+    };
+  },
+
+  async findExisting(creds, vendorNumber, vendorInvoiceNumber, deps): Promise<ErpDocumentRef[]> {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    const filter = `vendorNumber eq ${odataString(vendorNumber)} and vendorInvoiceNumber eq ${odataString(vendorInvoiceNumber)}`;
+    const docs = await collect(s, `${root}/purchaseInvoices?$filter=${encodeURIComponent(filter)}`);
+    return docs.map((d) => ({ id: str(d.id), number: str(d.number), status: str(d.status) }));
+  },
+
+  async createDraft(creds, inv: ErpPurchaseInvoice, deps) {
+    const s = await openSession(creds, deps);
+    const { root, lcy, name } = await companyContext(s);
+    const header: Doc = { vendorNumber: inv.vendorNumber, vendorInvoiceNumber: inv.vendorInvoiceNumber, invoiceDate: inv.invoiceDate };
+    if (inv.dueDate) header.dueDate = inv.dueDate;
+    if (inv.currency && inv.currency !== lcy) header.currencyCode = inv.currency;
+    const created = await sendJson(s, "POST", `${root}/purchaseInvoices`, header);
+    const id = str(created.id);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ConnectorError("Business Central didn't return the new invoice's id.");
+    const doc = `${root}/purchaseInvoices(${id})`;
+    try {
+      for (const l of inv.lines) {
+        const line: Doc = { lineType: l.type === "item" ? "Item" : "Account", lineObjectNumber: l.number, quantity: l.quantity, directUnitCost: l.directUnitCost };
+        // Item lines keep Business Central's item description; account lines need the supplier's text.
+        if (l.type === "account" && l.description) line.description = l.description.slice(0, 100);
+        await sendJson(s, "POST", `${doc}/purchaseInvoiceLines`, line);
+      }
+    } catch (error) {
+      await sendJson(s, "DELETE", doc).catch(() => undefined);
+      throw error;
+    }
+    const back = (await getJson(s, doc)) as Doc;
+    const total = Number(back.totalAmountIncludingTax);
+    return { id, number: str(back.number ?? created.number), status: str(back.status ?? "Draft"), company: name, totalIncludingTax: Number.isFinite(total) ? total : null };
+  },
+};
+
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
-  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents and items, read-only, for the B2B, purchasing and web store reconciliations.",
+  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents and items for the B2B, purchasing and web store reconciliations, and draft purchase invoices from Automation.",
   fields: [
     { key: "tenantId", label: "Tenant ID or domain", secret: false, placeholder: "contoso.onmicrosoft.com or 00000000-0000-…", help: "Microsoft Entra admin center → Overview → Tenant ID." },
     { key: "environment", label: "Environment", secret: false, placeholder: "Production", help: "As shown in the Business Central admin center, e.g. Production or Sandbox." },
@@ -432,4 +533,6 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
     }
     return { headers: [...spec.columns], rows };
   },
+
+  purchaseInvoices: bcPurchaseInvoices,
 };

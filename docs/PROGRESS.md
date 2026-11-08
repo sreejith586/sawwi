@@ -16,6 +16,7 @@ _Updated in every commit. Newest first within each section._
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
+| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In review: plan, decisions (D-60–D-67) and the purchase invoice flow end to end against the mock Business Central, in `feature/automation-purchase-invoices` (#40) |
 
 ## In flight
 
@@ -23,11 +24,49 @@ _Updated in every commit. Newest first within each section._
 | --- | --- | --- | --- |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
+| Phase 9 Automation: purchase invoice capture (D-60–D-67) | `feature/automation-purchase-invoices` | #40 | Automation session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
 
+- **Phase 9: Automation, starting with purchase invoices** (D-60–D-67, `feature/automation-purchase-invoices`).
+  - **Automation section** next to Reconciliation. The sidebar is grouped into Workspace, Reconcile and Automate. `/automation` shows purchase invoices, plus eight more use cases ranked by value and marked "Coming soon":
+    1. marketplace settlements → journals;
+    2. COD remittances;
+    3. gateway and BNPL payouts;
+    4. supplier credit notes;
+    5. ad and SaaS bills with reverse-charge VAT;
+    6. supplier statements → payment proposals;
+    7. landed cost;
+    8. vendors from TRN certificates.
+  - **Purchase invoices:** upload PDFs (text, scans, ZATCA e-invoices; no AI). Each becomes a draft with supplier, TRN, invoice number and date, due date, currency, lines and totals.
+  - **Review queue** (D-66, asked for by the user): every draft's extracted data, checks and blockers in one table. Rows expand to their lines. Single and bulk approve, CSV and push.
+  - **Single invoice page:** the PDF (scan or text) beside an editable form, with checks live.
+  - **Phone camera** (D-67, asked for by the user): "Take a photo", then "Add another page" for each next page (or Gallery), with rotate, reorder and remove per page, as in Daftar. The pages become one PDF in the browser, read by local OCR like a scan.
+  - **Out:** approved drafts download as CSV (D-65) or push to Business Central as unposted purchase invoices, behind a confirmation that names each invoice (D-64).
+  - **Matching** (D-62): vendor by memory, TRN or exact name; item by memory, SKU, GTIN or exact name. A supplier's item codes, vendor and payment terms are remembered from pushed or exported drafts (D-61).
+  - **Duplicates** (D-63): the same file opens its draft; the same supplier and number is flagged; an invoice already in BC is refused at push and shown when opened.
+  - **Connectors gain writes:** `Connector.purchaseInvoices` (Business Central only). BC's own total is read back. A half-made draft is deleted if a line fails. `liveDeps` and the fixed host apply.
+  - **Mock BC:** accepts draft writes and has vendors, items and accounts for the trading company.
+  - **Demo:** four sample invoices:
+    - one matched by TRN and SKU that needs a G/L account for delivery;
+    - one with supplier item codes, matched by name and learned;
+    - GLS-2307, already in BC as PI-9003;
+    - an OCR'd scan.
+  - Migration 5. 21 new tests; 2 updated (migration list, the trading company now has items).
+  - **Checked in the browser** (localhost):
+    - demo: loaded 3 samples; coded the delivery line; save and approve; pushed CAS-55188 → draft PI-1004 in the mock BC;
+    - bulk-selected 2 and approved the 1 that could be;
+    - bulk push of GLS-2307 refused as PI-9003;
+    - CSV and PDF downloads;
+    - a normal workspace: uploaded a PDF through the file input; with no ERP it is "Ready to approve";
+    - phone camera flow: two page photos (page 2 sideways, rotated in the page list) → one PDF → read by OCR as DOS-7781, AED 3,297.00, totals checked, "Ready to approve"; the page list clears after a read and stays if the read fails (fixed during the check);
+    - phone width shows no sideways scroll; no console or server errors.
+    - A fieldset overflow at narrow desktop widths was found and fixed.
+  - **Waits for the user:**
+    - a live push to a BC sandbox: the Entra app needs a purchase-document permission set, e.g. D365 PURCH DOC, EDIT;
+    - product choices in the open questions below.
 - **Vercel previews failing; preview databases now deleted when a PR closes** (D-59, `ci/neon-preview-cleanup`).
   - Every preview of a new git branch since 7 Nov failed within a second with `Resource provisioning failed`. The Neon integration's 10-branch Free plan was full of databases from previews of merged PRs. The user deleted them on 8 Nov.
   - New workflow `.github/workflows/neon-preview-cleanup.yml` deletes `preview/<branch>` in Neon when its PR closes.

@@ -51,6 +51,40 @@ export type Connector<C extends Record<string, string> = Record<string, string>>
   /** A short label for the account, e.g. the shop name, from a cheap read-only call. */
   test(credentials: C, deps: ConnectorDeps): Promise<{ accountLabel: string }>;
   pull(credentials: C, report: string, window: PullWindow, deps: ConnectorDeps): Promise<ParsedTable>;
+  /** Writing draft purchase invoices (D-64). Only connectors that can are push targets. */
+  purchaseInvoices?: PurchaseInvoiceWriter<C>;
+};
+
+// ─── Writes (D-64) ───────────────────────────────────────────────────────────
+
+export type ErpMasterData = {
+  company: string;
+  /** The company's local currency; documents in it carry no currency code. */
+  lcy: string;
+  vendors: { number: string; name: string; trn: string; currency: string }[];
+  items: { number: string; name: string; gtin: string }[];
+  /** G/L accounts that allow direct posting. */
+  accounts: { number: string; name: string }[];
+};
+
+export type ErpPurchaseInvoice = {
+  vendorNumber: string;
+  vendorInvoiceNumber: string;
+  invoiceDate: string;
+  /** "" lets the ERP apply the vendor's payment terms. */
+  dueDate: string;
+  currency: string;
+  lines: { type: "item" | "account"; number: string; description: string; quantity: number; directUnitCost: number }[];
+};
+
+export type ErpDocumentRef = { id: string; number: string; status: string };
+
+export type PurchaseInvoiceWriter<C> = {
+  masterData(credentials: C, deps: ConnectorDeps): Promise<ErpMasterData>;
+  /** Purchase invoices of this vendor with this vendor invoice number, posted or not (D-63). */
+  findExisting(credentials: C, vendorNumber: string, vendorInvoiceNumber: string, deps: ConnectorDeps): Promise<ErpDocumentRef[]>;
+  /** Creates an unposted purchase invoice; never posts. Returns it with the ERP's total incl. VAT. */
+  createDraft(credentials: C, invoice: ErpPurchaseInvoice, deps: ConnectorDeps): Promise<ErpDocumentRef & { company: string; totalIncludingTax: number | null }>;
 };
 
 /** A problem the user can act on (bad token, wrong shop, missing scope). */

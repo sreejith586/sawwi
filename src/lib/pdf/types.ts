@@ -77,6 +77,8 @@ export type InvoiceDoc = {
   type: "Invoice" | "Credit note" | "Debit note";
   number?: string;
   date?: string;
+  /** Payment due date, when printed ("Due date", "Payment due"). */
+  dueDate?: string;
   seller?: string;
   sellerVat?: string;
   buyer?: string;
