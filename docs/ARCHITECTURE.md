@@ -360,7 +360,7 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
-## 10. Automation (Phase 9, D-60–D-73)
+## 10. Automation (Phase 9, D-60–D-77)
 
 Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
 
@@ -400,3 +400,23 @@ Reconciliation checks work after it's done; Automation does the work: a document
    - Accounts and journal batches are cached an hour per connection (`erp_master_data`, key `<connection>#journals`).
 5. **Tables** (migration 7): `settlement_journals` (unique per workspace, marketplace and settlement ID) and `settlement_settings` (accounts, classifications, VAT split, batch, target).
 6. **Demo:** pushes go to the mock store company (`demo:business-central-store`). It has a chart of accounts, a DEFAULT batch and a posted S-2026-10-A. Samples are in `samples.ts`.
+
+**COD remittances** (`src/lib/automation/cod/`, `/automation/cod`, D-74–D-77):
+
+1. **Read** (`parse.ts`): any courier report through `parseUploads`. Columns are found by name: AWB, order reference, collected, fee, VAT, net, batch, date, currency, courier. Totals rows are skipped, parcels are grouped by batch, and VAT on the fee is inferred from the net when it's a standard rate (D-76). The courier is guessed from a column, the file name or the batch ID.
+2. **Match** (`match.ts`): the order reference against the ERP's posted invoices: External Document No., then number, then order number.
+   - Open invoices come from `openInvoices`, and unmatched references from `lookupInvoices` (paid or none).
+   - AWBs and applied invoices in the workspace's other batches are flagged as duplicates.
+   - Only an open, non-duplicate match gets the "apply" action automatically.
+   - "Match invoices again" (`rematch`) keeps a user's decision where the parcel's invoice is unchanged.
+3. **Review** (`remittance.ts`, browser-safe):
+   - one customer payment per parcel not left out: negative amount, applied to its invoice or on account (the invoice's customer, or the default COD customer);
+   - general journal lines: bank +net, fees +fee, input VAT +VAT, clearing −collected for every parcel. Cash left out stays in clearing;
+   - checks: per-parcel arithmetic and the batch total; flags for short, over, no invoice, paid and duplicate;
+   - CSV with both kinds of row.
+4. **Push** (`service.ts`): approval and hash as for the other use cases. The hash covers the draft, accounts, default customer, both batches and the target.
+   - `Connector.customerPayments` (`bcCustomerPayments`) writes `customerPaymentJournals({id})/customerPayments` first, then `Connector.journals` writes the general journal lines.
+   - A failure in the second step deletes the payments the first step created.
+   - Duplicates are checked in the payment batch, in the general batch's unposted lines and in posted G/L entries, by document number = batch ID.
+5. **Tables** (migration 8): `cod_remittances` (unique per workspace, courier and batch) and `cod_settings`. The ERP cache key is `<connection>#cod`.
+6. **Demo:** the store company's November COD invoices, customers, CODRCPT batch and bank, clearing and fee accounts. Samples are in `samples.ts`.

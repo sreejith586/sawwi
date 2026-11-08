@@ -16,7 +16,7 @@ _Updated in every commit. Newest first within each section._
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
-| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40). In review: AI-assisted reading (D-68, D-69, #41). In review: marketplace settlements → journal entries (D-70–D-73) |
+| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40). In review: AI-assisted reading (D-68, D-69, #41). In review: marketplace settlements → journal entries (D-70–D-73, #42); COD remittances → customer payments (D-74–D-77) |
 
 ## In flight
 
@@ -32,10 +32,37 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Recent changes
 
-- **Plan: COD remittances → customer payments applied to invoices** (D-74–D-77, `feature/automation-cod-remittances`, based on #42).
-  - A courier remittance report in. Each parcel is matched to its posted sales invoice by order reference, and its cash is applied (or put on account, or left out).
-  - The money side is a general journal: bank, COD fees and VAT on fees against courier clearing.
-  - Push goes to Business Central's customer payment batch and general journal batch, unposted.
+- **COD remittances → customer payments applied to invoices** (D-74–D-77, `feature/automation-cod-remittances`, based on #42). The third Automation use case, now live on `/automation`.
+  - **Reading:** courier remittance reports (Aramex, SMSA, J&T, Quiqup, iMile, Naqel or any other; CSV, Excel or PDF). Columns are found by name, and totals rows are left out.
+    - VAT on the fee is worked out from the net when the report has none (D-76).
+    - A missing currency is the company's own.
+    - One draft per batch.
+  - **Matching:** each parcel's order reference is matched to a posted sales invoice: External Document No., then invoice number, then order number.
+    - Open invoices are read once per batch; the rest are looked up to tell "already paid" from "no invoice".
+    - Flags: short or over collected, no invoice, already paid, an AWB or invoice already in another batch.
+    - Sawwi applies only the clear cases. Every other parcel needs a decision: apply, on account (default COD customer) or leave out.
+  - **Out:**
+    - one customer payment per parcel, applied to its invoice;
+    - one general journal for the money side: Dr bank (net), Dr COD fees, Dr input VAT, Cr courier clearing (collected). The payment batch's balancing account should also be courier clearing;
+    - cash left out stays in clearing, and the screen says so;
+    - CSV with both.
+  - **Review:** same queue as before, with single and bulk approve (hash-bound), push, and "Match invoices again" (keeps decisions where nothing changed).
+  - **Business Central (D-75):** new capability `customerPayments`: open invoices, invoice lookup, customers, payment batches, duplicate check, and unposted `customerPayments` with `appliesToInvoiceNumber`.
+    - Payments go first, then the journal lines; if the journal fails, the payments are deleted.
+    - Payment sign (negative = received) and `appliesToInvoiceNumber` on create are to be confirmed on a sandbox.
+  - **Mock BC:** the store company gains November COD invoices PSI-W1031–W1036 (W1035 paid), customers WEB and COD-UNAPPLIED, payment batch CODRCPT, bank 1020, clearing 1170 and COD fees 6150. It checks an applied invoice is open and belongs to the customer.
+  - **Demo samples (D-77):** an Aramex batch (paid in full, 10.00 short, never invoiced, already paid) and an SMSA batch (another layout, a repeated parcel).
+  - Migration 8. 9 new tests.
+  - **Checked in the browser** (demo, localhost):
+    - both samples loaded and matched: Aramex had 3 flagged and 2 to decide; SMSA's repeated parcel was caught;
+    - accounts and default customer set once;
+    - decided on-account and leave-out, then save and approve;
+    - pushed: 5 customer payments in CODRCPT and 4 journal lines in DEFAULT, unposted; journal AED 1,798.00 each side;
+    - CSV (5 payments + 4 lines); phone width has no sideways scroll; no server errors.
+    - Fixed during the check: a report with no currency column now takes the company's currency.
+  - **Waits for the user:**
+    - a live push to a BC sandbox (permission set D365 CASH RECEIPT or D365 JOURNALS, EDIT), to confirm the payment sign and invoice application;
+    - a real Aramex, SMSA or J&T remittance export.
 
 - **Marketplace settlements → journal entries** (D-70–D-73, `feature/automation-marketplace-settlements`, based on #41). The second Automation use case, now live on `/automation`.
   - **Reading:** settlement reports in Amazon's long flat file layout (V2: a summary row, then one row per amount with type and description) or a wide layout (a column per fee: Noon, generic marketplaces), as CSV, TSV, Excel or PDF. A file with several settlements gives one journal each.

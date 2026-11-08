@@ -43,7 +43,9 @@ const LINES: Record<string, string> = {
   salesCreditMemos: "salesCreditMemoLines",
 };
 
-const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA), "vendors", "accounts", "journals", "generalLedgerEntries"]);
+const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA), "vendors", "accounts", "journals", "generalLedgerEntries", "customers", "customerPaymentJournals"]);
+/** Batches and their line collections: general journals (D-71) and customer payment journals (D-75). */
+const BATCHES: Record<string, string> = { journals: "journalLines", customerPaymentJournals: "customerPayments" };
 
 type Reply = { status: number; body: unknown; headers?: Record<string, string> };
 const reply = (r: Reply) => ({
@@ -123,10 +125,10 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     writes.set(companyId, drafts);
 
     // General journal lines (D-71): list, filter by document number, add and delete; unposted, in memory.
-    if (entity === "journals" && docId) {
-      const batch = (books.data.journals ?? []).find((j) => j.id === docId);
-      if (!batch || sub !== "journalLines") return reply(odataError(404, "BadRequest_NotFound", "The journal does not exist."));
-      const key = `${companyId}/journal/${docId}`;
+    if (BATCHES[entity] && docId) {
+      const batch = (books.data[entity] ?? []).find((j) => j.id === docId);
+      if (!batch || sub !== BATCHES[entity]) return reply(odataError(404, "BadRequest_NotFound", "The journal does not exist."));
+      const key = `${companyId}/${entity}/${docId}`;
       const lines = writes.get(key) ?? [];
       writes.set(key, lines);
       if (init.method !== "GET" && opts.readOnly) return reply(odataError(403, "Authorization_InsufficientPermissions", "You do not have the following permissions on TableData Gen. Journal Line: Insert."));
@@ -149,10 +151,23 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
         } catch {
           return reply(odataError(400, "BadRequest", "Invalid JSON."));
         }
-        const account = (books.data.accounts ?? []).find((a) => a.number === body.accountNumber);
-        if (body.accountType !== "G/L Account" || !account) return reply(odataError(400, "Internal_RecordNotFound", `The G/L Account does not exist. Identification fields and values: No.='${String(body.accountNumber)}'`));
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.postingDate))) return reply(odataError(400, "BadRequest", "Posting Date must have a value."));
-        const line = { id: newId(), journalId: docId, lineNumber: (lines.length + 1) * 10000, ...body, accountId: account.id };
+        let extra: Doc;
+        if (entity === "journals") {
+          const account = (books.data.accounts ?? []).find((a) => a.number === body.accountNumber);
+          if (body.accountType !== "G/L Account" || !account) return reply(odataError(400, "Internal_RecordNotFound", `The G/L Account does not exist. Identification fields and values: No.='${String(body.accountNumber)}'`));
+          extra = { accountId: account.id };
+        } else {
+          const customer = (books.data.customers ?? []).find((c) => c.number === body.customerNumber);
+          if (!customer) return reply(odataError(400, "Internal_RecordNotFound", `The Customer does not exist. Identification fields and values: No.='${String(body.customerNumber)}'`));
+          if (body.appliesToInvoiceNumber) {
+            const inv = (books.data.salesInvoices ?? []).find((d) => d.number === body.appliesToInvoiceNumber);
+            if (!inv || inv.status !== "Open") return reply(odataError(400, "Application_NotOpen", `Invoice ${String(body.appliesToInvoiceNumber)} isn't open for application.`));
+            if (inv.customerNumber !== body.customerNumber) return reply(odataError(400, "Application_WrongCustomer", `Invoice ${String(body.appliesToInvoiceNumber)} belongs to another customer.`));
+          }
+          extra = { customerId: customer.id };
+        }
+        const line = { id: newId(), journalId: docId, lineNumber: (lines.length + 1) * 10000, ...body, ...extra };
         lines.push(line);
         return reply({ status: 201, body: line });
       }

@@ -1,5 +1,5 @@
 import { num, str } from "./format";
-import { ConnectorError, type Connector, type ConnectorDeps, type ErpDocumentRef, type ErpMasterData, type ErpPurchaseInvoice, type JournalWriter, type PullWindow, type PurchaseInvoiceWriter } from "./types";
+import { ConnectorError, type Connector, type ConnectorDeps, type ErpDocumentRef, type ErpMasterData, type CustomerPaymentWriter, type ErpInvoiceRef, type ErpPurchaseInvoice, type JournalWriter, type PullWindow, type PurchaseInvoiceWriter } from "./types";
 
 // Microsoft Dynamics 365 Business Central (online), standard API v2.0 (D-29).
 //
@@ -548,6 +548,107 @@ export const bcJournals: JournalWriter<BusinessCentralCredentials> = {
   },
 };
 
+// ─── Customer payments applied to invoices (D-75) ─────────────────────────────
+
+const PAYMENT_FORBIDDEN =
+  "Business Central didn't let the app add customer payments. Give the app a permission set that can edit payment journals, such as D365 CASH RECEIPT or D365 JOURNALS, EDIT.";
+
+const invoiceRef = (d: Doc, lcy: string): ErpInvoiceRef => ({
+  number: str(d.number),
+  externalDocumentNumber: str(d.externalDocumentNumber).trim(),
+  orderNumber: str(d.orderNumber),
+  customerNumber: str(d.customerNumber),
+  customerName: str(d.customerName),
+  remainingAmount: Number(d.remainingAmount ?? 0),
+  status: str(d.status),
+  currency: str(d.currencyCode) || lcy,
+});
+
+export const bcCustomerPayments: CustomerPaymentWriter<BusinessCentralCredentials> = {
+  async openInvoices(creds, deps) {
+    const s = await openSession(creds, deps);
+    const { root, lcy } = await companyContext(s);
+    const docs = await collect(s, `${root}/salesInvoices?$filter=${encodeURIComponent("status eq 'Open'")}`);
+    return docs.map((d) => invoiceRef(d, lcy));
+  },
+
+  async lookupInvoices(creds, refs, deps) {
+    const s = await openSession(creds, deps);
+    const { root, lcy } = await companyContext(s);
+    const out: ErpInvoiceRef[] = [];
+    for (const ref of [...new Set(refs.filter(Boolean))].slice(0, 200)) {
+      for (const field of ["externalDocumentNumber", "number"]) {
+        const docs = await collect(s, `${root}/salesInvoices?$filter=${encodeURIComponent(`${field} eq ${odataString(ref)}`)}`);
+        out.push(...docs.filter(posted).map((d) => invoiceRef(d, lcy)));
+        if (docs.length) break;
+      }
+    }
+    return out;
+  },
+
+  async customers(creds, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    return (await collect(s, `${root}/customers`)).filter((c) => !c.blocked || c.blocked === " ").map((c) => ({ number: str(c.number), name: str(c.displayName) }));
+  },
+
+  async listJournals(creds, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    return (await collect(s, `${root}/customerPaymentJournals`)).map((j) => ({ id: str(j.id), code: str(j.code), name: str(j.displayName) || str(j.code) }));
+  },
+
+  async findDocument(creds, journalId, documentNumber, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    if (!GUID.test(journalId)) throw new ConnectorError("Pick the customer payment batch again.");
+    const filter = encodeURIComponent(`documentNumber eq ${odataString(documentNumber)}`);
+    const unposted = await collect(s, `${root}/customerPaymentJournals(${journalId})/customerPayments?$filter=${filter}`);
+    const posted = await collect(s, `${root}/generalLedgerEntries?$filter=${filter}`);
+    return [
+      ...(unposted.length ? [{ where: "unposted" as const, detail: `${unposted.length} unposted payment${unposted.length === 1 ? "" : "s"} in the payment batch` }] : []),
+      ...(posted.length ? [{ where: "posted" as const, detail: `posted on ${str(posted[0].postingDate)}` }] : []),
+    ];
+  },
+
+  async createPayments(creds, journalId, payments, deps) {
+    const s = await openSession(creds, deps);
+    const { root, name } = await companyContext(s);
+    if (!GUID.test(journalId)) throw new ConnectorError("Pick the customer payment batch again.");
+    const base = `${root}/customerPaymentJournals(${journalId})/customerPayments`;
+    const ids: string[] = [];
+    try {
+      for (const p of payments) {
+        const body: Doc = {
+          customerNumber: p.customerNumber,
+          postingDate: p.postingDate,
+          documentNumber: p.documentNumber.slice(0, 20),
+          externalDocumentNumber: p.externalDocumentNumber.slice(0, 35),
+          amount: p.amount,
+          description: p.description.slice(0, 100),
+        };
+        if (p.appliesToInvoiceNumber) body.appliesToInvoiceNumber = p.appliesToInvoiceNumber;
+        const res = await sendJson(s, "POST", base, body).catch((error: unknown) => {
+          throw error instanceof ConnectorError && /didn't let the app create a purchase invoice/.test(error.message) ? new ConnectorError(PAYMENT_FORBIDDEN) : error;
+        });
+        const id = str(res.id);
+        if (/^[0-9a-f-]{36}$/i.test(id)) ids.push(id);
+      }
+    } catch (error) {
+      for (const id of ids) await sendJson(s, "DELETE", `${base}(${id})`).catch(() => undefined);
+      throw error;
+    }
+    const batch = (await collect(s, `${root}/customerPaymentJournals`)).find((j) => str(j.id) === journalId);
+    return { company: name, journal: str(batch?.code) || "payments", ids };
+  },
+
+  async deletePayments(creds, journalId, ids, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    for (const id of ids) await sendJson(s, "DELETE", `${root}/customerPaymentJournals(${journalId})/customerPayments(${id})`).catch(() => undefined);
+  },
+};
+
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
@@ -600,4 +701,5 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
 
   purchaseInvoices: bcPurchaseInvoices,
   journals: bcJournals,
+  customerPayments: bcCustomerPayments,
 };
