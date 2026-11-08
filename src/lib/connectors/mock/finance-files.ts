@@ -148,10 +148,28 @@ export const FINANCE_FILES: DemoFile[] = [
     ],
   },
   {
+    id: "payouts_by_provider",
+    label: "Payouts by payment provider",
+    description:
+      "The demo store's October payouts, named as in Magento's sales by payment method, with the fees each provider kept. Planted: the card capture paid 5.00 short, Tabby's second order not paid out, and a COD parcel collected 10.00 short.",
+    slots: ["web-payouts-by-method/payouts"],
+    headers: ["Payout / batch ID", "Provider", "Payout date", "Fees deducted", "Payout amount", "Currency"],
+    dateColumn: 2,
+    rows: [
+      ["RMT-2026-041", "Cash on delivery", "2026-10-09", "5.00", "224.00", "AED"],
+      ["TB-1014", "Tabby", "2026-10-14", "39.69", "800.31", "AED"],
+      ["po_1029", "Stripe", "2026-10-15", "23.21", "776.79", "AED"],
+      ["po_1105", "Stripe", "2026-10-19", "14.04", "164.96", "AED"],
+      ["RMT-2026-044", "Cash on delivery", "2026-10-23", "5.00", "415.00", "AED"], // 430.00 to collect, 420.00 collected
+      ["po_1119", "Stripe", "2026-10-23", "6.96", "34.04", "AED"], // credited 32.04; includes order 108's capture, 5.00 short
+      // Tabby hasn't paid out order 000000109 (484.00).
+    ],
+  },
+  {
     id: "bank_payouts",
     label: "Bank statement (store receipts account)",
     description: "The account the demo store's providers pay into. Planted: a payout short by 2.00, a payout missing, and a credit nobody can identify.",
-    slots: ["bank-payouts/bank"],
+    slots: ["bank-payouts/bank", "web-payouts-by-method/bank"],
     headers: ["Value date", "Narration / description", "Reference", "Credit amount", "Debit amount", "Currency"],
     dateColumn: 0,
     rows: [

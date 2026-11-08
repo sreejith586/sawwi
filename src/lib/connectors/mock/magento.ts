@@ -1,9 +1,9 @@
 import type { FetchLike } from "../types";
-import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS, DEMO_SOURCE_ITEMS, DEMO_SHIPMENTS, DEMO_STORE_CONFIGS } from "./magento-data";
+import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS, DEMO_PRODUCTS, DEMO_SOURCE_ITEMS, DEMO_SHIPMENTS, DEMO_STORE_CONFIGS } from "./magento-data";
 
 // An in-process stand-in for a Magento 2 store's REST API (D-30), for one invented store at a
 // reserved .example address. It answers the same paths and JSON shapes for GET orders,
-// invoices, creditmemos, shipments, inventory/source-items (searchCriteria filters, `in`, paging that repeats the last page past
+// invoices, creditmemos, shipments, products, inventory/source-items (searchCriteria filters, `in`, paging that repeats the last page past
 // the end, as Magento does) and store/storeConfigs, so tests and local demos run the real
 // connector with no network and no real token.
 
@@ -26,6 +26,7 @@ const COLLECTIONS: Record<string, { rows: Doc[]; resource: string }> = {
   invoices: { rows: DEMO_INVOICES, resource: "Magento_Sales::sales_invoice" },
   creditmemos: { rows: DEMO_CREDIT_MEMOS, resource: "Magento_Sales::sales_creditmemo" },
   shipments: { rows: DEMO_SHIPMENTS, resource: "Magento_Sales::shipment" },
+  products: { rows: DEMO_PRODUCTS, resource: "Magento_Catalog::products" },
   "inventory/source-items": { rows: DEMO_SOURCE_ITEMS, resource: "Magento_InventoryApi::source" },
 };
 

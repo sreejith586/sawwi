@@ -56,6 +56,7 @@ const EXPECTED: Record<string, string[]> = {
     "vat_mismatch: 000000103", "vat_mismatch: 000000108",
   ],
   "web-erp-stock": ["hidden_stock: SND-42", "not_in_erp: OUD-100", "overselling: OUD-50"],
+  "web-erp-prices": ["not_in_erp: OUD-100", "special_expired: ABY-BLK-M", "special_not_lower: MAT-01", "wrong_price: SND-42"],
   "b2b-cash-application": ["overdue: SI-3102", "overdue: SI-3104", "overdue: SI-3105", "overdue: SI-3106", "short_paid: SI-3103", "unapplied_receipt: TT REF 88213 MARINA FM"],
   "b2b-order-delivery-invoice": ["invoiced_not_delivered: LED-40", "open_orders: SO-1043 / CBL-25", "qty_mismatch: SSH-2103 / AC-18K"],
   // Marketplace templates: one invented seller (MP-10xx orders, two October settlements).
@@ -77,6 +78,10 @@ const EXPECTED: Record<string, string[]> = {
   ],
   "b2b-returns-vs-credit-notes": ["return_no_cn: RMA-0091", "value_mismatch: RMA-0088"],
   "b2b-pdc-clearing": ["amount_diff: 000416", "bounced: RETURNED CHEQUE INSUFFICIENT FUNDS", "due_not_deposited: 000414"],
+  // Magento sales by provider vs payouts (before fees) vs the bank. Stripe: 108 captured 5.00 short; Tabby: 109 not paid out; COD: 107 collected 10.00 short.
+  "web-payouts-by-method": [
+    "credit_difference: po_1119", "not_paid_out: Cash on delivery", "not_paid_out: Stripe", "not_paid_out: Tabby", "unidentified_credit: REF 99812",
+  ],
   "bank-payouts": ["fx_difference: po_1119", "not_credited: po_1126", "unidentified_credit: REF 99812"],
   "p2p-import-landed-cost": [
     "declaration_unknown: HLCU5555000", "declared_below_invoice: MAEU7654321", "duplicate_freight: Oasis Freight Forwarding / FWD-8812",

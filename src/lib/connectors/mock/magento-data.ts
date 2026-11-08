@@ -50,12 +50,12 @@ export const DEMO_ORDERS: Doc[] = [
   order(100, "000000100", "2026-09-30 23:30:00", "complete", "stripe_payments", [["OUD-50", 1]]),
   order(101, "000000101", "2026-10-01 08:12:44", "complete", "stripe_payments", [["ABY-BLK-M", 1], ["MAT-01", 1]]),
   order(102, "000000102", "2026-10-02 19:40:03", "complete", "cashondelivery", [["SND-42", 1]]),
-  order(103, "000000103", "2026-10-04 11:05:51", "closed", "stripe_payments", [["OUD-50", 1]], { total_refunded: 305 }),
+  order(103, "000000103", "2026-10-04 11:05:51", "closed", "stripe_payments", [["OUD-50", 1]], { total_refunded: 305, total_online_refunded: 305 }),
   order(104, "000000104", "2026-10-07 21:18:30", "complete", "tabby_installments", [["ABY-BLK-M", 2]]),
   order(105, "000000105", "2026-10-09 14:02:11", "canceled", "cashondelivery", [["MAT-01", 2]]),
-  order(106, "000000106", "2026-10-12 09:55:27", "complete", "stripe_payments", [["SND-42", 1], ["OUD-50", 1]], { total_refunded: 199 }),
+  order(106, "000000106", "2026-10-12 09:55:27", "complete", "stripe_payments", [["SND-42", 1], ["OUD-50", 1]], { total_refunded: 199, total_online_refunded: 199 }),
   order(107, "000000107", "2026-10-15 17:31:09", "processing", "cashondelivery", [["ABY-BLK-M", 1]]),
-  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]], { total_refunded: 15 }),
+  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]], { total_refunded: 15, total_offline_refunded: 15, total_online_refunded: 0 }),
   order(109, "000000109", "2026-10-26 20:20:20", "processing", "tabby_installments", [["OUD-50", 1], ["SND-42", 1]]),
   order(110, "000000110", "2026-10-31 23:59:00", "pending", "stripe_payments", [["MAT-01", 1]]),
   order(111, "000000111", "2026-11-01 00:10:00", "pending", "cashondelivery", [["SND-42", 1]]),
@@ -137,4 +137,28 @@ export const DEMO_SOURCE_ITEMS: Doc[] = [
   { sku: "OUD-50", source_code: "default", quantity: 10, status: 1 },
   { sku: "SND-42", source_code: "default", quantity: 15, status: 1 },
   { sku: "SND-42", source_code: "shj", quantity: 5, status: 0 },
+];
+
+// Catalogue prices (VAT included, as in Business Central's items). Planted against the store
+// company's unit prices (web-erp-prices, D-55):
+//  - ABY-BLK-M: a special price that ended on 15 October and is still set.
+//  - SND-42: 189.00 in the store, 199.00 in Business Central.
+//  - MAT-01: a special price above the regular price.
+//  - OUD-100: priced in the store, not an item in Business Central.
+//  - ABY-BLK: a configurable parent, which a pull leaves out (its children carry the price).
+const special = (price: number, from?: string, to?: string) => [
+  { attribute_code: "special_price", value: String(price) },
+  ...(from ? [{ attribute_code: "special_from_date", value: `${from} 00:00:00` }] : []),
+  ...(to ? [{ attribute_code: "special_to_date", value: `${to} 00:00:00` }] : []),
+];
+const product = (id: number, sku: string, name: string, price: number | undefined, custom: { attribute_code: string; value: string }[] = [], type_id = "simple"): Doc => ({
+  id, sku, name, type_id, status: 1, visibility: 4, ...(price !== undefined && { price }), custom_attributes: [{ attribute_code: "url_key", value: sku.toLowerCase() }, ...custom],
+});
+export const DEMO_PRODUCTS: Doc[] = [
+  product(1, "ABY-BLK", "Classic black abaya", undefined, [], "configurable"),
+  product(2, "ABY-BLK-M", PRODUCTS["ABY-BLK-M"].name, 420, special(380, "2026-09-01", "2026-10-15")),
+  product(3, "OUD-50", PRODUCTS["OUD-50"].name, 285, special(260, "2026-10-20", "2026-11-30")),
+  product(4, "SND-42", PRODUCTS["SND-42"].name, 189),
+  product(5, "MAT-01", PRODUCTS["MAT-01"].name, 75, special(80)),
+  product(6, "OUD-100", "Oud perfume 100 ml", 450),
 ];

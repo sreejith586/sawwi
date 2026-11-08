@@ -233,7 +233,7 @@ export const BC_REPORTS: ReportSpec[] = [
     id: "items",
     label: "Items (inventory and unit price)",
     description: "Every item with its current inventory, base unit and unit price. Not dated: it's the item list right now.",
-    slots: ["web-erp-stock/erp_stock"],
+    slots: ["web-erp-stock/erp_stock", "web-erp-prices/erp_prices"],
     entity: "items",
     columns: ["SKU", "Description", "Type", "Inventory", "Base unit", "Unit price", "Price includes VAT", "Blocked", "GTIN"],
     rows: (d) => [

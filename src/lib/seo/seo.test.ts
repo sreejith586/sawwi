@@ -48,6 +48,10 @@ describe("SEO pages (D-47)", () => {
     for (const slug of ["magento-2", "dynamics-365-business-central", "shopify", "amazon-settlement", "noon-settlement", "bank", "payment-gateway", "cash-on-delivery", "bnpl"]) expect(slugs).toContain(slug);
   });
 
+  it("keeps every template's summary short enough for its page description", () => {
+    for (const t of TEMPLATES) expect(t.summary.length, t.id).toBeLessThanOrEqual(160);
+  });
+
   it("never claims reviews, ratings or customers", () => {
     const text = JSON.stringify(SOLUTIONS).toLowerCase();
     for (const word of ["review", "rating", "trusted by", "customers love", "testimonial", "award"]) {

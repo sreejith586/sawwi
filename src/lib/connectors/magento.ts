@@ -150,6 +150,8 @@ export const MAGENTO_REFUND_COLUMNS = ["Order ID", "Refund / credit memo ID", "R
 export const MAGENTO_INVOICE_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Customer e-mail", "Customer", "Subtotal", "Shipping", "Discount", "VAT amount", "Invoice total (incl. VAT)", "Currency"] as const;
 export const MAGENTO_CREDIT_MEMO_COLUMNS = ["Order ID", "Credit memo ID", "Refund date", "Customer e-mail", "Customer", "Subtotal", "Shipping refunded", "Adjustment", "VAT amount", "Credit memo total (incl. VAT)", "Currency"] as const;
 export const MAGENTO_SOURCE_ITEM_COLUMNS = ["SKU", "Source", "Source quantity", "Stock status", "Sellable quantity"] as const;
+export const MAGENTO_PRICE_COLUMNS = ["SKU", "Product", "Product type", "Status", "Price", "Special price", "Special price from", "Special price to", "Checked on"] as const;
+export const MAGENTO_PAYMENT_TOTAL_COLUMNS = ["Payment provider", "Payment method", "Method code", "Orders", "Order total", "Refunded online", "Expected to receive", "Currency", "Period from", "Period to"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -176,6 +178,20 @@ const REPORTS: Report[] = [
     description: "Current quantity of every SKU at every inventory source, and how much of it the store can sell (sources set to in stock). Not dated: it's the stock right now.",
     slots: ["web-erp-stock/store_stock"],
     columns: MAGENTO_SOURCE_ITEM_COLUMNS,
+  },
+  {
+    id: "product_prices",
+    label: "Product prices (with special prices)",
+    description: "Every simple, virtual and downloadable product with its price, special price and the special price's dates, as set on the default store view right now.",
+    slots: ["web-erp-prices/store_prices"],
+    columns: MAGENTO_PRICE_COLUMNS,
+  },
+  {
+    id: "payment_totals",
+    label: "Sales by payment method",
+    description: "Orders placed in the period that are being fulfilled or done, totalled per payment provider and method, net of refunds paid back through the provider.",
+    slots: ["web-payouts-by-method/method_sales"],
+    columns: MAGENTO_PAYMENT_TOTAL_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -211,6 +227,68 @@ export function sourceItemRow(i: Doc): string[] {
   return [str(i.sku), str(i.source_code), num(qty), inStock ? "In stock" : "Out of stock", num(inStock ? qty : 0)];
 }
 
+/** Products with a price of their own; configurable, bundle and grouped parents take theirs from children. */
+const PRICED_TYPES = "simple,virtual,downloadable";
+const attr = (p: Doc, code: string) => ((p.custom_attributes as { attribute_code: string; value: unknown }[] | undefined) ?? []).find((a) => a.attribute_code === code)?.value;
+const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : "");
+
+/** Prices are current, so they are checked as of the period's end, or today if that is earlier. */
+export function priceRow(p: Doc, checkedOn: string): string[] {
+  const special = attr(p, "special_price");
+  return [
+    str(p.sku), str(p.name), str(p.type_id), Number(p.status) === 2 ? "Disabled" : "Enabled", num(p.price ?? 0),
+    special === undefined || special === null || special === "" ? "" : num(special), day(attr(p, "special_from_date")), day(attr(p, "special_to_date")), checkedOn,
+  ];
+}
+
+/**
+ * Who pays the money out, from the payment method code. Wallets (Apple Pay, Google Pay) run through
+ * a gateway, so they share its provider and stay apart by method title. Unknown codes keep their title.
+ */
+const PROVIDERS: [RegExp, string][] = [
+  [/^stripe/, "Stripe"],
+  [/^checkout/, "Checkout.com"],
+  [/paypal/, "PayPal"],
+  [/^braintree/, "Braintree"],
+  [/^adyen/, "Adyen"],
+  [/^tap/, "Tap"],
+  [/paytabs/, "PayTabs"],
+  [/telr/, "Telr"],
+  [/^amazon_?pay/, "Amazon Pay"],
+  [/tabby/, "Tabby"],
+  [/tamara/, "Tamara"],
+  [/^(cashondelivery|cod|msp_cashondelivery)/, "Cash on delivery"],
+  [/^(checkmo|banktransfer|purchaseorder)$/, "Offline"],
+];
+export function paymentProvider(code: string, title: string): string {
+  const c = code.toLowerCase();
+  return PROVIDERS.find(([re]) => re.test(c))?.[1] ?? (title || code || "Unknown");
+}
+
+/** Orders being fulfilled or done; new, pending payment, on hold and cancelled ones aren't owed a payout. */
+const PAYABLE_STATES = new Set(["processing", "complete", "closed"]);
+
+export function paymentTotalRows(orders: Doc[], w: PullWindow): string[][] {
+  const groups = new Map<string, { provider: string; title: string; code: string; orders: number; total: number; refunded: number; currency: string }>();
+  for (const o of orders) {
+    if (!PAYABLE_STATES.has(str(o.state))) continue;
+    const payment = (o.payment ?? {}) as { method?: string; additional_information?: unknown[] };
+    const code = str(payment.method);
+    const title = str(payment.additional_information?.[0]) || code;
+    const currency = str(o.order_currency_code);
+    const key = `${code}\u0000${title}\u0000${currency}`;
+    const g = groups.get(key) ?? { provider: paymentProvider(code, title), title, code, orders: 0, total: 0, refunded: 0, currency };
+    g.orders++;
+    g.total += Number(o.grand_total ?? 0);
+    // Offline refunds (store credit, cash) don't come out of the provider's payouts.
+    g.refunded += Number(o.total_online_refunded ?? o.total_refunded ?? 0);
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title))
+    .map((g) => [g.provider, g.title, g.code, num(g.orders), num(g.total), num(g.refunded), num(g.total - g.refunded), g.currency, w.from, w.to]);
+}
+
 /** Refunded items; configurable parents and their zero-priced children are collapsed to one line. */
 export function creditMemoRows(m: Doc, orderNo: string): string[][] {
   const items = ((m.items as Doc[] | undefined) ?? []).filter((i) => Number(i.qty) > 0 && !(Number(i.row_total ?? 0) === 0 && Number(i.price ?? 0) === 0));
@@ -236,14 +314,14 @@ export function shipmentRows(s: Doc, orderNo: string, unit: string | undefined):
 export const magento: Connector<MagentoCredentials> = {
   id: "magento",
   label: "Magento 2",
-  description: "Orders, invoices, refunds, shipments and stock from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
+  description: "Orders, invoices, refunds, shipments, stock and prices from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
   fields: [
     { key: "baseUrl", label: "Store address", secret: false, placeholder: "https://shop.example.com" },
     {
       key: "accessToken",
       label: "Integration access token",
       secret: true,
-      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Invoices, Credit Memos, Shipments), Stores → Settings and, for stock, Stores → Inventory → Sources, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
+      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Invoices, Credit Memos, Shipments), Stores → Settings and, for stock and prices, Catalog → Inventory → Products and Stores → Inventory → Sources, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
     },
   ],
   reports: REPORTS.map(({ id, label, description, slots }) => ({ id, label, description, slots })),
@@ -275,6 +353,13 @@ export const magento: Connector<MagentoCredentials> = {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
       rows = memos.map((m) => creditMemoTotalRow(m, orders.get(Number(m.order_id)) ?? NO_ORDER));
+    } else if (report === "payment_totals") {
+      rows = paymentTotalRows(await search(creds, "orders", window, deps), window);
+    } else if (report === "product_prices") {
+      const today = new Date().toISOString().slice(0, 10);
+      const checkedOn = window.to < today ? window.to : today;
+      const products = await searchAll(creds, "products", [[{ field: "type_id", value: PRICED_TYPES, condition: "in" }]], deps);
+      rows = products.map((p) => priceRow(p, checkedOn));
     } else if (report === "source_items") {
       // Multi-Source Inventory (Magento 2.3+). Current stock, so the window doesn't apply.
       rows = (await searchAll(creds, "inventory/source-items", [], deps, ["sku", "source_code"])).map(sourceItemRow);
