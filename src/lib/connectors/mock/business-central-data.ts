@@ -152,3 +152,22 @@ export const DEMO_DATA: Record<string, Doc[]> = {
     purchaseInvoice("PI-9003", "GLS-2307", "2026-10-27", "V0002", "", [{ item: "LED-40", qty: 50, price: 22 }]),
   ],
 };
+
+// Master data for purchase invoice capture (D-62): vendors with TRNs, items, and G/L accounts.
+// Al Noor (V0003) has no TRN on file, so it matches by name.
+const VENDOR_TRN: Record<string, string> = { V0001: "100234567800003", V0002: "100345678900003", V0003: "" };
+const MASTER: Record<string, Doc[]> = {
+  vendors: [
+    ...Object.entries(VENDORS).map(([number, displayName]) => ({ id: guid("9990"), number, displayName, taxRegistrationNumber: VENDOR_TRN[number], currencyCode: "", blocked: " " })),
+    { id: guid("9990"), number: "V0003", displayName: "Al Noor Packaging Materials", taxRegistrationNumber: "", currencyCode: "", blocked: " " },
+    { id: guid("9990"), number: "V0009", displayName: "Old Supplier (blocked)", taxRegistrationNumber: "", currencyCode: "", blocked: "All" },
+  ],
+  items: Object.entries(ITEMS).map(([number, displayName]) => ({ id: guid("9991"), number, displayName, type: "Inventory", baseUnitOfMeasureCode: "PCS", gtin: "", blocked: false })),
+  accounts: [
+    ["5410", "Freight and delivery inwards"],
+    ["6120", "Packaging materials"],
+    ["6230", "Office supplies"],
+    ["8110", "Bank charges"],
+  ].map(([number, displayName]) => ({ id: guid("9992"), number, displayName, category: "Expense", accountType: "Posting", directPosting: true, blocked: false })),
+};
+Object.assign(DEMO_DATA, MASTER);

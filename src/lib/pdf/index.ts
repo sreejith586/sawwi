@@ -26,7 +26,15 @@ export type PdfOptions = {
   countries?: string[];
 };
 
-export type PdfTable = { headers: string[]; rows: string[][]; info: PdfFileInfo };
+export type PdfTable = {
+  headers: string[];
+  rows: string[][];
+  info: PdfFileInfo;
+  /** The invoice itself, when the PDF is one (purchase invoice capture, D-61). */
+  invoice?: InvoiceDoc;
+  /** Who issued it (issuerKey), when read from the text layer or OCR. */
+  issuer?: string;
+};
 
 /** A stable key for "who issued this": the top line of page 1, without digits (dates, account numbers). */
 export function issuerKey(lines: Line[]): string {
@@ -138,6 +146,7 @@ async function fromLines(
       }
     }
     const result = invoiceTable(fileName, doc, method, pdf.numPages, opts);
+    result.issuer = issuer;
     if (table) result.info.layout = await remember(opts.layouts, issuer, table, "invoice");
     const perLine = (opts.grain ?? "invoice") === "line" && table && doc.lines.length === table.rows.length;
     return { result, rowsAt: perLine ? table.rows : undefined };
@@ -214,6 +223,7 @@ function invoiceTable(
       : { type: "Invoice", ...source, subtotal: Math.round((source.total - source.vat) * 100) / 100, lines: [], currency: "SAR" };
   const grain = opts.grain ?? "invoice";
   return {
+    invoice: doc,
     headers: grain === "line" ? LINE_HEADERS : INVOICE_HEADERS,
     rows: invoiceRows(doc, grain),
     info: {

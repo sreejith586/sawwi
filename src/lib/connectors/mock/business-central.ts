@@ -8,8 +8,10 @@ import { DEMO_STORE_COMPANY, DEMO_STORE_COMPANY_INFORMATION, DEMO_STORE_DATA } f
 // trading company, a web store company (D-52) and an empty holding company, so
 // tests and local demos exercise the real connector code with no network and no real
 // credentials. Supported: client-credentials token, companies, companyInformation, and
-// document collections with `$filter=<date> ge X and <date> le Y`, `$expand=<lines>` and
-// server-driven paging through @odata.nextLink.
+// document collections with `$filter=<date> ge X and <date> le Y` or `<field> eq '<text>'`
+// (joined with `and`), `$expand=<lines>` and server-driven paging through @odata.nextLink.
+// Writes (D-64): draft purchase invoices and their lines can be created, read back by id and
+// deleted. They live in memory (`writes`) and never change the invented books themselves.
 
 /** Made-up sign-in values for the demo tenant. They work only against this mock. */
 export const DEMO_BC_CREDENTIALS = {
@@ -41,7 +43,7 @@ const LINES: Record<string, string> = {
   salesCreditMemos: "salesCreditMemoLines",
 };
 
-const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA)]);
+const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA), "vendors", "accounts"]);
 
 type Reply = { status: number; body: unknown; headers?: Record<string, string> };
 const reply = (r: Reply) => ({
@@ -58,15 +60,37 @@ export type MockBusinessCentralOptions = {
   /** Rows per page before a nextLink; small by default so paging is always exercised. */
   pageSize?: number;
   /** Requests seen, for assertions. */
-  log?: { method: string; url: string }[];
+  log?: { method: string; url: string; body?: string }[];
+  /** Draft purchase invoices created through the mock, per company id. Pass one to share or inspect it. */
+  writes?: Map<string, Record<string, unknown>[]>;
+  /** Answer writes with 403, like an app with a read-only permission set. */
+  readOnly?: boolean;
 };
+
+type Doc = Record<string, unknown>;
+const r2 = (n: number) => Math.round(n * 100) / 100;
+let written = 0;
+const newId = () => `d1a7f000-0000-4000-8000-${String(++written).padStart(12, "0")}`;
+
+/** `a eq 'x' and b eq 'y'`, the only non-date filter the connector sends. */
+function eqFilter(filter: string): [string, string][] | undefined {
+  const parts = filter.split(" and ").map((p) => p.match(/^(\w+) eq '((?:[^']|'')*)'$/));
+  return parts.every(Boolean) ? parts.map((m) => [m![1], m![2].replace(/''/g, "'")]) : undefined;
+}
+
+function totalsOf(lines: Doc[]) {
+  const ex = r2(lines.reduce((a, l) => a + Number(l.netAmount ?? 0), 0));
+  const tax = r2(lines.reduce((a, l) => a + Number(l.netTaxAmount ?? 0), 0));
+  return { totalAmountExcludingTax: ex, totalTaxAmount: tax, totalAmountIncludingTax: r2(ex + tax) };
+}
 
 export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): FetchLike {
   const pageSize = opts.pageSize ?? 3;
   const demo = DEMO_BC_CREDENTIALS;
+  const writes = opts.writes ?? new Map<string, Doc[]>();
 
   return async (url, init) => {
-    opts.log?.push({ method: init.method, url });
+    opts.log?.push({ method: init.method, url, body: init.body });
 
     // Microsoft Entra: client credentials.
     if (url.startsWith(`${BC_LOGIN_HOST}/`)) {
@@ -81,7 +105,7 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     }
 
     // Business Central API v2.0.
-    if (init.method !== "GET") return reply(odataError(405, "BadRequest_MethodNotAllowed", "Sawwi's mock is read-only."));
+    if (!["GET", "POST", "DELETE"].includes(init.method)) return reply(odataError(405, "BadRequest_MethodNotAllowed", "Method not allowed."));
     if (init.headers.Authorization !== `Bearer ${TOKEN}`) return reply(odataError(401, "Authentication_InvalidCredentials", "The credentials provided are incorrect."));
     const u = new URL(url);
     const m = u.pathname.match(/^\/v2\.0\/([^/]+)\/([^/]+)\/api\/v2\.0\/(.*)$/);
@@ -90,20 +114,71 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     if (tenant !== demo.tenantId || environment !== demo.environment) return reply(odataError(404, "BadRequest_NotFound", "Environment not found."));
     if (rest === "companies") return reply({ status: 200, body: { value: COMPANIES } });
 
-    const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)$/);
+    const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)(?:\(([^)]+)\)(?:\/(\w+))?)?$/);
     if (!cm) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
-    const [, companyId, entity] = cm;
+    const [, companyId, entity, docId, sub] = cm;
     if (!COMPANIES.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
     const books = BOOKS[companyId] ?? EMPTY;
+    const drafts = writes.get(companyId) ?? [];
+    writes.set(companyId, drafts);
+
+    // Writes: draft purchase invoices only (D-64).
+    if (init.method !== "GET" || docId) {
+      if (entity !== "purchaseInvoices") return reply(odataError(405, "BadRequest_MethodNotAllowed", "The mock only writes purchase invoices."));
+      if (init.method !== "GET" && opts.readOnly) return reply(odataError(403, "Authorization_InsufficientPermissions", "You do not have the following permissions on TableData Purchase Header: Insert."));
+      const found = docId ? drafts.find((d) => d.id === docId) : undefined;
+      if (docId && !found) return reply(odataError(404, "BadRequest_NotFound", "The purchase invoice does not exist."));
+      const body = (() => { try { return JSON.parse(init.body ?? "{}") as Doc; } catch { return undefined; } })();
+      if (init.method !== "GET" && init.method !== "DELETE" && !body) return reply(odataError(400, "BadRequest", "Invalid JSON."));
+
+      if (init.method === "GET" && found && !sub) return reply({ status: 200, body: Object.fromEntries(Object.entries(found).filter(([k]) => k !== "purchaseInvoiceLines")) });
+      if (init.method === "DELETE" && found && !sub) {
+        if (init.headers["If-Match"] === undefined) return reply(odataError(400, "BadRequest", "If-Match header is required."));
+        drafts.splice(drafts.indexOf(found), 1);
+        return reply({ status: 204, body: {} });
+      }
+      if (init.method === "POST" && !docId) {
+        const vendor = (books.data.vendors ?? []).find((v) => v.number === body!.vendorNumber);
+        if (!vendor) return reply(odataError(400, "Internal_RecordNotFound", `The Vendor does not exist. Identification fields and values: No.='${String(body!.vendorNumber)}'`));
+        const allPi = [...(books.data.purchaseInvoices ?? []), ...drafts];
+        const doc: Doc = {
+          id: newId(), number: `PI-${1000 + allPi.length + written}`, vendorNumber: vendor.number, vendorName: vendor.displayName, vendorInvoiceNumber: String(body!.vendorInvoiceNumber ?? ""),
+          invoiceDate: body!.invoiceDate, postingDate: body!.invoiceDate, dueDate: body!.dueDate ?? body!.invoiceDate, currencyCode: body!.currencyCode ?? "", orderNumber: "", status: "Draft",
+          ...totalsOf([]), purchaseInvoiceLines: [],
+        };
+        drafts.push(doc);
+        return reply({ status: 201, body: Object.fromEntries(Object.entries(doc).filter(([k]) => k !== "purchaseInvoiceLines")) });
+      }
+      if (init.method === "POST" && found && sub === "purchaseInvoiceLines") {
+        const lines = found.purchaseInvoiceLines as Doc[];
+        const type = String(body!.lineType);
+        const no = String(body!.lineObjectNumber ?? "");
+        const master = type === "Item" ? books.data.items : type === "Account" ? books.data.accounts : undefined;
+        const record = master?.find((r) => r.number === no);
+        if (!record) return reply(odataError(400, "Internal_RecordNotFound", `The ${type === "Account" ? "G/L Account" : type} does not exist. Identification fields and values: No.='${no}'`));
+        const qty = Number(body!.quantity ?? 0);
+        const cost = Number(body!.directUnitCost ?? 0);
+        const net = r2(qty * cost);
+        const line = {
+          id: newId(), sequence: (lines.length + 1) * 10000, lineType: type, lineObjectNumber: no, description: body!.description ?? record.displayName, quantity: qty, directUnitCost: cost,
+          taxPercent: 5, netAmount: net, netTaxAmount: r2(net * 0.05), netAmountIncludingTax: r2(net * 1.05),
+        };
+        lines.push(line);
+        Object.assign(found, totalsOf(lines));
+        return reply({ status: 201, body: line });
+      }
+      return reply(odataError(405, "BadRequest_MethodNotAllowed", "Not supported by the mock."));
+    }
     if (entity === "companyInformation") return reply({ status: 200, body: { value: books.info } });
     if (!ENTITIES.has(entity)) return reply(odataError(404, "BadRequest_NotFound", `Resource '${entity}' not found.`));
 
-    let rows = books.data[entity] ?? [];
+    let rows = [...(books.data[entity] ?? []), ...(entity === "purchaseInvoices" ? drafts : [])];
     const filter = u.searchParams.get("$filter");
     if (filter) {
       const f = filter.match(/^(\w+) ge (\d{4}-\d{2}-\d{2}) and (\w+) le (\d{4}-\d{2}-\d{2})$/);
-      if (!f || f[1] !== f[3]) return reply(odataError(400, "BadRequest", `Unsupported filter in the mock: ${filter}`));
-      rows = rows.filter((d) => String(d[f[1]]) >= f[2] && String(d[f[1]]) <= f[4]);
+      const eq = f ? undefined : eqFilter(filter);
+      if ((!f || f[1] !== f[3]) && !eq) return reply(odataError(400, "BadRequest", `Unsupported filter in the mock: ${filter}`));
+      rows = f ? rows.filter((d) => String(d[f[1]]) >= f[2] && String(d[f[1]]) <= f[4]) : rows.filter((d) => eq!.every(([k, v]) => String(d[k] ?? "") === v));
     }
     const expand = u.searchParams.get("$expand");
     if (expand && expand !== LINES[entity]) return reply(odataError(400, "BadRequest", `Could not find a property named '${expand}'.`));

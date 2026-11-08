@@ -37,7 +37,10 @@ export const demoConnectionId = (id: string) => `${PREFIX}${id}`;
 export const demoSourceFor = (connectionId: string): DemoSource | undefined =>
   connectionId.startsWith(PREFIX) ? DEMO_SOURCES.find((s) => s.id === connectionId.slice(PREFIX.length)) : undefined;
 
-const bc = mockBusinessCentral({ pageSize: 50 });
+/** Draft purchase invoices the demo pushed to the mock (D-64), cleared at the nightly reset. */
+const bcWrites = new Map<string, Record<string, unknown>[]>();
+const bc = mockBusinessCentral({ pageSize: 50, writes: bcWrites });
+export const resetDemoErpWrites = () => bcWrites.clear();
 const magento = mockMagento();
 
 /** Answers the demo sources' requests in-process; anything else is refused. */

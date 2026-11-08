@@ -39,6 +39,19 @@ export const CalendarIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const AutomationIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M11 2.5 4.5 11H10l-1 6.5L15.5 9H10l1-6.5Z" />
+  </Icon>
+);
+
+export const InvoiceIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5 2.8h7.5L15.5 6v11.2H5z" />
+    <path d="M12.5 2.8V6h3M7.5 9.5h5M7.5 12.5h5M7.5 15h3" />
+  </Icon>
+);
+
 export const PlusIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 4.5v11M4.5 10h11" />

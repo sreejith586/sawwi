@@ -731,3 +731,35 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - totals: Invoice amount excl. VAT, Invoice VAT, Invoice amount incl. VAT.
   Dates are ISO and amounts are plain numbers with a dot. One invoice, or every draft marked ready, in one file.
 - **Consequences:** CSV works with no ERP connection. Vendor and item numbers are blank where nothing matched yet.
+
+### D-66: A review queue with single and bulk approval; approval is required before CSV-or-push, and is for exact content
+- **Context:** the user asked (8 Nov 2026, during the build) for a review screen showing all the extracted invoice data for manual review, with single and bulk approve. They also asked for the scanned PDF to be shown on the review screen (already planned in D-61).
+- **Decision:**
+  - **The queue is the review screen.** `/automation/purchase-invoices` lists every captured invoice with the extracted data:
+    - supplier, TRN, the vendor it matched and how;
+    - invoice number, how the PDF was read, and dates;
+    - lines, net, VAT and total, and whether the totals check;
+    - status and the first blocker.
+    A row expands to its lines with their item or account coding and every blocker and warning. Tabs: To review, Approved, In ERP, All. Checkboxes allow bulk approve, CSV download and push.
+  - **Single invoice:** its own page shows the PDF (text or scan) next to an editable form, with checks run live.
+  - **Approve is a status, not a push.** Statuses: needs review → ready → approved → pushing → pushed. Only a draft with nothing blocking can be approved; bulk approve approves those and says why each other one wasn't. An approval stores a hash of the draft and the push target. Any edit, or a change of target, voids it.
+  - **Push takes approved drafts only**, still with the confirmation from D-64. One dialog lists every invoice, vendor and total for a bulk push, and each push is checked against its own hash. "Download approved as CSV" exports every approved draft.
+- **Consequences:** two people can split the work, one approving and another pushing. The approver is recorded on the draft. Separate approver and pusher roles (four eyes) aren't enforced yet; that is an open product choice.
+
+### D-67: Phone camera capture: one invoice from one or more page photos, made into a PDF in the browser
+- **Context:** the user asked (8 Nov 2026, during the build) for camera support on phones, and for adding pages to the same invoice the way the Daftar project's receipt capture does.
+- **Decision:**
+  - **Flow, as in Daftar:** below the `md` breakpoint the purchase invoices page shows "Take a photo" (rear camera, `capture="environment"`) and "Gallery" (several at once). After the first photo the button reads "Add another page" with a page count, and a page list shows thumbnails, "Page n of N", rotate, move up and down, remove, and "Remove all". "Read invoice (N pages)" sends them as one invoice. Up to 10 pages.
+  - The camera input has no `multiple`, because Android Chrome then ignores `capture` and opens the file chooser (Daftar found the same).
+  - **Photos become a PDF in the browser** (`components/automation/photo.ts`, `lib/automation/purchase-invoices/photo-pdf.ts`). Each photo is:
+    - turned upright from its EXIF orientation, then by the user's quarter turns;
+    - scaled to at most 2400 px on its long side;
+    - made grayscale with its contrast stretched (2nd–98th percentile), which helps OCR on paper photos;
+    - saved as a JPEG page in a minimal multi-page PDF written by hand (no library).
+    The server sees a scanned PDF: the same upload route, local OCR (D-24), the same checks, and the PDF kept and shown on the review page. Uploads stay PDF only, and no AI is involved.
+  - **Reader fix found while testing this:** an invoice number must contain a digit, so "Invoice No:  Bill To: …" with the number left blank no longer reads as "Bill".
+- **Rejected alternatives:**
+  - Accepting JPEG/PNG on the server: the reader, storage and review screen all expect a PDF, and a multi-page invoice would need one anyway.
+  - A live in-page camera (`getUserMedia`): the phone's own camera app focuses and exposes better, and needs no permission prompt.
+  - Edge detection or perspective correction: worth it if real photos read badly; it waits on photos of real invoices.
+- **Consequences:** photos read at OCR quality, so the review page says to check the figures against the image. The demo store still takes no uploads, so the camera is offered only in real workspaces.

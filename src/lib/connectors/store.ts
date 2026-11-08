@@ -57,6 +57,8 @@ export async function setConnectionStatus(orgKey: string, id: string, status: Co
 /** Deletes the connection and its secret. Sync history is kept for the audit trail. */
 export async function deleteConnection(orgKey: string, id: string) {
   await getDb().run("DELETE FROM connections WHERE id = ? AND org_key = ?", id, orgKey);
+  // Vendors, items and accounts cached for purchase invoice capture (D-62) go with it.
+  await getDb().run("DELETE FROM erp_master_data WHERE connection_id = ? AND org_key = ?", id, orgKey);
 }
 
 export type SyncRecord = {

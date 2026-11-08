@@ -269,6 +269,7 @@ Decision (Phase 3): matching runs in TypeScript in memory rather than DuckDB. Up
 7. Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds)
 8. Go live: Postgres (Neon), object storage (Vercel Blob), key management, deploy (Vercel), job runner (D-37; the repo's Phase 7)
 9. Email (Resend: reminders, notices, password reset) and SEO pages (D-44; the repo's Phase 8)
+10. Automation: documents → reviewed ERP entries, starting with purchase invoices (§10, D-60; the repo's Phase 9)
 
 ## 8. PDF inputs
 
@@ -359,3 +360,23 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
+## 10. Automation (Phase 9, D-60–D-67)
+
+Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
+
+**Purchase invoices** (`src/lib/automation/purchase-invoices/`, `/automation/purchase-invoices`):
+
+1. **Capture** (`service.capturePdf`). Upload PDFs, up to 50 at a time and 10 MB each. With Blob on, they go from the browser straight to Blob under a per-workspace incoming folder (`incoming.ts`, D-39). Each file gets its own request to `/api/automation/purchase-invoices`. The file's SHA-256 finds a re-upload, which opens the existing draft (D-63). The PDF goes through Phase 5's `extractPdf` (§8) at line grain, with the workspace's layout memory, and the result is `PdfTable.invoice` (an `InvoiceDoc`, now with a due date) plus `issuer`. `draft.ts` turns it into a `Draft` (ISO dates, read day first; a one-line draft when there's no line table). The PDF is kept (`automation/purchase-invoices/<id>.pdf`) for review. No LLM (D-61).
+   **Phone camera** (D-67): below `md`, `components/automation/photo-pages.tsx` takes one photo per page ("Add another page", Gallery, rotate, reorder, remove; up to 10). `photo.ts` makes each page upright, grayscale and contrast-stretched, as a JPEG. `photo-pdf.ts` writes them into one multi-page PDF. That PDF uploads like any other and is read by OCR.
+2. **Match** (`matching.ts`, D-62). With a push target chosen, vendors, items and direct-posting G/L accounts are read from the ERP and cached an hour per connection (`erp_master_data`). Vendor: supplier memory → TRN → exact normalised name (legal suffixes dropped). Line: memory → SKU = item no. → GTIN → exact item name. Never fuzzy. A due date missing from the invoice comes from remembered payment terms.
+3. **Review** (D-66). The queue lists every draft with what was read, the vendor and how it matched, line coding, totals checks, blockers and duplicate warnings. A row expands to its lines. Tabs: To review, Approved, In ERP, All. Select rows to approve, download CSV or push in bulk. `/automation/purchase-invoices/[id]` shows the PDF beside an editable form (header, vendor, lines with an item or account picker, totals), with the checks run live in the browser (`reviewDraft` is browser-safe). Statuses: `needs_review` (something blocks), `ready`, `approved` (an approval holds a hash of the content and target), `pushing`, `pushed`. Saving an edit withdraws an approval.
+4. **Out.**
+   - CSV (`/api/automation/purchase-invoices/export`, D-65): one row per line, header repeated.
+   - Push (D-64): through `Connector.purchaseInvoices`. Only Business Central has it (`bcPurchaseInvoices`: `masterData`, `findExisting`, `createDraft`). The push confirmation names the company and every invoice, and sends each draft's hash. `pushMany` re-checks approval, hash and blockers, claims the row (`pushing`) and asks BC for the same vendor invoice number, then creates the header and lines, reads BC's total back, and records the BC number. If a line fails, it deletes its own half-made draft. Live calls go through `liveDeps` (`assertPublicUrl`) and the fixed API host. Reviewed vendor, item and terms choices become supplier memory (`supplier_profiles`) on push or export.
+5. **Duplicates** (D-63): same file (hash), same supplier and normalised invoice number in Sawwi (warning; refused once one is pushed), and already in BC (checked when a draft opens and refused at push). A same-supplier, same-date, same-total draft is a soft warning.
+
+**Tables** (migration 5): `purchase_invoices`, `supplier_profiles`, `erp_master_data` (deleted with its connection), `automation_prefs` (the chosen push target; `"none"` for CSV only). All are keyed by `org_key`, so the demo reset clears them; it also deletes the kept PDFs and the mock BC's in-memory drafts.
+
+**Access:** capture, approve and push go through `runBlocker()` (role, plan, trial). Viewers can see everything and download, but change nothing. The demo store takes no uploads: it has four sample invoices (`samples.ts`, PDFs as base64 in `samples-data.ts`, drawn by `fixtures/samples.ts`) and pushes to the mock Business Central, which now accepts draft purchase invoice writes, `eq` filters, and vendors, items and accounts.
+
+**Tests:** `purchase-invoices.test.ts` covers the draft model, matching, BC writes against the mock (deep insert, cleanup on failure, read-only 403, host pinning), and the demo flow end to end: capture, re-upload, approve and withdraw, push with a hash, refusal of an invoice BC already has, learning a supplier's item code, an OCR'd scan, and bulk approve plus CSV; photos made into one- and two-page PDFs and read by OCR.

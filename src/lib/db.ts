@@ -277,6 +277,52 @@ CREATE TABLE IF NOT EXISTS reset_requests (
 CREATE INDEX IF NOT EXISTS reset_requests_email ON reset_requests (email_hash, created_at);
 CREATE INDEX IF NOT EXISTS reset_requests_ip ON reset_requests (ip_hash, created_at);`,
   },
+  {
+    id: 5,
+    name: "purchase invoice capture (D-61–D-66)",
+    sql: `
+CREATE TABLE IF NOT EXISTS purchase_invoices (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_hash TEXT NOT NULL,
+  stored_path TEXT,
+  issuer_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  draft_json TEXT NOT NULL,
+  source_json TEXT NOT NULL,
+  approved_hash TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  erp_json TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS purchase_invoices_org ON purchase_invoices (org_key, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS purchase_invoices_file ON purchase_invoices (org_key, file_hash);
+CREATE TABLE IF NOT EXISTS supplier_profiles (
+  org_key TEXT NOT NULL,
+  issuer_key TEXT NOT NULL,
+  trn TEXT NOT NULL DEFAULT '',
+  profile_json TEXT NOT NULL,
+  uses INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_key, issuer_key)
+);
+CREATE TABLE IF NOT EXISTS erp_master_data (
+  org_key TEXT NOT NULL,
+  connection_id TEXT NOT NULL,
+  data_json TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (org_key, connection_id)
+);
+CREATE TABLE IF NOT EXISTS automation_prefs (
+  org_key TEXT PRIMARY KEY,
+  target_connection TEXT,
+  updated_at TEXT NOT NULL
+);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

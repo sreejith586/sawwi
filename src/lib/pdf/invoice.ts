@@ -6,12 +6,14 @@ import type { InvoiceDoc, InvoiceLine, PdfCheck } from "./types";
 // the summary block (subtotal, VAT, total). Then lines → subtotal and VAT = rate × net.
 
 const DATE = String.raw`(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}[ -][A-Za-z]{3,9}[ -,]+\d{2,4})`;
-const NUMBER = [/(?:tax\s+)?invoice\s*(?:no\.?|number|#|num)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-\/]*)/i, /رقم\s+الفاتورة\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]*)/i];
+// An invoice number has a digit: "Invoice No:  Bill To: …" with the number left blank isn't "Bill".
+const NUMBER = [/(?:tax\s+)?invoice\s*(?:no\.?|number|#|num)\s*[:.\-]?\s*((?=[A-Z\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]*)/i, /رقم\s+الفاتورة\s*[:\-]?\s*((?=[A-Z\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]*)/i];
 const CREDIT_NUMBER = /credit\s+note\s*(?:no\.?|number|#)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-\/]*)/i;
 const DATES = [
   new RegExp(String.raw`(?:invoice\s+date|date\s+of\s+(?:issue|supply)|issue\s+date|تاريخ\s+الفاتورة|تاريخ\s+الإصدار)\s*[:\-]?\s*${DATE}`, "i"),
   new RegExp(String.raw`\bdate\s*[:\-]\s*${DATE}`, "i"),
 ];
+const DUE = new RegExp(String.raw`(?:due\s+date|payment\s+due(?:\s+date)?|due\s+on|تاريخ\s+الاستحقاق)\s*[:\-]?\s*${DATE}`, "i");
 const TRN = /(?:TRN|VAT\s*(?:reg(?:istration)?\.?\s*)?(?:no\.?|number|#|id)|tax\s+registration\s+(?:no\.?|number)|الرقم\s+الضريبي|رقم\s+التسجيل\s+الضريبي)\s*[:\-]?\s*(\d{15})/gi;
 const PO = /(?:\bP\.?\s?O\.?|purchase\s+order)(?!\s*box)\s*(?:no\.?|number|#|ref\.?)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]{2,})/i;
 const SELLER = /^(?:seller|supplier|vendor|from|البائع|المورد)\s*[:\-]\s*(.+)$/i;
@@ -41,7 +43,10 @@ export function invoiceFromText(lines: Line[], table: TableExtraction | undefine
 
   for (const s of all) {
     doc.number ??= (doc.type === "Credit note" ? CREDIT_NUMBER.exec(s)?.[1] : undefined) ?? NUMBER.map((r) => r.exec(s)?.[1]).find(Boolean);
-    doc.date ??= DATES.map((r) => r.exec(s)?.[1]).find(Boolean);
+    const due = DUE.exec(s)?.[1];
+    doc.dueDate ??= due;
+    // A due date isn't the invoice date: the generic "Date:" pattern skips lines that only give one.
+    doc.date ??= DATES.map((r, i) => (i > 0 && due ? undefined : r.exec(s)?.[1])).find(Boolean);
     doc.poNumber ??= PO.exec(s)?.[1];
   }
   // "Seller:" / "Bill To:" blocks often share a line with other labels: read them per cluster.
@@ -177,6 +182,7 @@ export function invoiceMetaRows(doc: InvoiceDoc): { label: string; value: string
     ["Document", doc.type],
     ["Number", doc.number],
     ["Date", doc.date],
+    ["Due date", doc.dueDate],
     ["Seller", doc.seller],
     ["Seller VAT no.", doc.sellerVat],
     ["Buyer", doc.buyer],

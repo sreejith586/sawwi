@@ -8,7 +8,7 @@ import { demoDeps, demoSourceFor, demoSourceOffers } from "./mock";
 import { assertPublicUrl } from "./net-guard";
 import { connectorById } from "./registry";
 import * as store from "./store";
-import { ConnectorError, type ConnectorDeps, type PullWindow } from "./types";
+import { ConnectorError, type Connector, type ConnectorDeps, type PullWindow } from "./types";
 
 // Connections per workspace: add (validate + test + encrypt), remove, and pull a report
 // into a run slot. A pull becomes a CSV "upload", so mapping and matching are unchanged.
@@ -30,6 +30,28 @@ export async function addConnection(orgKey: string, provider: string, input: Rec
   const credentials = connector.parseCredentials(input);
   const { accountLabel } = await connector.test(credentials, deps);
   return await store.insertConnection({ orgKey, provider, accountLabel, secretEnc: encryptSecret(credentials, aad(orgKey, provider)), createdBy });
+}
+
+/**
+ * A connection ready to call: its connector, decrypted credentials and the deps to use. The demo
+ * store's built-in sources (D-32) answer in-process and only in the demo workspace.
+ */
+export async function openConnection(
+  orgKey: string,
+  connectionId: string,
+  deps: ConnectorDeps = liveDeps,
+): Promise<{ connector: Connector; credentials: Record<string, string>; deps: ConnectorDeps; accountLabel: string; demo: boolean }> {
+  const demo = demoSourceFor(connectionId);
+  if (demo) {
+    const connector = connectorById(demo.provider);
+    if (!connector || !isDemoOrg(orgKey)) throw new ConnectorError("That connection no longer exists.");
+    return { connector, credentials: demo.credentials, deps: demoDeps, accountLabel: demo.accountLabel, demo: true };
+  }
+  const connection = await store.getConnection(orgKey, connectionId);
+  const sealed = connection && await store.getConnectionSecret(orgKey, connectionId);
+  const connector = connection && connectorById(connection.provider);
+  if (!connection || !sealed || !connector) throw new ConnectorError("That connection no longer exists.");
+  return { connector, credentials: decryptSecret<Record<string, string>>(sealed, aad(orgKey, connector.id)), deps, accountLabel: connection.accountLabel, demo: false };
 }
 
 export function validWindow(w: PullWindow): boolean {

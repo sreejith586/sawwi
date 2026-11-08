@@ -8,15 +8,15 @@ import * as PImage from "pureimage";
 import QRCode from "qrcode";
 import { encodeZatcaQr } from "../zatca";
 
-type Cell = { text: string; x: number; align?: "left" | "right"; bold?: boolean };
+export type Cell = { text: string; x: number; align?: "left" | "right"; bold?: boolean };
 type Canvas = ReturnType<typeof PImage.make>;
 /** With `scan`, text is painted onto a page-sized bitmap instead: an image-only "scanned" page. */
-type Ctx = { page: PDFPage; font: PDFFont; bold: PDFFont; size: number; scan?: Canvas };
+export type Ctx = { page: PDFPage; font: PDFFont; bold: PDFFont; size: number; scan?: Canvas };
 
 /** Scan resolution: 2.5 × 72 = 180 dpi, a typical office scan. */
 const SCAN_SCALE = 2.5;
 
-function draw(ctx: Ctx, y: number, cells: Cell[]) {
+export function draw(ctx: Ctx, y: number, cells: Cell[]) {
   for (const c of cells) {
     const font = c.bold ? ctx.bold : ctx.font;
     // Liberation Sans (used for scans) has the same metrics as Helvetica, so alignment matches.
@@ -41,7 +41,7 @@ function loadScanFonts() {
   return fontsLoaded;
 }
 
-async function newScan(page: PDFPage): Promise<Canvas> {
+export async function newScan(page: PDFPage): Promise<Canvas> {
   await loadScanFonts();
   const img = PImage.make(Math.round(page.getWidth() * SCAN_SCALE), Math.round(page.getHeight() * SCAN_SCALE));
   const g = img.getContext("2d");
@@ -51,7 +51,7 @@ async function newScan(page: PDFPage): Promise<Canvas> {
 }
 
 /** Places each page's bitmap as a full-page image: the PDF has no text layer at all. */
-async function finishScans(doc: PDFDocument, scans: { page: PDFPage; img: Canvas }[]) {
+export async function finishScans(doc: PDFDocument, scans: { page: PDFPage; img: Canvas }[]) {
   for (const { page, img } of scans) {
     const chunks: Buffer[] = [];
     const out = new PassThrough();
@@ -62,7 +62,7 @@ async function finishScans(doc: PDFDocument, scans: { page: PDFPage; img: Canvas
   }
 }
 
-async function newDoc() {
+export async function newDoc() {
   const doc = await PDFDocument.create();
   doc.setProducer("Sawwi test fixtures");
   doc.setCreationDate(new Date("2026-02-01T00:00:00Z"));

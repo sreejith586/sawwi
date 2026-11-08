@@ -1,6 +1,6 @@
 # Sawwi
 
-Reconciliation for e-commerce sellers in the GCC: marketplace sellers, own webstores (Shopify,
+Reconciliation and automation for e-commerce sellers in the GCC: marketplace sellers, own webstores (Shopify,
 Magento 1 & 2, WooCommerce, Salla, Zid) and companies selling directly to businesses.
 
 Product and architecture plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Deploying: [docs/DEPLOY.md](docs/DEPLOY.md). Where things stand: [docs/PROGRESS.md](docs/PROGRESS.md). Why: [docs/DECISIONS.md](docs/DECISIONS.md). How to contribute (PRs, docs in every commit): [docs/PROCESS.md](docs/PROCESS.md).
@@ -71,6 +71,16 @@ pnpm build
     and their gateway, courier, warehouse, bank, customs and statement files). Start any reconciliation, click **Fill with demo data**, then
     **Run reconciliation**. No account needed; uploads and AI calls are off there, and it resets every
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
+15. **Automation → Purchase invoices** (D-60–D-66): upload supplier invoice PDFs (text, scans, ZATCA
+    e-invoices), up to 50 at a time, or on a phone photograph an invoice page by page. Each becomes a draft: supplier, TRN, invoice number and dates,
+    currency, lines and totals, read with no AI. A review queue shows them all with their checks, for
+    approving one at a time or in bulk. Each invoice also has a review page with its PDF next to an
+    editable form. Approved drafts download as CSV, or push to Business Central as unposted purchase
+    invoices after a confirmation. Vendors and items are matched to Business Central's, and choices are
+    remembered per supplier. In the demo store, try the four sample invoices against the mock Business
+    Central. To push to a real tenant, the connection's Entra app needs a permission set that can create
+    purchase documents (e.g. D365 PURCH DOC, EDIT). Re-make the sample PDFs with
+    `pnpm dlx tsx scripts/make-purchase-invoice-samples.mts`.
 
 Local data lives in `.data/`, which is git-ignored: the database (`.data/pglite`, an in-process
 Postgres, D-37) and files (`.data/files`; a private Vercel Blob store when one is connected (`BLOB_STORE_ID`) or `BLOB_READ_WRITE_TOKEN` is set, D-39). Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon

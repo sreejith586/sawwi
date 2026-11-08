@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { deletePrefixes, fileKeys } from "@/lib/files/storage";
+import { deleteFiles, deletePrefixes, fileKeys } from "@/lib/files/storage";
 
 // SQL for the demo store's daily reset (D-32). The wipe is generic: every table with a run_id
 // column loses the demo's runs' rows, and every table with an org_key column loses the demo's
@@ -18,6 +18,8 @@ export async function setDemoState(key: string, value: string) {
 export async function wipeOrgData(orgKey: string): Promise<Record<string, number>> {
   const db = getDb();
   const runIds = (await db.all<{ id: string }>("SELECT id FROM runs WHERE org_key = ?", orgKey)).map((r) => r.id);
+  // Captured purchase invoice PDFs (D-61) are filed by their own id, not the run's.
+  const pdfs = (await db.all<{ stored_path: string }>("SELECT stored_path FROM purchase_invoices WHERE org_key = ? AND stored_path IS NOT NULL", orgKey)).map((r) => r.stored_path);
   const cols = await db.all<{ table_name: string; column_name: string }>(
     `SELECT table_name, column_name FROM information_schema.columns
      WHERE table_schema = current_schema() AND column_name IN ('run_id', 'org_key') ORDER BY table_name`,
@@ -36,5 +38,6 @@ export async function wipeOrgData(orgKey: string): Promise<Record<string, number
     }
   });
   await deletePrefixes(runIds.flatMap(fileKeys.runPrefixes));
+  if (pdfs.length) await deleteFiles(pdfs);
   return removed;
 }
