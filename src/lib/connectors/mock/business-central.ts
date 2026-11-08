@@ -43,7 +43,7 @@ const LINES: Record<string, string> = {
   salesCreditMemos: "salesCreditMemoLines",
 };
 
-const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA), "vendors", "accounts"]);
+const ENTITIES = new Set([...Object.keys(LINES), ...Object.keys(DEMO_STORE_DATA), "vendors", "accounts", "journals", "generalLedgerEntries"]);
 
 type Reply = { status: number; body: unknown; headers?: Record<string, string> };
 const reply = (r: Reply) => ({
@@ -114,13 +114,50 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     if (tenant !== demo.tenantId || environment !== demo.environment) return reply(odataError(404, "BadRequest_NotFound", "Environment not found."));
     if (rest === "companies") return reply({ status: 200, body: { value: COMPANIES } });
 
-    const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)(?:\(([^)]+)\)(?:\/(\w+))?)?$/);
+    const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)(?:\(([^)]+)\)(?:\/(\w+)(?:\(([^)]+)\))?)?)?$/);
     if (!cm) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
-    const [, companyId, entity, docId, sub] = cm;
+    const [, companyId, entity, docId, sub, subId] = cm;
     if (!COMPANIES.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
     const books = BOOKS[companyId] ?? EMPTY;
     const drafts = writes.get(companyId) ?? [];
     writes.set(companyId, drafts);
+
+    // General journal lines (D-71): list, filter by document number, add and delete; unposted, in memory.
+    if (entity === "journals" && docId) {
+      const batch = (books.data.journals ?? []).find((j) => j.id === docId);
+      if (!batch || sub !== "journalLines") return reply(odataError(404, "BadRequest_NotFound", "The journal does not exist."));
+      const key = `${companyId}/journal/${docId}`;
+      const lines = writes.get(key) ?? [];
+      writes.set(key, lines);
+      if (init.method !== "GET" && opts.readOnly) return reply(odataError(403, "Authorization_InsufficientPermissions", "You do not have the following permissions on TableData Gen. Journal Line: Insert."));
+      if (init.method === "GET" && !subId) {
+        const filter = u.searchParams.get("$filter");
+        const eq = filter ? eqFilter(filter) : [];
+        if (!eq) return reply(odataError(400, "BadRequest", `Unsupported filter in the mock: ${filter}`));
+        return reply({ status: 200, body: { value: lines.filter((l) => eq.every(([k, v]) => String(l[k] ?? "") === v)) } });
+      }
+      if (init.method === "DELETE" && subId) {
+        const i = lines.findIndex((l) => l.id === subId);
+        if (i < 0) return reply(odataError(404, "BadRequest_NotFound", "The journal line does not exist."));
+        lines.splice(i, 1);
+        return reply({ status: 204, body: {} });
+      }
+      if (init.method === "POST" && !subId) {
+        let body: Doc;
+        try {
+          body = JSON.parse(init.body ?? "{}") as Doc;
+        } catch {
+          return reply(odataError(400, "BadRequest", "Invalid JSON."));
+        }
+        const account = (books.data.accounts ?? []).find((a) => a.number === body.accountNumber);
+        if (body.accountType !== "G/L Account" || !account) return reply(odataError(400, "Internal_RecordNotFound", `The G/L Account does not exist. Identification fields and values: No.='${String(body.accountNumber)}'`));
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.postingDate))) return reply(odataError(400, "BadRequest", "Posting Date must have a value."));
+        const line = { id: newId(), journalId: docId, lineNumber: (lines.length + 1) * 10000, ...body, accountId: account.id };
+        lines.push(line);
+        return reply({ status: 201, body: line });
+      }
+      return reply(odataError(405, "BadRequest_MethodNotAllowed", "Not supported by the mock."));
+    }
 
     // Writes: draft purchase invoices only (D-64).
     if (init.method !== "GET" || docId) {

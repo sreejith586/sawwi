@@ -1,5 +1,5 @@
 import { num, str } from "./format";
-import { ConnectorError, type Connector, type ConnectorDeps, type ErpDocumentRef, type ErpMasterData, type ErpPurchaseInvoice, type PullWindow, type PurchaseInvoiceWriter } from "./types";
+import { ConnectorError, type Connector, type ConnectorDeps, type ErpDocumentRef, type ErpMasterData, type ErpPurchaseInvoice, type JournalWriter, type PullWindow, type PurchaseInvoiceWriter } from "./types";
 
 // Microsoft Dynamics 365 Business Central (online), standard API v2.0 (D-29).
 //
@@ -484,6 +484,70 @@ export const bcPurchaseInvoices: PurchaseInvoiceWriter<BusinessCentralCredential
   },
 };
 
+// ─── Writes: unposted general journal lines (D-71) ─────────────────────────────
+
+const JOURNAL_FORBIDDEN =
+  "Business Central didn't let the app add journal lines. Give the app (on “Microsoft Entra Applications”) a permission set that can edit general journals, such as D365 JOURNALS, EDIT, next to D365 READ.";
+
+export const bcJournals: JournalWriter<BusinessCentralCredentials> = {
+  async accounts(creds, deps) {
+    const s = await openSession(creds, deps);
+    const { root, lcy, name } = await companyContext(s);
+    const open = (d: Doc) => !d.blocked && d.directPosting !== false && (d.accountType ?? "Posting") === "Posting";
+    return { company: name, lcy, accounts: (await collect(s, `${root}/accounts`)).filter(open).map((a) => ({ number: str(a.number), name: str(a.displayName) })) };
+  },
+
+  async listJournals(creds, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    return (await collect(s, `${root}/journals`)).map((j) => ({ id: str(j.id), code: str(j.code), name: str(j.displayName) || str(j.code) }));
+  },
+
+  async findDocument(creds, journalId, documentNumber, deps) {
+    const s = await openSession(creds, deps);
+    const { root } = await companyContext(s);
+    if (!GUID.test(journalId)) throw new ConnectorError("Pick the journal batch again.");
+    const filter = encodeURIComponent(`documentNumber eq ${odataString(documentNumber)}`);
+    const unposted = await collect(s, `${root}/journals(${journalId})/journalLines?$filter=${filter}`);
+    const posted = await collect(s, `${root}/generalLedgerEntries?$filter=${filter}`);
+    return [
+      ...(unposted.length ? [{ where: "unposted" as const, detail: `${unposted.length} unposted line${unposted.length === 1 ? "" : "s"} in the journal batch` }] : []),
+      ...(posted.length ? [{ where: "posted" as const, detail: `posted on ${str(posted[0].postingDate)}` }] : []),
+    ];
+  },
+
+  async createLines(creds, journalId, lines, deps) {
+    const s = await openSession(creds, deps);
+    const { root, name } = await companyContext(s);
+    if (!GUID.test(journalId)) throw new ConnectorError("Pick the journal batch again.");
+    const base = `${root}/journals(${journalId})/journalLines`;
+    const created: string[] = [];
+    try {
+      for (const l of lines) {
+        const res = await sendJson(s, "POST", base, {
+          accountType: "G/L Account",
+          accountNumber: l.accountNumber,
+          postingDate: l.postingDate,
+          documentNumber: l.documentNumber.slice(0, 20),
+          externalDocumentNumber: l.externalDocumentNumber.slice(0, 35),
+          amount: l.amount,
+          description: l.description.slice(0, 100),
+        }).catch((error: unknown) => {
+          throw error instanceof ConnectorError && /didn't let the app create a purchase invoice/.test(error.message) ? new ConnectorError(JOURNAL_FORBIDDEN) : error;
+        });
+        const id = str(res.id);
+        if (/^[0-9a-f-]{36}$/i.test(id)) created.push(id);
+      }
+    } catch (error) {
+      // Only the lines this push added, by id.
+      for (const id of created) await sendJson(s, "DELETE", `${base}(${id})`).catch(() => undefined);
+      throw error;
+    }
+    const batch = (await collect(s, `${root}/journals`)).find((j) => str(j.id) === journalId);
+    return { company: name, journal: str(batch?.code) || "journal", count: created.length };
+  },
+};
+
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
@@ -535,4 +599,5 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
   },
 
   purchaseInvoices: bcPurchaseInvoices,
+  journals: bcJournals,
 };

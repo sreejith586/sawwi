@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { AutomationIcon, InvoiceIcon } from "@/components/icons";
+import { AutomationIcon, InvoiceIcon, RunsIcon } from "@/components/icons";
 import { buttonClass } from "@/components/ui";
 import { listCaptures } from "@/lib/automation/purchase-invoices/store";
+import { listJournals } from "@/lib/automation/settlements/store";
 import { USE_CASES } from "@/lib/automation/use-cases";
 import { getCurrentSession } from "@/lib/saas/session";
 
@@ -12,21 +13,23 @@ export const metadata: Metadata = { title: "Automation" };
 // The Automation section (D-60): use cases that turn documents into ERP entries. The live one
 // opens its workspace; the backlog is shown in value order, marked "Coming soon".
 
-async function LiveCounts() {
+async function LiveCounts({ id }: { id: string }) {
   const session = await getCurrentSession();
   if (!session) return null;
-  const all = await listCaptures(session.org.key);
+  const all = id === "purchase-invoices" ? await listCaptures(session.org.key) : await listJournals(session.org.key);
   const count = (s: string) => all.filter((c) => c.status === s).length;
   const toReview = count("needs_review") + count("ready");
   return (
     <p className="mt-3 text-xs text-muted">
-      {all.length === 0 ? "No invoices yet." : `${toReview} to review · ${count("approved")} approved · ${count("pushed")} sent to the ERP`}
+      {all.length === 0 ? "None yet." : `${toReview} to review · ${count("approved")} approved · ${count("pushed")} sent to the ERP`}
     </p>
   );
 }
 
 export default function AutomationPage() {
-  const [live, ...soon] = USE_CASES;
+  const live = USE_CASES.filter((u) => u.status === "live");
+  const soon = USE_CASES.filter((u) => u.status !== "live");
+  const ICONS: Record<string, typeof InvoiceIcon> = { "purchase-invoices": InvoiceIcon, "marketplace-settlements": RunsIcon };
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Automation</h1>
@@ -37,23 +40,30 @@ export default function AutomationPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold">Available now</h2>
-        <div className="mt-3 rounded-xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-wrap items-start gap-4">
-            <span className="grid size-10 place-items-center rounded-lg bg-brand-soft text-brand">
-              <InvoiceIcon className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{live.title}</p>
-              <p className="text-xs text-muted">{live.flow}</p>
-              <p className="mt-2 max-w-2xl text-sm">{live.summary}</p>
-              <Suspense fallback={<p className="mt-3 text-xs text-muted">…</p>}>
-                <LiveCounts />
-              </Suspense>
-            </div>
-            <Link href={live.href!} className={buttonClass("primary")}>
-              Open
-            </Link>
-          </div>
+        <div className="mt-3 space-y-3">
+          {live.map((u) => {
+            const Icon = ICONS[u.id] ?? AutomationIcon;
+            return (
+              <div key={u.id} className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+                <div className="flex flex-wrap items-start gap-4">
+                  <span className="grid size-10 place-items-center rounded-lg bg-brand-soft text-brand">
+                    <Icon className="size-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{u.title}</p>
+                    <p className="text-xs text-muted">{u.flow}</p>
+                    <p className="mt-2 max-w-2xl text-sm">{u.summary}</p>
+                    <Suspense fallback={<p className="mt-3 text-xs text-muted">…</p>}>
+                      <LiveCounts id={u.id} />
+                    </Suspense>
+                  </div>
+                  <Link href={u.href!} className={buttonClass("primary")}>
+                    Open
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

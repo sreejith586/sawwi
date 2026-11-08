@@ -82,6 +82,10 @@ pnpm build
     Central. To push to a real tenant, the connection's Entra app needs a permission set that can create
     purchase documents (e.g. D365 PURCH DOC, EDIT). Re-make the sample PDFs with
     `pnpm dlx tsx scripts/make-purchase-invoice-samples.mts`.
+16. **Automation → Marketplace settlements** (D-70–D-73): upload settlement reports (Amazon flat files, Noon or any
+    marketplace's CSV, Excel or PDF), map each kind of amount to a G/L account once, and get one balanced journal per
+    settlement. Review and approve them, then download CSV or add them to a Business Central journal batch, unposted.
+    In the demo store, try the two sample reports.
 
 Local data lives in `.data/`, which is git-ignored: the database (`.data/pglite`, an in-process
 Postgres, D-37) and files (`.data/files`; a private Vercel Blob store when one is connected (`BLOB_STORE_ID`) or `BLOB_READ_WRITE_TOKEN` is set, D-39). Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon

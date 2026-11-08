@@ -53,6 +53,8 @@ export type Connector<C extends Record<string, string> = Record<string, string>>
   pull(credentials: C, report: string, window: PullWindow, deps: ConnectorDeps): Promise<ParsedTable>;
   /** Writing draft purchase invoices (D-64). Only connectors that can are push targets. */
   purchaseInvoices?: PurchaseInvoiceWriter<C>;
+  /** Writing unposted general journal lines (D-71). */
+  journals?: JournalWriter<C>;
 };
 
 // ─── Writes (D-64) ───────────────────────────────────────────────────────────
@@ -89,3 +91,16 @@ export type PurchaseInvoiceWriter<C> = {
 
 /** A problem the user can act on (bad token, wrong shop, missing scope). */
 export class ConnectorError extends Error {}
+
+export type ErpJournalLine = { accountNumber: string; postingDate: string; documentNumber: string; externalDocumentNumber: string; amount: number; description: string };
+
+export type JournalWriter<C> = {
+  /** G/L accounts that allow direct posting, and the company's local currency. */
+  accounts(credentials: C, deps: ConnectorDeps): Promise<{ company: string; lcy: string; accounts: { number: string; name: string }[] }>;
+  /** General journal batches. */
+  listJournals(credentials: C, deps: ConnectorDeps): Promise<{ id: string; code: string; name: string }[]>;
+  /** The document number among the batch's unposted lines or the posted G/L entries (D-72). */
+  findDocument(credentials: C, journalId: string, documentNumber: string, deps: ConnectorDeps): Promise<{ where: "unposted" | "posted"; detail: string }[]>;
+  /** Adds unposted lines to the batch; never posts. On a failed line, deletes the lines it added. */
+  createLines(credentials: C, journalId: string, lines: ErpJournalLine[], deps: ConnectorDeps): Promise<{ company: string; journal: string; count: number }>;
+};

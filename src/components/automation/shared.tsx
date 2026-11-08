@@ -112,3 +112,69 @@ export function ResultList({ results }: { results: { ok: boolean; message?: stri
     </ul>
   );
 }
+
+/** The same explicit confirmation as PushDialog (D-64), for any document: it lists exactly what is sent. */
+export function ConfirmPushDialog(props: {
+  open: boolean;
+  title: string;
+  body: React.ReactNode;
+  headers: [string, string, string];
+  rows: { id: string; cells: [React.ReactNode, React.ReactNode, React.ReactNode] }[];
+  footer?: React.ReactNode;
+  confirmLabel: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (props.open && !d.open) d.showModal();
+    if (!props.open && d.open) d.close();
+  }, [props.open]);
+  return (
+    <dialog
+      ref={ref}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!props.busy) props.onCancel();
+      }}
+      className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/40"
+    >
+      <div className="p-5">
+        <h2 className="text-base font-semibold">{props.title}</h2>
+        <div className="mt-1 text-sm text-muted">{props.body}</div>
+        <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-muted text-left text-xs text-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">{props.headers[0]}</th>
+                <th className="px-3 py-2 font-medium">{props.headers[1]}</th>
+                <th className="px-3 py-2 text-right font-medium">{props.headers[2]}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((r) => (
+                <tr key={r.id} className="border-t border-border">
+                  <td className="px-3 py-2">{r.cells[0]}</td>
+                  <td className="px-3 py-2">{r.cells[1]}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.cells[2]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {props.footer && <div className="mt-2 text-right text-sm">{props.footer}</div>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={buttonClass("secondary")} onClick={props.onCancel} disabled={props.busy}>
+            Cancel
+          </button>
+          <button type="button" className={buttonClass("primary")} onClick={props.onConfirm} disabled={props.busy} autoFocus>
+            {props.busy ? "Pushing…" : props.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
