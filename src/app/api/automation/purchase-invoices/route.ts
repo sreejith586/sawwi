@@ -4,6 +4,9 @@ import { getCurrentSession, runBlocker } from "@/lib/saas/session";
 import { discardIncomingPdfs, MAX_PDFS_PER_UPLOAD, readIncomingPdfs } from "@/lib/automation/purchase-invoices/incoming";
 import { capturePdf, CaptureError, MAX_PDF_BYTES } from "@/lib/automation/purchase-invoices/service";
 
+/** OCR of a scan plus an AI reading (D-69) can take a while; this covers the server actions on the page too. */
+export const maxDuration = 300;
+
 // Supplier invoice PDFs in, one draft each (D-61). A route handler, not an action: actions cap
 // bodies at 1 MB. Two shapes, as for reconciliation uploads (D-39): multipart files (no Blob
 // store), or JSON { uploads: [{ pathname, name }] } naming PDFs already put in the Blob store.

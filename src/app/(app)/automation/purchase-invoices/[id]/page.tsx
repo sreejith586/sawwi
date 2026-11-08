@@ -5,8 +5,12 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { currentTarget, getView, masterData } from "@/lib/automation/purchase-invoices/service";
 import { getMasterData } from "@/lib/automation/purchase-invoices/store";
+import { llmAvailable } from "@/lib/mapping/llm";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
 import { Review } from "./review";
+
+/** OCR of a scan plus an AI reading (D-69) can take a while; this covers the server actions on the page too. */
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: "Review purchase invoice" };
 
@@ -40,6 +44,7 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
       target={target ?? null}
       master={md ? { company: md.company, vendors: md.vendors, items: md.items, accounts: md.accounts } : null}
       canEdit={canRun(session.access)}
+      aiAvailable={llmAvailable(orgKey)}
     />
   );
 }

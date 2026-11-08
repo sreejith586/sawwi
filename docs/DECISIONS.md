@@ -763,3 +763,36 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - A live in-page camera (`getUserMedia`): the phone's own camera app focuses and exposes better, and needs no permission prompt.
   - Edge detection or perspective correction: worth it if real photos read badly; it waits on photos of real invoices.
 - **Consequences:** photos read at OCR quality, so the review page says to check the figures against the image. The demo store still takes no uploads, so the camera is offered only in real workspaces.
+
+### D-68: Approving and pushing can be the same person
+- **Context:** D-66 left open whether approving and pushing should be separate roles. The user decided (8 Nov 2026): they can be the same.
+- **Decision:** any editor or above can approve and push, including an invoice they approved themselves. The approver and the pusher are still recorded on each draft. No separate approver role.
+- **Consequences:** no change to the code from D-66. A four-eyes option can be added later per workspace if a customer asks.
+
+### D-69: AI-assisted reading when the rules fall short, accuracy first
+- **Context:** D-61 kept capture rule-only and left an AI fallback open. The user decided (8 Nov 2026) that AI assistance is required where the rules can't read an invoice, with "no compromise in accuracy as much as possible".
+- **Decision:**
+  - **Rules first, still.** A supplier whose invoice the rules read completely, with every check passing, costs nothing, as in D-61.
+  - **When the AI is asked:**
+    - the rules can't read the PDF as an invoice (unreadable scan, unusual layout);
+    - a totals check fails;
+    - the invoice number, date, total, supplier or line items are missing, or lines are incomplete;
+    - only the ZATCA QR could be read;
+    - OCR confidence is below 85%;
+    - or the user clicks "Read again with AI" on a draft not yet pushed.
+  - **Model and settings, for accuracy:** Claude Opus 5.5 (`claude-opus-5-5`, the most capable default model) at effort `high`. It reads the PDF itself (text and page images, so scans and photos too), with structured output against a fixed schema and the server-side refusal fallback. The instructions are byte-stable and cached for an hour (D-4). They tell the model to copy what is printed and never compute or infer a figure; anything not printed is null. Net = qty × price is the only figure Sawwi fills in.
+  - **Verification:**
+    - the AI's reading goes through the same totals checks as a rule-read draft;
+    - it is kept unless it checks worse than the rules' reading, or says the document isn't an invoice while the rules read one;
+    - blank header fields are filled from the other reading;
+    - every field the two read differently (TRN, number, dates, currency, net, VAT, total, line count) is shown as "Check against the PDF";
+    - the AI's own notes are shown, and the draft is marked "Read by AI" in the queue and on the review page;
+    - nothing read by AI skips review, since approval (D-66) is still required.
+  - **No AI in the demo store** (`llmAvailable`, D-32), and none without an API key; then the rules' reading stands as before.
+  - **Cost:** each AI reading is logged as "Invoice reading (AI)". Since there is no run, `llm_usage` gains an `org_key` (migration 6), so the usage dashboard counts it for the workspace. A one- or two-page invoice is a few thousand input tokens: a few US cents on Opus 5.5.
+  - **Time:** the capture route and the pages' server actions allow 300 seconds (`maxDuration`), for OCR plus an AI reading.
+- **Rejected alternatives:**
+  - The AI on every invoice: it costs every time, and the rules are exact where they work.
+  - Sonnet or Haiku for this: the user put accuracy first.
+  - Sending the rules' reading to the AI as a hint: it would anchor the AI on the rules' mistakes. The two readings are independent, then compared.
+- **Consequences:** a repeat supplier whose layout the rules can't read is read by AI each time. Learning a layout recipe from an AI reading is a possible follow-up. Live checks against the API wait for the user, as tests use a fake reader.

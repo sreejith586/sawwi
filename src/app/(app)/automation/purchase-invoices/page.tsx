@@ -11,6 +11,9 @@ import { getMasterData } from "@/lib/automation/purchase-invoices/store";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
 import { Queue, type QueueRow } from "./queue";
 
+/** OCR of a scan plus an AI reading (D-69) can take a while; this covers the server actions on the page too. */
+export const maxDuration = 300;
+
 export const metadata: Metadata = { title: "Purchase invoices" };
 
 async function Workspace() {
@@ -30,6 +33,7 @@ async function Workspace() {
     checksOk: v.review.checks.every((c) => c.ok),
     hash: v.hash,
     method: v.source.method,
+    ai: v.source.ai?.used === "ai",
     layout: v.source.layout ?? null,
     erpNumber: v.erp?.number ?? null,
     createdAt: v.createdAt,
