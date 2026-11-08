@@ -659,3 +659,9 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Orders instead of invoices: orders that aren't invoiced yet aren't owed a posting.
   - A percentage tolerance: the engine compares absolute amounts, and 1.00 in base currency covers rounding at GCC rates.
 - **Consequences:** 30 templates. Magento has eleven reports, Business Central twelve.
+
+### D-59: A GitHub Action deletes a PR's Neon preview database when the PR closes
+- **Context:** Vercel's Neon integration creates a database branch (`preview/<git branch>`) for each new preview git branch, and nothing deletes it. On Neon's Free plan, 10 branches fill up after 9 previews. From 7 Nov 2026 every preview of a new branch failed in about a second with `Resource provisioning failed` (PRs #29–#38), while production kept deploying. The user deleted the 9 stale branches by hand on 8 Nov.
+- **Decision:** a workflow, `.github/workflows/neon-preview-cleanup.yml`, runs on `pull_request: closed` (merged or not, since a closed PR's preview is no longer needed) and deletes the Neon branch named `preview/<head branch>` through the Neon API. It only ever deletes a branch whose name starts with `preview/` and that isn't the default branch. If the branch doesn't exist, or the secret and variable aren't set, it succeeds without deleting anything. It can also be run by hand for one git branch. Fork PRs are skipped (they get no secrets). It uses `curl` and `jq` rather than a third-party action, so no outside code runs with the key.
+- **Consequences:** needs a `NEON_API_KEY` secret and a `NEON_PROJECT_ID` variable in the GitHub repository; the user adds them. Reopening a PR makes a new database branch on its next preview. More than 9 PRs open at the same time still fill the Free plan. Previews still get their own database branch, so they never touch production data (DEPLOY.md).
+

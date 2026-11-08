@@ -21,22 +21,17 @@ _Updated in every commit. Newest first within each section._
 
 | Work | Branch | PR | Owner |
 | --- | --- | --- | --- |
-| Phase 8: email foundation, reminders, notices (D-44, D-45) | `feature/phase-8-email-reminders` | #25 | Phase 8 session |
-| Phase 8: password reset (D-46), based on #25 | `feature/phase-8-password-reset` | #26 | Phase 8 session |
-| Phase 8: SEO pages (D-47), based on #26 | `feature/phase-8-seo-pages` | this PR | Phase 8 session |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
-| Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
-| AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
-| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
-| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
-| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | PR 3 | Magento↔BC session |
-| 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | PR 4 | Magento↔BC session |
-| 5: webstore sales by payment method vs. payouts and bank (D-56), based on PR 4 | `feature/magento-payouts-by-method` | #36 | Magento↔BC session |
-| 6: gift cards and store credit roll-forward, Adobe Commerce (D-57), based on PR 5 | `feature/magento-gift-cards` | PR 6 | Magento↔BC session |
-| 7: multi-store, multi-currency store invoices vs. ERP (D-58), based on PR 6 | `feature/magento-multi-currency` | this PR | Magento↔BC session |
+| Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
+
+Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
 
+- **Vercel previews failing; preview databases now deleted when a PR closes** (D-59, `ci/neon-preview-cleanup`).
+  - Every preview of a new git branch since 7 Nov failed within a second with `Resource provisioning failed`. The Neon integration's 10-branch Free plan was full of databases from previews of merged PRs. The user deleted them on 8 Nov.
+  - New workflow `.github/workflows/neon-preview-cleanup.yml` deletes `preview/<branch>` in Neon when its PR closes.
+  - The `NEON_API_KEY` secret and `NEON_PROJECT_ID` variable are set in GitHub (8 Nov). The first real run is this PR's own close, which should delete `preview/ci/neon-preview-cleanup`.
 - **Multi-store, multi-currency store invoices vs. ERP** (D-58, `feature/magento-multi-currency`, PR 7 of the stack, based on PR 6; scenario 10, added by the user).
   - New template `web-erp-fx`: each store view's invoices at the base value Magento recorded against Business Central's local-currency amount (tolerance 1.00). It also flags invoices in the wrong currency, invoices not posted, and stores missing from Business Central (by Global Dimension 1).
   - Magento connector: new `invoice_currencies` report (store view, currencies, recorded rate). Business Central connector: new `web_sales_invoices_fx` report, with local currency worked out from the exchange rates table on the posting date (API v2.0 documents have no currency factor).
