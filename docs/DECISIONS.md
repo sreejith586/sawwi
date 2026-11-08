@@ -665,3 +665,69 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Decision:** a workflow, `.github/workflows/neon-preview-cleanup.yml`, runs on `pull_request: closed` (merged or not, since a closed PR's preview is no longer needed) and deletes the Neon branch named `preview/<head branch>` through the Neon API. It only ever deletes a branch whose name starts with `preview/` and that isn't the default branch. If the branch doesn't exist, or the secret and variable aren't set, it succeeds without deleting anything. It can also be run by hand for one git branch. Fork PRs are skipped (they get no secrets). It uses `curl` and `jq` rather than a third-party action, so no outside code runs with the key.
 - **Consequences:** needs a `NEON_API_KEY` secret and a `NEON_PROJECT_ID` variable in the GitHub repository; the user adds them. Reopening a PR makes a new database branch on its next preview. More than 9 PRs open at the same time still fill the Free plan. Previews still get their own database branch, so they never touch production data (DEPLOY.md).
 
+
+### D-60: Phase 9 is Automation, a peer of Reconciliation; purchase invoice capture first
+- **Context:** the user wants Sawwi to do work as well as check it: turn documents GCC e-commerce sellers type in by hand into ERP entries. Purchase invoices come first. The other use cases are to be researched and shown as "coming soon", ranked by value.
+- **Decision:**
+  - A new **Automation** section sits beside Reconciliation in the sidebar. The nav is grouped: Home; Reconcile (Reconciliations, Templates, Schedules); Automate (Automation).
+  - `/automation` lists the use cases. The one that's live opens its workspace; the rest are cards marked "Coming soon", in value order. The list lives in code (`src/lib/automation/use-cases.ts`), with a value score and the reason for it, so ranking changes go through review.
+  - **First use case: purchase invoices** at `/automation/purchase-invoices`. Upload supplier invoice PDFs (text, scans or ZATCA e-invoices) and get a draft per invoice. Review and correct it, then download CSV or push it to Business Central as an unposted purchase invoice.
+  - **Ranked backlog**, by value = documents a month × minutes saved per document × cost of a mistake, with what Sawwi already has noted:
+    1. Marketplace settlements (Amazon, Noon, Namshi, Trendyol) → journal entries. Every seller has them, every fortnight, with dozens of fee lines each. Settlements are already parsed for reconciliation.
+    2. COD remittances (Aramex, SMSA, J&T, Quiqup…) → cash receipts applied to orders. Cash on delivery is still a large share of GCC orders, and applying remittances order by order is the slowest manual job.
+    3. Payment gateway and BNPL payouts (Tabby, Tamara, Checkout.com, PayTabs, Tap, Stripe) → cash receipts plus fee and VAT-on-fee entries.
+    4. Supplier credit notes → draft purchase credit memos. Almost free once purchase invoices exist: the reader already tells credit notes apart.
+    5. Ad and SaaS bills (Meta, Google, TikTok, Shopify…) → purchase invoices with reverse-charge VAT. Monthly, foreign suppliers, and the VAT treatment is easy to get wrong.
+    6. Supplier statements → payment proposals: pay what's due, matched and not disputed. Builds on the supplier statement template.
+    7. Import and customs bills → landed cost (item charges spread over receipts). High value per document, but fewer documents and a harder allocation.
+    8. New suppliers from their TRN or VAT certificate → vendor cards. Rare, but it closes the "vendor not found" gap in purchase invoice capture.
+  - **Considered and left out for now:** VAT return workpapers (a report, not an entry), and sales invoices for B2B customers (already made in the ERP).
+- **Consequences:** Phase 9 opens with one PR: the plan, the section, the purchase invoice flow end to end against the mock Business Central, and the backlog. Each later use case is its own PR and decision.
+
+### D-61: Purchase invoice capture: the Phase 5 reader, no LLM, supplier memory learned from corrections
+- **Context:** repeat suppliers must cost nothing to read. Phase 5's reader (ARCHITECTURE §8, D-24) already reads invoices with no AI: embedded ZATCA XML, then the text layer or local OCR of scans, with the ZATCA QR for totals. It remembers a table layout per issuer in `pdf_layouts`.
+- **Decision:**
+  - **Reading:** `extractPdf` at line grain, with the workspace's layout memory, so a supplier's line table is learned the first time and reused after. The reader now also picks up the due date ("Due date", "Payment due") and keeps it apart from the invoice date. Dates become ISO, read day-first as in the GCC.
+  - **No LLM in v1.** Rules plus the review screen cover the fields; a supplier whose layout the rules can't read is fixed once by hand, and the fix is remembered. A Haiku fallback for a first-time supplier's missing header fields (text only, cached per supplier) is left for later and would be its own decision.
+  - **Supplier memory** (`supplier_profiles`, per workspace, keyed by the reader's issuer key, with the TRN as a second key):
+    - the ERP vendor the user picked;
+    - supplier SKU or description → ERP item or G/L account, from each line the user mapped;
+    - payment terms in days, used when an invoice has no due date.
+    These are saved when a draft is pushed or exported, not on every keystroke, so only reviewed choices are learned.
+  - **The source PDF is kept** with its draft (`automation/<org>/purchase-invoices/<id>.pdf`), so review shows the document next to the form. That's unlike reconciliation uploads (D-39), which aren't kept. It is deleted with the draft. Uploads go to Blob from the browser where Blob is on, as in D-39.
+  - **Checks** are the reader's (lines add up to the subtotal, VAT = rate × net, net + VAT = total) and are run again on the edited draft. A draft can't be pushed while a total check fails, nor while a line has no item or account, nor without a vendor.
+- **Consequences:** no AI cost per invoice. A supplier whose PDF has no line table still gives a one-line draft (net, VAT, total) the user can split. OCR'd drafts say so and ask for a closer look.
+
+### D-62: Matching suppliers and items to Business Central records
+- **Decision:**
+  - **Vendor**, first hit wins: the supplier memory; then TRN equal to the vendor's `taxRegistrationNumber`; then name, compared without case, punctuation or legal suffixes (LLC, FZE, FZCO, Co., Trading, Est.…), which must match exactly one vendor. Otherwise the user picks from the vendor list. Sawwi never creates vendors (that is backlog item 8).
+  - **Line**, first hit wins: the supplier memory for that SKU or description; then SKU equal to an item number; then SKU equal to the item's GTIN; then the description equal to exactly one item's name, after the same normalising. Otherwise the user picks an item, or a G/L account for freight, services and the like.
+  - **Master data is cached** per workspace and connection (`erp_master_data`) for an hour: vendors, items and G/L accounts that allow direct posting. The review screen has "Refresh from Business Central". The cache is read-only data the ERP already holds, and it is deleted with the connection.
+- **Consequences:** a repeat supplier with mapped SKUs goes straight to "Ready". Fuzzy matching is left out on purpose, since a wrong item on a purchase invoice costs more than a click.
+
+### D-63: Duplicate supplier invoices are caught three times
+- **Decision:**
+  1. **Same file:** a SHA-256 of the PDF. Uploading it again opens the existing draft instead of making a new one.
+  2. **Same invoice in Sawwi:** same supplier (vendor, else TRN, else issuer) and the same invoice number after normalising (case, spaces, dashes, leading zeros). Shown as a warning on both drafts. A second push of the same draft is refused.
+  3. **Already in the ERP:** before every push, Sawwi asks Business Central for purchase invoices of that vendor with that vendor invoice number, posted or not (`purchaseInvoices?$filter=vendorNumber eq '…' and vendorInvoiceNumber eq '…'`). If there is one, the push is refused, with its number. The same check runs when a draft is opened, so it shows early.
+  - **Soft warning:** the same supplier, date and total under another invoice number ("possible duplicate"). It doesn't block.
+- **Consequences:** Business Central also refuses to post a second invoice with the same vendor invoice number, but only at posting. Sawwi stops it before a draft is made.
+
+### D-64: Writing to the ERP: connectors gain a write capability, drafts only, confirmed per push
+- **Context:** connectors have only read so far (D-27–D-30). Creating a purchase invoice is the first write.
+- **Decision:**
+  - **Capability, not a new connector:** `Connector.purchaseInvoices?` holds three functions: `masterData` (vendors, items, accounts), `findExisting` (the duplicate check) and `createDraft`. Only Business Central has it for now. A connection whose connector lacks it can't be a push target.
+  - **Drafts only.** Sawwi creates an unposted purchase invoice (`POST …/purchaseInvoices`, then `POST …/purchaseInvoices({id})/purchaseInvoiceLines` per line) and never posts, releases or changes an existing document. If a line fails, Sawwi deletes the half-made draft it just created (only that one, by id) and reports the error.
+  - **VAT is Business Central's.** Lines carry type, number, description, quantity and direct unit cost. Business Central works out VAT from its posting setup. Sawwi then reads the draft back and compares BC's total with the invoice's. A difference is shown on the draft (for example, a vendor posting group with the wrong VAT), and the BC draft is left for the user to fix.
+  - **Explicit confirmation per push:** the dialog names the company, vendor, invoice number and total. The server takes a hash of the exact draft it showed and refuses if the draft changed since, so a confirmation never carries over to other content. Every push is recorded on the draft: who, when, BC number and id. Viewers can't push, and `runBlocker()` applies (role, plan, trial).
+  - **Same network rules as reads:** live requests go through `liveDeps`, so `assertPublicUrl` applies (https, public addresses only, no redirects, 30 s timeout). The connector also only ever builds URLs on the fixed Business Central host. The demo store pushes to the in-process mock BC (D-29), which now accepts these writes, keeps them in memory, and forgets them at the demo's nightly reset.
+  - **Customer setup:** the Entra app already has `API.ReadWrite.All` (there is no read-only scope, D-29). To push, its permission set in Business Central must also allow creating purchase invoices, for example "D365 PURCH DOC, EDIT" next to "D365 READ". Without it Business Central answers 403, and Sawwi says which permission set to add.
+- **Consequences:** reading and writing share one connection and one secret. Pushing more document types later means adding functions to the capability. A live push waits for the user and a sandbox tenant.
+
+### D-65: Purchase invoice CSV: one row per line, header repeated, ERP numbers alongside the supplier's
+- **Decision:** the CSV is one row per line, with the invoice header repeated on each row, so it loads as a flat table into Business Central configuration packages, Excel or another ERP. Columns:
+  - header: Vendor No., Vendor name, Vendor TRN, Vendor invoice no., Invoice date, Due date, Currency, Purchase order no.;
+  - line: Line no., Type (Item / G/L Account), No., Description, Supplier SKU, Quantity, Direct unit cost, VAT %, Line amount excl. VAT, Line VAT;
+  - totals: Invoice amount excl. VAT, Invoice VAT, Invoice amount incl. VAT.
+  Dates are ISO and amounts are plain numbers with a dot. One invoice, or every draft marked ready, in one file.
+- **Consequences:** CSV works with no ERP connection. Vendor and item numbers are blank where nothing matched yet.
