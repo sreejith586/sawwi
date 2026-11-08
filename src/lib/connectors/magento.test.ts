@@ -7,7 +7,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import { runReconciliation } from "@/lib/runs/reconcile";
 import * as runStore from "@/lib/runs/store";
 import { buildRunView } from "@/lib/runs/view";
-import { magento, MAGENTO_INVOICE_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
+import { magento, MAGENTO_CREDIT_MEMO_COLUMNS, MAGENTO_INVOICE_COLUMNS, MAGENTO_SOURCE_ITEM_COLUMNS, MAGENTO_ORDER_COLUMNS, normaliseBaseUrl, searchQuery, windowGroups } from "./magento";
 import { DEMO_MAGENTO_CREDENTIALS, mockMagento, type MockMagentoOptions } from "./mock/magento";
 import { assertPublicUrl, isPrivateAddress, isPublicHostname } from "./net-guard";
 import { addConnection, pullIntoRun } from "./service";
@@ -109,6 +109,40 @@ describe("Magento reports", () => {
     expect(lookups).toHaveLength(1);
     expect(lookups[0]).toContain("fields=items[entity_id,increment_id,customer_email,customer_firstname,customer_lastname]");
     await expect(magento.pull(creds, "invoices", october, deps({ deny: ["Magento_Sales::sales_invoice"] }))).rejects.toThrow(/Magento_Sales::sales_invoice/);
+  });
+
+  it("gives one row per credit memo with shipping and adjustment refunds (D-53)", async () => {
+    const t = await magento.pull(creds, "credit_memos", october, deps());
+    expect(t.headers).toEqual([...MAGENTO_CREDIT_MEMO_COLUMNS]);
+    expect(t.rows).toEqual([
+      ["000000103", "000000501", "2026-10-08T10:00:00Z", "omar.saleh@example.com", "Omar Saleh", "271.43", "20.00", "0.00", "14.52", "305.00", "AED"],
+      ["000000106", "000000502", "2026-10-19T15:45:00Z", "mariam.fares@example.com", "Mariam Fares", "189.52", "0.00", "0.00", "9.48", "199.00", "AED"],
+      ["000000108", "000000503", "2026-10-24T11:30:00Z", "layla.haddad@example.com", "Layla Haddad", "0.00", "0.00", "15.00", "0.00", "15.00", "AED"],
+    ]);
+    // The goodwill refund has no items, so the item-level report leaves it out.
+    expect((await magento.pull(creds, "credit_memo_lines", october, deps())).rows.map((r) => r[1])).toEqual(["000000501", "000000502"]);
+  });
+
+  it("reads stock per SKU and source; only in-stock sources count as sellable (D-54)", async () => {
+    const log: { method: string; url: string }[] = [];
+    const t = await magento.pull(creds, "source_items", { from: "2030-01-01", to: "2030-01-31" }, deps({ log, maxPageSize: 3 }));
+    expect(t.headers).toEqual([...MAGENTO_SOURCE_ITEM_COLUMNS]);
+    expect(t.rows.map((r) => r.join(" "))).toEqual([
+      "ABY-BLK-M default 12.00 In stock 12.00",
+      "MAT-01 default 18.00 In stock 18.00",
+      "MAT-01 shj 12.00 In stock 12.00",
+      "OUD-100 default 6.00 In stock 6.00",
+      "OUD-50 default 10.00 In stock 10.00",
+      "SND-42 default 15.00 In stock 15.00",
+      "SND-42 shj 5.00 Out of stock 0.00",
+    ]);
+    expect(log).toHaveLength(3); // 7 rows, 3 a page, stopped at total_count
+    const q = decodeURIComponent(log[0].url);
+    expect(q).toContain("/rest/V1/inventory/source-items?");
+    expect(q).toContain("searchCriteria[sortOrders][0][field]=sku");
+    expect(q).toContain("searchCriteria[sortOrders][1][field]=source_code");
+    expect(q).not.toContain("created_at");
+    await expect(magento.pull(creds, "source_items", october, deps({ noMsi: true }))).rejects.toThrow(/Multi-Source Inventory/);
   });
 
   it("gives one row per tracking number, with weight in kg", async () => {

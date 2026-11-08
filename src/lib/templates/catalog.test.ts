@@ -21,9 +21,9 @@ const base: Profile = {
 const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
 
 describe("template catalogue", () => {
-  it("has 24 templates with unique ids", () => {
-    expect(TEMPLATES).toHaveLength(24);
-    expect(new Set(ids(TEMPLATES)).size).toBe(24);
+  it("has 26 templates with unique ids", () => {
+    expect(TEMPLATES).toHaveLength(26);
+    expect(new Set(ids(TEMPLATES)).size).toBe(26);
   });
 
   it("links only declared slots and fields", () => {
@@ -55,6 +55,7 @@ describe("template catalogue", () => {
         if ("link" in r) expect(r.link, `${t.id}/${c.id}`).toBeLessThan(t.links.length);
         if (r.kind === "compare") {
           for (const id of [...idents(r.left ?? ""), ...idents(r.right ?? "")]) expect(all, `${t.id}/${c.id}: ${id}`).toContain(id);
+          for (const id of idents(r.value ?? "").filter((w) => w !== "diff")) expect(all, `${t.id}/${c.id} value: ${id}`).toContain(id);
           if (!r.left || !r.right) expect(t.links[r.link].amount, `${t.id}/${c.id}`).toBeDefined();
         }
         if ("field" in r && typeof r.field === "string") expect(all, `${t.id}/${c.id}`).toContain(r.field);

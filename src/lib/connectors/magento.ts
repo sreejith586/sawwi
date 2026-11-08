@@ -42,7 +42,7 @@ export function normaliseBaseUrl(input: string): string {
 }
 
 /** Magento searchCriteria query string. Filters in one group are OR'ed, groups are AND'ed. */
-export function searchQuery(groups: { field: string; value: string; condition: string }[][], page?: { size: number; current: number }, fields?: string): string {
+export function searchQuery(groups: { field: string; value: string; condition: string }[][], page?: { size: number; current: number; sort?: string[] }, fields?: string): string {
   const p = new URLSearchParams();
   groups.forEach((filters, g) =>
     filters.forEach((f, i) => {
@@ -55,8 +55,10 @@ export function searchQuery(groups: { field: string; value: string; condition: s
   if (page) {
     p.set("searchCriteria[pageSize]", String(page.size));
     p.set("searchCriteria[currentPage]", String(page.current));
-    p.set("searchCriteria[sortOrders][0][field]", "entity_id");
-    p.set("searchCriteria[sortOrders][0][direction]", "ASC");
+    (page.sort ?? ["entity_id"]).forEach((field, i) => {
+      p.set(`searchCriteria[sortOrders][${i}][field]`, field);
+      p.set(`searchCriteria[sortOrders][${i}][direction]`, "ASC");
+    });
   }
   if (fields) p.set("fields", fields);
   return p.toString();
@@ -89,6 +91,7 @@ async function get<T>(creds: MagentoCredentials, path: string, deps: ConnectorDe
         `The store refused access${resource ? ` (${resource})` : ""}. Check the access token, that the integration is active with read access to Sales → Operations (Orders, Invoices, Credit Memos, Shipments), and on Magento 2.4.4+ that “Allow OAuth Access Tokens to be used as standalone Bearer tokens” is Yes (Stores → Configuration → Services → OAuth).`,
       );
     }
+    if (res.status === 404 && path.startsWith("inventory/")) throw new ConnectorError("This store has no Multi-Source Inventory API (Magento 2.3 or later, with the Inventory modules enabled), so stock can't be read. Export the stock from the admin and upload it instead.");
     if (res.status === 404) throw new ConnectorError("No Magento REST API answered at that address. Check the store URL.");
     if (!res.ok || body === undefined) throw new ConnectorError(`The store returned HTTP ${res.status}${body?.message ? `: ${body.message}` : ""}.`);
     return body;
@@ -97,9 +100,14 @@ async function get<T>(creds: MagentoCredentials, path: string, deps: ConnectorDe
 
 /** Every page of a search, stopping at total_count (Magento repeats the last page past the end). */
 async function search(creds: MagentoCredentials, resource: string, w: PullWindow, deps: ConnectorDeps): Promise<Doc[]> {
+  return searchAll(creds, resource, windowGroups(w), deps);
+}
+
+/** Every page for any filter groups, in a stable order (`sort`), stopping at total_count. */
+async function searchAll(creds: MagentoCredentials, resource: string, groups: Parameters<typeof searchQuery>[0], deps: ConnectorDeps, sort?: string[]): Promise<Doc[]> {
   const out: Doc[] = [];
   for (let page = 1; ; page++) {
-    const r = await get<SearchResult>(creds, `${resource}?${searchQuery(windowGroups(w), { size: PAGE_SIZE, current: page })}`, deps);
+    const r = await get<SearchResult>(creds, `${resource}?${searchQuery(groups, { size: PAGE_SIZE, current: page, sort })}`, deps);
     const items = r.items ?? [];
     out.push(...items);
     if (out.length > MAX_ROWS) throw new ConnectorError("More than 200,000 records in that period. Pull a shorter period.");
@@ -140,6 +148,8 @@ async function weightUnit(creds: MagentoCredentials, deps: ConnectorDeps): Promi
 export const MAGENTO_ORDER_COLUMNS = ["Order ID", "Order date", "Order status", "Payment method", "Payment method title", "Order total", "Refunded amount", "Shipping charged", "Currency", "Subtotal", "Discount", "Tax", "Total paid", "Store"] as const;
 export const MAGENTO_REFUND_COLUMNS = ["Order ID", "Refund / credit memo ID", "Refund date", "SKU", "Product", "Quantity", "Refund amount", "Credit memo total", "Currency"] as const;
 export const MAGENTO_INVOICE_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Customer e-mail", "Customer", "Subtotal", "Shipping", "Discount", "VAT amount", "Invoice total (incl. VAT)", "Currency"] as const;
+export const MAGENTO_CREDIT_MEMO_COLUMNS = ["Order ID", "Credit memo ID", "Refund date", "Customer e-mail", "Customer", "Subtotal", "Shipping refunded", "Adjustment", "VAT amount", "Credit memo total (incl. VAT)", "Currency"] as const;
+export const MAGENTO_SOURCE_ITEM_COLUMNS = ["SKU", "Source", "Source quantity", "Stock status", "Sellable quantity"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -152,6 +162,20 @@ const REPORTS: Report[] = [
     description: "One row per invoice created in the period, with its order, customer e-mail, VAT and total.",
     slots: ["web-erp-invoices/store_invoices"],
     columns: MAGENTO_INVOICE_COLUMNS,
+  },
+  {
+    id: "credit_memos",
+    label: "Credit memos (totals)",
+    description: "One row per credit memo created in the period, with its order, customer e-mail, VAT and total, including shipping and adjustment refunds.",
+    slots: ["web-erp-credit-memos/store_refunds"],
+    columns: MAGENTO_CREDIT_MEMO_COLUMNS,
+  },
+  {
+    id: "source_items",
+    label: "Stock by source (MSI source items)",
+    description: "Current quantity of every SKU at every inventory source, and how much of it the store can sell (sources set to in stock). Not dated: it's the stock right now.",
+    slots: ["web-erp-stock/store_stock"],
+    columns: MAGENTO_SOURCE_ITEM_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -170,6 +194,21 @@ export function invoiceRow(inv: Doc, order: OrderInfo): string[] {
     order.number, str(inv.increment_id), isoTime(inv.created_at), order.email, order.name,
     num(inv.subtotal ?? 0), num(inv.shipping_amount ?? 0), num(inv.discount_amount ?? 0), num(inv.tax_amount ?? 0), num(inv.grand_total), str(inv.order_currency_code),
   ];
+}
+
+export function creditMemoTotalRow(m: Doc, order: OrderInfo): string[] {
+  const adjustment = m.adjustment ?? Number(m.adjustment_positive ?? 0) - Number(m.adjustment_negative ?? 0);
+  return [
+    order.number, str(m.increment_id), isoTime(m.created_at), order.email, order.name,
+    num(m.subtotal ?? 0), num(m.shipping_amount ?? 0), num(adjustment), num(m.tax_amount ?? 0), num(m.grand_total), str(m.order_currency_code),
+  ];
+}
+
+/** A source's quantity counts as sellable only while the source item is "in stock" (status 1). */
+export function sourceItemRow(i: Doc): string[] {
+  const qty = Number(i.quantity ?? 0);
+  const inStock = Number(i.status) === 1;
+  return [str(i.sku), str(i.source_code), num(qty), inStock ? "In stock" : "Out of stock", num(inStock ? qty : 0)];
 }
 
 /** Refunded items; configurable parents and their zero-priced children are collapsed to one line. */
@@ -197,14 +236,14 @@ export function shipmentRows(s: Doc, orderNo: string, unit: string | undefined):
 export const magento: Connector<MagentoCredentials> = {
   id: "magento",
   label: "Magento 2",
-  description: "Orders, invoices, refunds and shipments from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
+  description: "Orders, invoices, refunds, shipments and stock from your Magento 2 / Adobe Commerce store, read-only, for the webstore reconciliations.",
   fields: [
     { key: "baseUrl", label: "Store address", secret: false, placeholder: "https://shop.example.com" },
     {
       key: "accessToken",
       label: "Integration access token",
       secret: true,
-      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Invoices, Credit Memos, Shipments) and Stores → Settings, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
+      help: "In the Magento admin: System → Extensions → Integrations → Add New Integration. Under API, give it Sales → Operations (Orders, Invoices, Credit Memos, Shipments), Stores → Settings and, for stock, Stores → Inventory → Sources, save, Activate, and copy the Access Token. On Magento 2.4.4 or later also set Stores → Configuration → Services → OAuth → “Allow OAuth Access Tokens to be used as standalone Bearer tokens” to Yes.",
     },
   ],
   reports: REPORTS.map(({ id, label, description, slots }) => ({ id, label, description, slots })),
@@ -232,6 +271,13 @@ export const magento: Connector<MagentoCredentials> = {
       const invoices = await search(creds, "invoices", window, deps);
       const orders = await orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps);
       rows = invoices.map((i) => invoiceRow(i, orders.get(Number(i.order_id)) ?? NO_ORDER));
+    } else if (report === "credit_memos") {
+      const memos = await search(creds, "creditmemos", window, deps);
+      const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
+      rows = memos.map((m) => creditMemoTotalRow(m, orders.get(Number(m.order_id)) ?? NO_ORDER));
+    } else if (report === "source_items") {
+      // Multi-Source Inventory (Magento 2.3+). Current stock, so the window doesn't apply.
+      rows = (await searchAll(creds, "inventory/source-items", [], deps, ["sku", "source_code"])).map(sourceItemRow);
     } else if (report === "credit_memo_lines") {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);

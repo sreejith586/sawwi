@@ -149,7 +149,8 @@ type ReportSpec = {
   description: string;
   slots: string[];
   entity: string;
-  dateField: string;
+  /** Master data (items) has none: the report is the current state, whatever the window. */
+  dateField?: string;
   expand?: string;
   keep?: (d: Doc) => boolean;
   needsShipments?: boolean;
@@ -213,6 +214,30 @@ export const BC_REPORTS: ReportSpec[] = [
     columns: ["Posted invoice no.", "Store order no. (external document no.)", "Posting date", "Invoice date", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Amount incl. VAT", "Status"],
     rows: (d, { lcy }) => [
       [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.invoiceDate), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
+    id: "web_sales_credit_memos",
+    label: "Posted sales credit memos for web refunds",
+    description: "Posted sales credit memos in the period that carry a web store order number (External Document No.), with the customer's e-mail, VAT and total.",
+    slots: ["web-erp-credit-memos/erp_credit_notes"],
+    entity: "salesCreditMemos",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    columns: ["Posted credit memo no.", "Store order no. (external document no.)", "Posting date", "Credit memo date", "Applies-to invoice no.", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Credit amount incl. VAT", "Status"],
+    rows: (d, { lcy }) => [
+      [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.creditMemoDate), str(d.invoiceNumber), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
+    id: "items",
+    label: "Items (inventory and unit price)",
+    description: "Every item with its current inventory, base unit and unit price. Not dated: it's the item list right now.",
+    slots: ["web-erp-stock/erp_stock"],
+    entity: "items",
+    columns: ["SKU", "Description", "Type", "Inventory", "Base unit", "Unit price", "Price includes VAT", "Blocked", "GTIN"],
+    rows: (d) => [
+      [str(d.number), str(d.displayName), str(d.type), num(d.inventory ?? 0), str(d.baseUnitOfMeasureCode), num(d.unitPrice ?? 0), d.priceIncludesTax ? "Yes" : "No", d.blocked ? "Yes" : "No", str(d.gtin)],
     ],
   },
   {
@@ -293,10 +318,11 @@ export function windowFilter(field: string, w: PullWindow): string {
   return `${field} ge ${w.from} and ${field} le ${w.to}`;
 }
 
-function entityUrl(s: Session, companyId: string, spec: { entity: string; dateField: string; expand?: string }, w: PullWindow): string {
-  const params = [`$filter=${encodeURIComponent(windowFilter(spec.dateField, w))}`];
+function entityUrl(s: Session, companyId: string, spec: { entity: string; dateField?: string; expand?: string }, w: PullWindow): string {
+  const params = spec.dateField ? [`$filter=${encodeURIComponent(windowFilter(spec.dateField, w))}`] : [];
   if (spec.expand) params.push(`$expand=${spec.expand}`);
-  return `${apiRoot(s.creds)}/companies(${companyId})/${spec.entity}?${params.join("&")}`;
+  const url = `${apiRoot(s.creds)}/companies(${companyId})/${spec.entity}`;
+  return params.length ? `${url}?${params.join("&")}` : url;
 }
 
 const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
@@ -319,7 +345,7 @@ async function shipmentIndex(s: Session, companyId: string, w: PullWindow): Prom
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
-  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents, read-only, for the B2B, purchasing and web store reconciliations.",
+  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents and items, read-only, for the B2B, purchasing and web store reconciliations.",
   fields: [
     { key: "tenantId", label: "Tenant ID or domain", secret: false, placeholder: "contoso.onmicrosoft.com or 00000000-0000-…", help: "Microsoft Entra admin center → Overview → Tenant ID." },
     { key: "environment", label: "Environment", secret: false, placeholder: "Production", help: "As shown in the Business Central admin center, e.g. Production or Sandbox." },

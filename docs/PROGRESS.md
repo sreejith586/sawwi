@@ -27,9 +27,24 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
-| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | this PR | Magento↔BC session |
+| Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
+| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
+| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Store stock vs. ERP inventory** (D-54, `feature/magento-bc-stock`, PR 3 of the stack, based on PR 2).
+  - New template `web-erp-stock`: Magento's sellable quantity per SKU (summed over in-stock sources) against Business Central's item inventory. Flags overselling, stock hidden from the store, and SKUs Business Central doesn't know.
+  - Magento connector: new `source_items` report (Multi-Source Inventory, current stock). Business Central connector: new `items` report (inventory and unit price), the first undated report.
+  - Demo: the store company's items and two Magento sources; the template fills in one click and finds its 3 planted exceptions.
+  - From the browser check: stock gaps are valued at quantity × unit price (a `value` expression on `compare`), "Explain" says "units" for quantity checks, and generated text keeps acronyms ("ERP", "VAT", "GRN") instead of lower-casing them. A remembered column mapping now also maps fields a template gained after it was saved, by name and without questions.
+  - 1 new test, 2 extended. A new SEO test checks each connector page lists every template its connector fills, with no duplicates; it found the Business Central page missing "B2B invoices vs. payment release", now listed.
+
+- **Store refunds vs. ERP credit notes** (D-53, `feature/magento-bc-credit-memos`, PR 2 of the stack, based on PR 1).
+  - New template `web-erp-credit-memos`: every Magento credit memo should be a posted Business Central credit memo, once, for the same amount and VAT. Matched on the order number.
+  - Magento connector: new `credit_memos` report (totals, with shipping and adjustment refunds). Business Central connector: new `web_sales_credit_memos` report.
+  - Demo: a 15.00 goodwill refund on order 108 (store credit, no items); the store company posts 103's refund twice, leaves 106's as a draft and posts 108's as 20.00. The template fills in one click and finds its 6 planted exceptions; the other demo results are unchanged.
+  - 2 new tests, 2 extended.
 
 - **Store invoices vs. ERP posted invoices** (D-52, `feature/magento-bc-invoices`, PR 1 of the Magento ↔ Business Central stack).
   - New template `web-erp-invoices`: every Magento invoice should be a posted Business Central invoice, once, with the same total, VAT and customer e-mail. Flags orders never synced, orders posted twice, total, VAT and customer differences; "posted without a store invoice" is listed for review.
@@ -205,4 +220,4 @@ _Updated in every commit. Newest first within each section._
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
 - Small files of whole numbers (e.g. 5 invoice lines, all with different quantities) profile the quantity column as an ID, so mapping asks one confirm question. This is a general profiling rule, not specific to PDFs. Connectors avoid it by writing decimals with 2 places (D-29).
-- "Value at risk" adds quantity differences into money totals for quantity checks (D-13).
+- "Value at risk" adds quantity differences into money totals for quantity checks (D-13), except where a check prices them with a `value` expression, as the stock template does (D-54).

@@ -119,6 +119,8 @@ describe("Business Central reports", () => {
       sales_invoice_lines: 7,
       sales_credit_memos: 1,
       web_sales_invoices: 1, // SI-3106 carries the customer's reference in External Document No.
+      web_sales_credit_memos: 1, // SCM-501 carries the RMA number
+      items: 0, // the trading company's items aren't in the mock
       sales_order_lines: 5,
       sales_shipment_lines: 6,
       purchase_order_lines: 4,
@@ -133,6 +135,13 @@ describe("Business Central reports", () => {
     const t = await businessCentral.pull(store, "web_sales_invoices", october, mockDeps(2));
     expect(t.rows.map((r) => `${r[0]} ${r[1]}`)).toEqual(["PSI-W1001 000000101", "PSI-W1002 000000102", "PSI-W1004 000000104", "PSI-W1005 000000104", "PSI-W1006 000000106", "PSI-W1008 000000108"]); // draft PSI-W1003 left out
     expect(t.rows[0]).toEqual(["PSI-W1001", "000000101", "2026-10-02", "2026-10-02", "WEB", "Khalid Nasser", "khalid.nasser@example.com", "AED", "471.43", "23.57", "495.00", "Paid"]);
+    const cm = await businessCentral.pull(store, "web_sales_credit_memos", october, mockDeps(2));
+    const log: { method: string; url: string }[] = [];
+    const items = await businessCentral.pull(store, "items", { from: "2030-01-01", to: "2030-01-31" }, mockDeps(4, log));
+    expect(items.rows.map((r) => `${r[0]} ${r[3]}`)).toEqual(["ABY-BLK-M 12.00", "GIFT-BOX 50.00", "MAT-01 30.00", "OUD-50 4.00", "SND-42 20.00", "SHIP-STD 0.00"]); // any window: current stock
+    expect(items.rows[0]).toEqual(["ABY-BLK-M", "Classic black abaya, M", "Inventory", "12.00", "PCS", "420.00", "Yes", "No", ""]);
+    expect(log.filter((l) => l.url.includes("/items")).map((l) => l.url.includes("$filter"))).toEqual([false, false]); // two pages, no date filter
+    expect(cm.rows.map((r) => `${r[0]} ${r[1]} ${r[11]}`)).toEqual(["PCM-W2001 000000103 305.00", "PCM-W2002 000000103 305.00", "PCM-W2004 000000108 20.00"]); // draft PCM-W2003 left out
   });
 
   it("finds each invoice line's delivery note from its order when that is unambiguous", async () => {
