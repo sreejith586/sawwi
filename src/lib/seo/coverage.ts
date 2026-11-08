@@ -31,6 +31,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-prices": { store_prices: "product_prices" },
     "web-payouts-by-method": { method_sales: "payment_totals" },
     "web-gift-cards": { gift_cards: "gift_card_balances", redemptions: "gift_card_redemptions" },
+    "web-erp-fx": { store_invoices: "invoice_currencies" },
   },
   "business-central": {
     "mkt-settlement-vs-sales": { sales: "sales_invoices" },
@@ -44,6 +45,7 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-credit-memos": { erp_credit_notes: "web_sales_credit_memos" },
     "web-erp-stock": { erp_stock: "items" },
     "web-erp-prices": { erp_prices: "items" },
+    "web-erp-fx": { erp_invoices: "web_sales_invoices_fx" },
   },
 };
 

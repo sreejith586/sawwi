@@ -48,10 +48,34 @@ function order(entity: number, inc: string, created: string, status: string, met
     entity_id: entity, increment_id: inc, created_at: created, updated_at: created, status, state: status === "canceled" ? "canceled" : status,
     store_id: 1, store_name: STORE_NAME, ...shopper(entity), order_currency_code: "AED", base_currency_code: "AED",
     subtotal: r2(subtotalIncl - (subtotalIncl * 5) / 105), discount_amount: 0, shipping_amount: shipping + cod, tax_amount: tax, grand_total: grand, total_paid: paid,
+    base_grand_total: grand, base_to_order_rate: 1,
     payment: { method, additional_information: [PAYMENTS[method]] },
     items: lines.map(([sku, qty], i) => ({ item_id: entity * 10 + i, sku, name: PRODUCTS[sku].name, qty_ordered: qty, price: PRODUCTS[sku].price, weight: PRODUCTS[sku].weight })),
     ...extra,
   };
+}
+
+// Store views (D-58): one website, base currency AED, three store views in their own currency.
+export const DEMO_STORE_VIEWS: Doc[] = [
+  { id: 1, code: "uae_en", name: DEMO_STORE_NAME, website_id: 1, store_group_id: 1, is_active: 1 },
+  { id: 2, code: "ksa_ar", name: "Sawwi Demo Store KSA", website_id: 1, store_group_id: 1, is_active: 1 },
+  { id: 3, code: "omn_en", name: "Sawwi Demo Store Oman", website_id: 1, store_group_id: 1, is_active: 1 },
+];
+const ABROAD: Record<string, { id: number; currency: string; rate: number; vat: number }> = {
+  ksa_ar: { id: 2, currency: "SAR", rate: 1.021, vat: 15 },
+  omn_en: { id: 3, currency: "OMR", rate: 0.1048, vat: 5 },
+};
+
+/** An order in another store view: totals in its currency at the rate Magento recorded, base in AED. */
+function abroad(entity: number, created: string, store: string, base: number, lines: Line[]): Doc {
+  const s = ABROAD[store];
+  const grand = r2(base * s.rate);
+  const tax = r2((grand * s.vat) / (100 + s.vat));
+  const view = DEMO_STORE_VIEWS.find((v) => v.id === s.id)!;
+  return order(entity, String(entity).padStart(9, "0"), created, "complete", "cashondelivery", lines, {
+    store_id: s.id, store_name: `Main Website\nMain Website Store\n${view.name}`, order_currency_code: s.currency,
+    subtotal: r2(grand - tax), shipping_amount: 0, tax_amount: tax, grand_total: grand, total_paid: grand, base_grand_total: base, base_to_order_rate: s.rate,
+  });
 }
 
 export const DEMO_ORDERS: Doc[] = [
@@ -67,14 +91,20 @@ export const DEMO_ORDERS: Doc[] = [
   order(109, "000000109", "2026-10-26 20:20:20", "processing", "tabby_installments", [["OUD-50", 1], ["SND-42", 1]]),
   order(110, "000000110", "2026-10-31 23:59:00", "pending", "stripe_payments", [["MAT-01", 1]]),
   order(111, "000000111", "2026-11-01 00:10:00", "pending", "cashondelivery", [["SND-42", 1]]),
+  // The KSA (SAR, 15% VAT) and Oman (OMR) store views, cash on delivery and delivered (D-58).
+  abroad(120, "2026-10-10 10:00:00", "ksa_ar", 1000, [["ABY-BLK-M", 2]]),
+  abroad(121, "2026-10-14 15:30:00", "ksa_ar", 500, [["OUD-50", 1]]),
+  abroad(122, "2026-10-24 18:45:00", "ksa_ar", 2000, [["ABY-BLK-M", 4]]),
+  abroad(123, "2026-10-27 12:10:00", "omn_en", 500, [["SND-42", 2]]),
 ];
 
 /** Invoices: card and Tabby orders are invoiced when paid, COD orders when delivered. */
 function invoice(entity: number, inc: string, orderId: number, created: string): Doc {
   const o = DEMO_ORDERS.find((x) => x.entity_id === orderId)!;
   return {
-    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, state: 2, order_currency_code: "AED",
-    subtotal: o.subtotal, shipping_amount: o.shipping_amount, discount_amount: 0, tax_amount: o.tax_amount, grand_total: o.grand_total,
+    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, state: 2, store_id: o.store_id,
+    order_currency_code: o.order_currency_code, base_currency_code: o.base_currency_code, base_to_order_rate: o.base_to_order_rate,
+    subtotal: o.subtotal, shipping_amount: o.shipping_amount, discount_amount: 0, tax_amount: o.tax_amount, grand_total: o.grand_total, base_grand_total: o.base_grand_total,
   };
 }
 
@@ -86,6 +116,10 @@ export const DEMO_INVOICES: Doc[] = [
   invoice(404, "000000404", 104, "2026-10-07 21:19:00"),
   invoice(406, "000000406", 106, "2026-10-12 09:56:00"),
   invoice(408, "000000408", 108, "2026-10-21 12:48:00"),
+  invoice(420, "000000420", 120, "2026-10-11 16:00:00"), // KSA and Oman COD orders, invoiced on delivery
+  invoice(421, "000000421", 121, "2026-10-15 17:00:00"),
+  invoice(422, "000000422", 122, "2026-10-25 12:00:00"),
+  invoice(423, "000000423", 123, "2026-10-28 14:00:00"),
   // 107 (COD, not delivered), 109 (Tabby, not captured) and 110 (pending) have no invoice yet.
 ];
 

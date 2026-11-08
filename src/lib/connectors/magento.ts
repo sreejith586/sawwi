@@ -155,6 +155,7 @@ export const MAGENTO_PRICE_COLUMNS = ["SKU", "Product", "Product type", "Status"
 export const MAGENTO_PAYMENT_TOTAL_COLUMNS = ["Payment provider", "Payment method", "Method code", "Orders", "Order total", "Refunded online", "Expected to receive", "Currency", "Period from", "Period to"] as const;
 export const MAGENTO_GIFT_CARD_COLUMNS = ["Account", "Status", "Created", "Expires", "Opening balance", "Issued", "Expired", "Closing balance", "Period from", "Period to"] as const;
 export const MAGENTO_REDEMPTION_COLUMNS = ["Account", "Type", "Order ID", "Redemption date", "Redeemed amount", "Currency"] as const;
+export const MAGENTO_INVOICE_CURRENCY_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Store code", "Store", "Order currency", "Invoice total (FCY)", "Base currency", "Invoice total (base)", "Rate (base to order)", "Total ÷ rate"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -209,6 +210,13 @@ const REPORTS: Report[] = [
     description: "Adobe Commerce only: one row per gift card or store credit amount used on an order placed in the period.",
     slots: ["web-gift-cards/redemptions"],
     columns: MAGENTO_REDEMPTION_COLUMNS,
+  },
+  {
+    id: "invoice_currencies",
+    label: "Invoices by store and currency",
+    description: "One row per invoice created in the period, with its store view, the order currency, the base currency and the exchange rate Magento recorded.",
+    slots: ["web-erp-fx/store_invoices"],
+    columns: MAGENTO_INVOICE_CURRENCY_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -302,7 +310,7 @@ export function paymentTotalRows(orders: Doc[], w: PullWindow): string[][] {
     groups.set(key, g);
   }
   return [...groups.values()]
-    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title))
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title) || a.currency.localeCompare(b.currency))
     .map((g) => [g.provider, g.title, g.code, num(g.orders), num(g.total), num(g.refunded), num(g.total - g.refunded), g.currency, w.from, w.to]);
 }
 
@@ -365,6 +373,27 @@ export function redemptionRows(o: Doc): string[][] {
   return rows;
 }
 
+/** Store views by ID, for their codes; empty if the integration can't read Stores → Settings. */
+async function storeViews(creds: MagentoCredentials, deps: ConnectorDeps): Promise<Map<number, { code: string; name: string }>> {
+  try {
+    const views = await get<Doc[]>(creds, "store/storeViews", deps);
+    return new Map(views.map((v) => [Number(v.id), { code: str(v.code), name: str(v.name) }]));
+  } catch (error) {
+    if (error instanceof ConnectorError && /refused access/.test(error.message)) return new Map();
+    throw error;
+  }
+}
+
+/** Magento records base_to_order_rate on each document: base total × rate = total in the order currency. */
+export function invoiceCurrencyRow(inv: Doc, orderNo: string, view: { code: string; name: string } | undefined): string[] {
+  const rate = Number(inv.base_to_order_rate ?? 1) || 1;
+  const total = Number(inv.grand_total ?? 0);
+  return [
+    orderNo, str(inv.increment_id), isoTime(inv.created_at), view?.code ?? str(inv.store_id), view?.name ?? "", str(inv.order_currency_code), num(total),
+    str(inv.base_currency_code), num(inv.base_grand_total ?? total), num(rate), num(Math.round((total / rate) * 100) / 100),
+  ];
+}
+
 /** Refunded items; configurable parents and their zero-priced children are collapsed to one line. */
 export function creditMemoRows(m: Doc, orderNo: string): string[][] {
   const items = ((m.items as Doc[] | undefined) ?? []).filter((i) => Number(i.qty) > 0 && !(Number(i.row_total ?? 0) === 0 && Number(i.price ?? 0) === 0));
@@ -425,6 +454,10 @@ export const magento: Connector<MagentoCredentials> = {
       const invoices = await search(creds, "invoices", window, deps);
       const orders = await orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps);
       rows = invoices.map((i) => invoiceRow(i, orders.get(Number(i.order_id)) ?? NO_ORDER));
+    } else if (report === "invoice_currencies") {
+      const invoices = await search(creds, "invoices", window, deps);
+      const [orders, views] = await Promise.all([orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps), storeViews(creds, deps)]);
+      rows = invoices.map((i) => invoiceCurrencyRow(i, orders.get(Number(i.order_id))?.number ?? "", views.get(Number(i.store_id))));
     } else if (report === "credit_memos") {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);

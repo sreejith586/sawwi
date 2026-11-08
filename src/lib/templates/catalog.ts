@@ -971,6 +971,70 @@ export const TEMPLATES: Template[] = [
     ],
     outputs: ["Price differences to correct", "Stale special prices", "SKUs missing from the ERP"],
   },
+  {
+    id: "web-erp-fx",
+    title: "Multi-currency store invoices vs. ERP",
+    summary: "For each store view and currency, check the ERP booked every invoice in the right currency and at the base value Magento recorded, within an FX tolerance.",
+    group: "webstore",
+    frequency: "monthly",
+    appliesTo: { channels: ["webstore"] },
+    roles: ["finance", "owner"],
+    sources: [
+      {
+        key: "store_invoices",
+        label: "Webstore invoices by store and currency",
+        description: "Invoices from every store view in the period, with the order currency, the base currency total and the exchange rate the store recorded.",
+        examples: ["Magento 2 invoices with base and order currency", "Shopify Markets orders export (shop and presentment currency)"],
+        fields: [
+          ORDER_ID,
+          f("invoice_date", "Invoice date", "date", true),
+          f("store_code", "Store code", "id"),
+          f("order_currency", "Order currency", "text", true),
+          f("invoice_total_fcy", "Invoice total (FCY)", "money", true),
+          f("base_total", "Invoice total (base)", "money", true),
+          f("currency", "Base currency", "text"),
+        ],
+      },
+      {
+        key: "erp_invoices",
+        label: "ERP posted invoices in two currencies",
+        description: "Posted sales invoices for web orders with their currency, the amount in that currency and in your local currency, and the store they belong to (a dimension).",
+        examples: ["Business Central posted sales invoices with currency and dimension", "ERP sales register with FCY and LCY amounts"],
+        fields: [
+          f("erp_invoice_no", "Posted invoice no.", "id", true),
+          f("order_ref", "Store order no. (external document no.)", "id", true),
+          f("posting_date", "Posting date", "date", true),
+          f("store_dim", "Store (dimension 1)", "id"),
+          f("erp_currency", "Invoice currency", "text", true),
+          f("amount_fcy", "Amount incl. VAT (FCY)", "money"),
+          f("amount_lcy", "Amount incl. VAT (LCY)", "money", true),
+        ],
+      },
+    ],
+    links: [
+      {
+        left: "store_invoices",
+        right: "erp_invoices",
+        keys: [{ left: "order_id", right: "order_ref", normalize: ["trim", "upper", "strip_leading_zeros"] }],
+        cardinality: "many_to_many",
+        amount: { left: "base_total", right: "amount_lcy", tolerance: 1 },
+        dateWindowDays: 7,
+      },
+      {
+        left: "store_invoices",
+        right: "erp_invoices",
+        keys: [{ left: "store_code", right: "store_dim", normalize: ["trim", "upper"] }],
+        cardinality: "many_to_many",
+      },
+    ],
+    checks: [
+      { id: "fx_difference", label: "FX difference above tolerance", description: "The ERP's local-currency amount differs from the base value the store recorded by more than 1.00: a different rate, or a different amount.", rule: { kind: "compare", link: 0, direction: "either" } },
+      { id: "wrong_currency", label: "Posted in the wrong currency", description: "The ERP invoice is in another currency than the store order.", rule: { kind: "text_mismatch", link: 0, left: "order_currency", right: "erp_currency" } },
+      { id: "not_posted", label: "Not posted in the ERP", description: "A store invoice with no posted ERP invoice.", rule: { kind: "unmatched_left", link: 0 } },
+      { id: "store_missing", label: "Store missing from the ERP", description: "No ERP invoice carries this store's code in its dimension: the store isn't connected to the ERP, or its dimension isn't set.", rule: { kind: "unmatched_left", link: 1, where: { field: "store_code", pattern: "\\S" }, value: "base_total" } },
+    ],
+    outputs: ["FX differences by store and currency", "Invoices in the wrong currency", "Stores not reaching the ERP"],
+  },
   // ─── Direct B2B sales ─────────────────────────────────────────────────
   {
     id: "b2b-cash-application",
@@ -1561,7 +1625,10 @@ export const TEMPLATES: Template[] = [
       {
         left: "method_sales",
         right: "payouts",
-        keys: [{ left: "provider", right: "provider", normalize: ["trim", "upper", "strip_non_alnum"] }],
+        keys: [
+          { left: "provider", right: "provider", normalize: ["trim", "upper", "strip_non_alnum"] },
+          { left: "currency", right: "currency", normalize: ["trim", "upper"] },
+        ],
         cardinality: "many_to_many",
         amount: { left: "expected_amount", right: "amount + fees", tolerance: 1 },
       },
