@@ -39,9 +39,21 @@ type MappingResult = { mapping: SlotMapping; questions: QuestionPayload[]; usedA
 async function buildMapping(run: Run, slot: SourceSlot, profile: FileProfile, ctx: RunContext, confirmColumns = false): Promise<MappingResult> {
   const cached = await store.getCachedMapping(run.orgKey, run.templateId, slot.key, profile.fingerprint);
   if (cached) {
-    const fields = Object.fromEntries(
+    const fields: Record<string, FieldMapping> = Object.fromEntries(
       Object.entries(cached.fields).map(([k, v]) => [k, { ...v, source: "remembered" as const }]),
     );
+    // Fields the template gained after this layout was remembered: map them on a strong name
+    // match among the columns nobody uses yet, and ask nothing (D-54).
+    const added = slot.fields.filter((f) => !(f.key in fields));
+    if (added.length) {
+      const taken = new Set(Object.values(fields).map((f) => f.column).filter((c): c is string => !!c));
+      const best = assign(scoreCandidates(added, profile.columns.filter((c) => !taken.has(c.name))));
+      for (const f of added) {
+        const c = best.get(f.key);
+        if (c && c.score >= AUTO_ACCEPT) fields[f.key] = { column: c.column, source: "auto", confidence: c.score };
+        else if (!f.required) fields[f.key] = { column: null, source: "auto", confidence: 0 };
+      }
+    }
     return { mapping: { ...cached, fields }, questions: [], usedAi: false, remembered: true };
   }
 

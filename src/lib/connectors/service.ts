@@ -4,7 +4,7 @@ import { ingestFiles } from "@/lib/runs/engine";
 import type { Run } from "@/lib/runs/types";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { isDemoOrg } from "@/lib/demo/demo";
-import { demoDeps, demoSourceFor } from "./mock";
+import { demoDeps, demoSourceFor, demoSourceOffers } from "./mock";
 import { assertPublicUrl } from "./net-guard";
 import { connectorById } from "./registry";
 import * as store from "./store";
@@ -57,7 +57,7 @@ export async function pullIntoRun(
   if (!connector || (!demo && (!connection || !sealed))) throw new ConnectorError("That connection no longer exists.");
   const provider = connector.id;
   const accountLabel = demo?.accountLabel ?? connection!.accountLabel;
-  if (!connector.reports.some((r) => r.id === report)) throw new ConnectorError("Unknown report.");
+  if (!connector.reports.some((r) => r.id === report) || (demo && !demoSourceOffers(demo, report))) throw new ConnectorError("Unknown report.");
   if (!validWindow(window)) throw new ConnectorError("Pick a period of up to a year, start before end.");
 
   const log = (rows: number, status: "ok" | "failed", error: string | null) =>

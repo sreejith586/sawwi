@@ -142,17 +142,30 @@ export function deliveryNoteFor(index: ShipmentIndex, order: string, item: strin
   return exact.length === 1 ? exact[0].dn : ""; // otherwise only an unambiguous quantity match
 }
 
-type Ctx = { lcy: string; shipments?: ShipmentIndex };
+type Rate = { currency: string; from: string; lcyPerUnit: number };
+type Ctx = { lcy: string; shipments?: ShipmentIndex; rates?: Rate[] };
+
+/**
+ * LCY per unit of a currency on a date, from the currency exchange rates table. API v2.0 posted
+ * invoices carry no currency factor, so this is the rate BC would apply on that posting date (D-58).
+ */
+export function lcyRate(rates: Rate[], currency: string, date: string, lcy: string): number | undefined {
+  if (!currency || currency === lcy) return 1;
+  const hit = rates.filter((r) => r.currency === currency && r.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
+  return hit?.lcyPerUnit;
+}
 type ReportSpec = {
   id: string;
   label: string;
   description: string;
   slots: string[];
   entity: string;
-  dateField: string;
+  /** Master data (items) has none: the report is the current state, whatever the window. */
+  dateField?: string;
   expand?: string;
   keep?: (d: Doc) => boolean;
   needsShipments?: boolean;
+  needsRates?: boolean;
   columns: readonly string[];
   rows: (d: Doc, ctx: Ctx) => string[][];
 };
@@ -200,6 +213,60 @@ export const BC_REPORTS: ReportSpec[] = [
     columns: ["Credit note no.", "Credit note date", "Original invoice no.", "External document no.", "Customer no.", "Customer", "Currency", "Amount excl. VAT", "VAT amount", "Credit amount", "Status"],
     rows: (d, { lcy }) => [
       [str(d.number), str(d.creditMemoDate || d.postingDate), str(d.invoiceNumber), str(d.externalDocumentNumber), str(d.customerNumber), str(d.customerName), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
+    id: "web_sales_invoices",
+    label: "Posted sales invoices for web orders",
+    description: "Posted sales invoices in the period that carry a web store order number (External Document No.), with the customer's e-mail, VAT and total.",
+    slots: ["web-erp-invoices/erp_invoices"],
+    entity: "salesInvoices",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    columns: ["Posted invoice no.", "Store order no. (external document no.)", "Posting date", "Invoice date", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Amount incl. VAT", "Status"],
+    rows: (d, { lcy }) => [
+      [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.invoiceDate), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
+    id: "web_sales_invoices_fx",
+    label: "Posted web invoices in document and local currency",
+    description: "Posted sales invoices for web orders with their currency, the amount in that currency, the exchange rate on the posting date and the amount in local currency, plus the store dimension (Global Dimension 1).",
+    slots: ["web-erp-fx/erp_invoices"],
+    entity: "salesInvoices",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    needsRates: true,
+    columns: ["Posted invoice no.", "Store order no. (external document no.)", "Posting date", "Store (dimension 1)", "Invoice currency", "Amount incl. VAT (FCY)", "Exchange rate (LCY per unit)", "Amount incl. VAT (LCY)"],
+    rows: (d, { lcy, rates }) => {
+      const cur = currency(d, lcy);
+      const rate = lcyRate(rates ?? [], cur, str(d.postingDate), lcy);
+      const fcy = Number(d.totalAmountIncludingTax ?? 0);
+      return [[str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.shortcutDimension1Code), cur, num(fcy), rate === undefined ? "" : num(rate), rate === undefined ? "" : num(Math.round(fcy * rate * 100) / 100)]];
+    },
+  },
+  {
+    id: "web_sales_credit_memos",
+    label: "Posted sales credit memos for web refunds",
+    description: "Posted sales credit memos in the period that carry a web store order number (External Document No.), with the customer's e-mail, VAT and total.",
+    slots: ["web-erp-credit-memos/erp_credit_notes"],
+    entity: "salesCreditMemos",
+    dateField: "postingDate",
+    keep: (d) => posted(d) && str(d.externalDocumentNumber).trim() !== "",
+    columns: ["Posted credit memo no.", "Store order no. (external document no.)", "Posting date", "Credit memo date", "Applies-to invoice no.", "Customer no.", "Customer", "Customer e-mail", "Currency", "Amount excl. VAT", "VAT amount", "Credit amount incl. VAT", "Status"],
+    rows: (d, { lcy }) => [
+      [str(d.number), str(d.externalDocumentNumber).trim(), str(d.postingDate), str(d.creditMemoDate), str(d.invoiceNumber), str(d.customerNumber), str(d.customerName), str(d.email), currency(d, lcy), num(d.totalAmountExcludingTax), num(d.totalTaxAmount), num(d.totalAmountIncludingTax), str(d.status)],
+    ],
+  },
+  {
+    id: "items",
+    label: "Items (inventory and unit price)",
+    description: "Every item with its current inventory, base unit and unit price. Not dated: it's the item list right now.",
+    slots: ["web-erp-stock/erp_stock", "web-erp-prices/erp_prices"],
+    entity: "items",
+    columns: ["SKU", "Description", "Type", "Inventory", "Base unit", "Unit price", "Price includes VAT", "Blocked", "GTIN"],
+    rows: (d) => [
+      [str(d.number), str(d.displayName), str(d.type), num(d.inventory ?? 0), str(d.baseUnitOfMeasureCode), num(d.unitPrice ?? 0), d.priceIncludesTax ? "Yes" : "No", d.blocked ? "Yes" : "No", str(d.gtin)],
     ],
   },
   {
@@ -280,10 +347,11 @@ export function windowFilter(field: string, w: PullWindow): string {
   return `${field} ge ${w.from} and ${field} le ${w.to}`;
 }
 
-function entityUrl(s: Session, companyId: string, spec: { entity: string; dateField: string; expand?: string }, w: PullWindow): string {
-  const params = [`$filter=${encodeURIComponent(windowFilter(spec.dateField, w))}`];
+function entityUrl(s: Session, companyId: string, spec: { entity: string; dateField?: string; expand?: string }, w: PullWindow): string {
+  const params = spec.dateField ? [`$filter=${encodeURIComponent(windowFilter(spec.dateField, w))}`] : [];
   if (spec.expand) params.push(`$expand=${spec.expand}`);
-  return `${apiRoot(s.creds)}/companies(${companyId})/${spec.entity}?${params.join("&")}`;
+  const url = `${apiRoot(s.creds)}/companies(${companyId})/${spec.entity}`;
+  return params.length ? `${url}?${params.join("&")}` : url;
 }
 
 const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
@@ -303,10 +371,22 @@ async function shipmentIndex(s: Session, companyId: string, w: PullWindow): Prom
   return index;
 }
 
+/** The whole currency exchange rates table (it is small): LCY per unit = relational ÷ exchange rate amount. */
+async function exchangeRates(s: Session, companyId: string): Promise<Rate[]> {
+  const out: Rate[] = [];
+  for await (const page of allPages(s, `${apiRoot(s.creds)}/companies(${companyId})/currencyExchangeRates`)) {
+    for (const r of page) {
+      const amount = Number(r.exchangeRateAmount ?? 0);
+      if (amount) out.push({ currency: str(r.currencyCode), from: str(r.startingDate), lcyPerUnit: Number(r.relationalExchangeRateAmount ?? 0) / amount });
+    }
+  }
+  return out;
+}
+
 export const businessCentral: Connector<BusinessCentralCredentials> = {
   id: "business-central",
   label: "Business Central",
-  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents, read-only, for the B2B and purchasing reconciliations.",
+  description: "Microsoft Dynamics 365 Business Central (online): sales and purchase documents and items, read-only, for the B2B, purchasing and web store reconciliations.",
   fields: [
     { key: "tenantId", label: "Tenant ID or domain", secret: false, placeholder: "contoso.onmicrosoft.com or 00000000-0000-…", help: "Microsoft Entra admin center → Overview → Tenant ID." },
     { key: "environment", label: "Environment", secret: false, placeholder: "Production", help: "As shown in the Business Central admin center, e.g. Production or Sandbox." },
@@ -343,6 +423,7 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
     const info = await getJson(s, `${apiRoot(creds)}/companies(${c.id})/companyInformation`);
     const ctx: Ctx = { lcy: str(info.value?.[0]?.currencyCode) };
     if (spec.needsShipments) ctx.shipments = await shipmentIndex(s, c.id, window);
+    if (spec.needsRates) ctx.rates = await exchangeRates(s, c.id);
 
     const rows: string[][] = [];
     for await (const page of allPages(s, entityUrl(s, c.id, spec, window))) {

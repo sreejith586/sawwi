@@ -18,6 +18,7 @@ import {
   emailFacts,
   exceptionFacts,
   fixFirst,
+  inText,
   money,
   ruleEmail,
   ruleExplanation,
@@ -146,7 +147,7 @@ async function fixFirstTurn({ run, template, result }: Ctx) {
     return;
   }
   const top = items[0];
-  const body = `Start with ${top.checkLabel.toLowerCase()}: ${top.count.toLocaleString("en-US")} item${top.count === 1 ? "" : "s"}${
+  const body = `Start with ${inText(top.checkLabel)}: ${top.count.toLocaleString("en-US")} item${top.count === 1 ? "" : "s"}${
     top.value ? ` worth ${money(top.value, result.currency)}` : ""
   }. Ranked by money at risk and severity:`;
   const payload: ChatPayload = { type: "fix_first", source: "rules", items: items.map(({ checkLabel, severity, count, value, action }) => ({ checkLabel, severity, count, value, action })) };
@@ -157,7 +158,7 @@ async function breakdownTurn({ run, template, result }: Ctx, checkId: string, by
   const check = result.checks.find((c) => c.id === checkId);
   const dim = check && (await dimensionsFor(run, template, checkId)).find((d) => d.key === by);
   if (!check || !dim) throw new ChatInputError("That breakdown isn't available for this check.");
-  await ask({ run }, `Break down ${check.label.toLowerCase()} by ${dim.label.toLowerCase()}`);
+  await ask({ run }, `Break down ${inText(check.label)} by ${inText(dim.label)}`);
   const { rows, totalGroups } = breakdown(template, result, await loadRunDatasets(run), checkId, by);
   const payload: ChatPayload = {
     type: "breakdown",
@@ -178,7 +179,7 @@ async function emailTurn({ run, template, result }: Ctx, checkId: string, audien
   if (!check) throw new ChatInputError("Pick a check with findings to write about.");
   const audience = audienceKey && AUDIENCE_LABELS[audienceKey] ? audienceKey : AUDIENCES[template.group].key;
   const label = AUDIENCE_LABELS[audience];
-  await ask({ run }, `Draft an email to the ${label} about ${check.label.toLowerCase()}`);
+  await ask({ run }, `Draft an email to the ${label} about ${inText(check.label)}`);
 
   let email = ruleEmail(template, result, checkId, audience, company);
   let source: "ai" | "rules" = "rules";
@@ -205,7 +206,7 @@ async function explainTurn({ run, template, result }: Ctx, index: number) {
   const e = result.exceptions[index];
   if (!e) throw new ChatInputError("That exception is no longer in the report. Refresh and try again.");
   const checkLabel = result.checks.find((c) => c.id === e.check)?.label ?? e.check;
-  await ask({ run }, `Explain ${e.key} (${checkLabel.toLowerCase()})`);
+  await ask({ run }, `Explain ${e.key} (${inText(checkLabel)})`);
 
   let text = ruleExplanation(template, result, index);
   let source: "ai" | "rules" = "rules";

@@ -3,6 +3,7 @@ import { parseNumber } from "@/lib/files/profile";
 import { getTemplate } from "@/lib/templates/catalog";
 import { compile } from "./expr";
 import { parseDate, type Dataset, type Rec } from "./load";
+import { ruleExplanation } from "@/lib/insights/facts";
 import { reconcile, type ReconResult } from "./match";
 
 // Build datasets straight from field-keyed rows (what loadDataset produces after mapping).
@@ -290,5 +291,51 @@ describe("Excel export", () => {
     await all.xlsx.load((await buildWorkbook(report, "all", {})).buffer);
     expect(all.worksheets.map((w) => w.name)).toEqual(["Checks", "Exceptions", "Matching"]);
     expect(all.getWorksheet("Exceptions")!.rowCount).toBe(1 + result.totals.exceptions);
+  });
+});
+
+describe("text_mismatch (D-52)", () => {
+  it("flags a matched order whose customer e-mail differs, ignoring case, spaces and blanks", () => {
+    const r = run("web-erp-invoices", [
+      ds("web-erp-invoices", "store_invoices", [
+        { order_id: "000000101", invoice_date: "2026-10-01", customer_email: "Layla.Haddad@example.com ", invoice_amount: "100.00", vat_amount: "4.76" },
+        { order_id: "000000102", invoice_date: "2026-10-02", customer_email: "omar@example.com", invoice_amount: "50.00", vat_amount: "2.38" },
+        { order_id: "000000103", invoice_date: "2026-10-03", customer_email: "", invoice_amount: "20.00", vat_amount: "0.95" },
+      ]),
+      ds("web-erp-invoices", "erp_invoices", [
+        { erp_invoice_no: "PSI-1", order_ref: "101", posting_date: "2026-10-02", customer_email: "layla.haddad@example.com", invoice_amount: "100.00", vat_amount: "4.76" },
+        { erp_invoice_no: "PSI-2", order_ref: "000000102", posting_date: "2026-10-03", customer_email: "guest@example.com", invoice_amount: "50.00", vat_amount: "2.38" },
+        { erp_invoice_no: "PSI-3", order_ref: "000000103", posting_date: "2026-10-04", customer_email: "someone@example.com", invoice_amount: "20.00", vat_amount: "0.95" },
+      ]),
+    ]);
+    expect(keysOf(r, "customer_mismatch")).toEqual(["000000102"]);
+    const e = r.exceptions.find((x) => x.check === "customer_mismatch")!;
+    expect(e.note).toBe("omar@example.com vs guest@example.com");
+    expect(e.value).toBe(50);
+    expect(check(r, "not_synced").count).toBe(0); // leading zeros don't matter
+  });
+});
+
+describe("quantity checks priced at unit price (D-54)", () => {
+  it("values a stock gap at quantity × unit price, and shows the store's own quantity for unknown SKUs", () => {
+    const r = run("web-erp-stock", [
+      ds("web-erp-stock", "erp_stock", [
+        { sku: "OUD-50", erp_qty: "4.00", unit_price: "285.00" },
+        { sku: "SND-42", erp_qty: "20.00", unit_price: "199.00" },
+      ]),
+      ds("web-erp-stock", "store_stock", [
+        { sku: "OUD-50", source: "default", store_qty: "10.00" },
+        { sku: "SND-42", source: "default", store_qty: "15.00" },
+        { sku: "SND-42", source: "shj", store_qty: "0.00" },
+        { sku: "OUD-100", source: "default", store_qty: "6.00" },
+      ]),
+    ]);
+    const by = (id: string) => r.exceptions.find((e) => e.check === id)!;
+    expect([by("overselling").leftValue, by("overselling").rightValue, by("overselling").value]).toEqual([4, 10, 1710]);
+    expect(by("hidden_stock").value).toBe(995); // 5 × 199
+    expect([by("not_in_erp").rightValue, by("not_in_erp").value]).toEqual([6, 0]);
+    expect(check(r, "overselling").value).toBe(1710);
+    const text = ruleExplanation(getTemplate("web-erp-stock")!, { ...r, currency: "AED" }, r.exceptions.findIndex((e) => e.check === "overselling"));
+    expect(text).toContain("Your ERP item inventory shows 4.00 units and the webstore stock by source shows 10.00 units, a difference of 6.00 units. AED 1,710.00 is at risk.");
   });
 });

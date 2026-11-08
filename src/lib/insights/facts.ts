@@ -14,6 +14,8 @@ export const money = (value: number, currency?: string) => {
 };
 const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+/** A label in running text: lower case, but acronyms such as ERP, VAT or GRN stay as they are. */
+export const inText = (s: string) => s.replace(/[A-Za-z][A-Za-z0-9]*/g, (w) => (/^[A-Z0-9]{2,}$/.test(w) && /[A-Z]/.test(w) ? w : w.toLowerCase()));
 
 export function slotLabel(t: Template, key: string) {
   return t.sources.find((s) => s.key === key)?.label ?? key;
@@ -23,11 +25,11 @@ export function slotLabel(t: Template, key: string) {
 export function summarize(r: ReconResult, leftLabel: string): string {
   const main = r.links[0];
   const rate = main?.leftRows ? Math.round((main.matchedLeft / main.leftRows) * 1000) / 10 : 0;
-  let text = `Done. Matched ${(main?.matchedLeft ?? 0).toLocaleString()} of ${(main?.leftRows ?? 0).toLocaleString()} rows in your ${leftLabel.toLowerCase()} (${rate}%).`;
+  let text = `Done. Matched ${(main?.matchedLeft ?? 0).toLocaleString()} of ${(main?.leftRows ?? 0).toLocaleString()} rows in your ${inText(leftLabel)} (${rate}%).`;
   const found = findings(r);
   if (found.length === 0) return `${text} No exceptions found. Everything reconciles.`;
   text += ` I found ${r.totals.exceptions.toLocaleString()} exceptions worth ${money(r.totals.value, r.currency)}.`;
-  text += " Biggest: " + found.slice(0, 3).map((c) => `${c.label.toLowerCase()} (${c.count}${c.value ? `, ${money(c.value, r.currency)}` : ""})`).join("; ") + ".";
+  text += " Biggest: " + found.slice(0, 3).map((c) => `${inText(c.label)} (${c.count}${c.value ? `, ${money(c.value, r.currency)}` : ""})`).join("; ") + ".";
   return text;
 }
 
@@ -44,8 +46,8 @@ export function fixAction(t: Template, check: Check): string {
   const rule = check.rule;
   if (!rule) return "Review these items by hand.";
   const link = "link" in rule ? t.links[rule.link] : undefined;
-  const L = link ? slotLabel(t, link.left).toLowerCase() : "";
-  const R = link ? slotLabel(t, link.right).toLowerCase() : "";
+  const L = link ? inText(slotLabel(t, link.left)) : "";
+  const R = link ? inText(slotLabel(t, link.right)) : "";
   const actions: Record<CheckRule["kind"], string> = {
     unmatched_left: `Find each item in the ${R}: if it's genuinely missing, chase it; if it's there under another reference, fix the key and re-run.`,
     unmatched_right: `Trace these ${R} lines back to your ${L}: post what's missing, or query lines you don't recognise.`,
@@ -58,6 +60,7 @@ export function fixAction(t: Template, check: Check): string {
     pair_match: `Check each pair and agree the treatment with the other party.`,
     date_outside: `Confirm the right price or rate applied on those dates and raise a correction if not.`,
     vat_rate: `Correct the VAT on these lines before the return is filed.`,
+    text_mismatch: `Check which side is right and correct the other, so both systems agree.`,
   };
   return actions[rule.kind];
 }
@@ -361,6 +364,17 @@ export function exceptionFacts(t: Template, r: ReconResult, index: number, datas
     .join("\n");
 }
 
+/** True when a compare check's figures are all number fields (quantities, weights), not money. */
+export function comparesQuantities(t: Template, check: Check): boolean {
+  const rule = check.rule;
+  if (rule?.kind !== "compare") return false;
+  const link = t.links[rule.link];
+  const exprs = [rule.left ?? link.amount?.left ?? "", rule.right ?? link.amount?.right ?? ""];
+  const idents = exprs.flatMap((e) => (e.match(/[a-z_][a-z0-9_]*/g) ?? []).filter((w) => w !== "abs"));
+  const types = new Map(t.sources.flatMap((s) => s.fields.map((f) => [f.key, f.type] as const)));
+  return idents.length > 0 && idents.every((i) => types.get(i) === "number");
+}
+
 export function ruleExplanation(t: Template, r: ReconResult, index: number): string {
   const e = r.exceptions[index];
   const check = t.checks.find((c) => c.id === e?.check);
@@ -370,7 +384,10 @@ export function ruleExplanation(t: Template, r: ReconResult, index: number): str
   const R = link ? slotLabel(t, link.right) : "right file";
   let text = `${e.key} was flagged by "${check.label}". ${check.description}`;
   if (e.leftValue !== undefined && e.rightValue !== undefined) {
-    text += ` Your ${L.toLowerCase()} shows ${money(e.leftValue, r.currency)} and the ${R.toLowerCase()} shows ${money(e.rightValue, r.currency)}, a difference of ${money(Math.abs(e.diff ?? e.leftValue - e.rightValue), r.currency)}.`;
+    // Quantity checks compare units, not money.
+    const fig = (n: number) => (comparesQuantities(t, check) ? `${money(n)} units` : money(n, r.currency));
+    text += ` Your ${inText(L)} shows ${fig(e.leftValue)} and the ${inText(R)} shows ${fig(e.rightValue)}, a difference of ${fig(Math.abs(e.diff ?? e.leftValue - e.rightValue))}.`;
+    if (comparesQuantities(t, check) && e.value) text += ` ${money(Math.abs(e.value), r.currency)} is at risk.`;
   } else if (e.value) text += ` ${money(Math.abs(e.value), r.currency)} is at risk.`;
   if (e.note) text += ` (${e.note})`;
   return `${text} Next: ${fixAction(t, check)}`;

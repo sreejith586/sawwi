@@ -1,5 +1,5 @@
 import { isDemoOrg } from "@/lib/demo/demo";
-import { DEMO_SOURCES, demoConnectionId } from "./mock";
+import { DEMO_SOURCES, demoConnectionId, demoSourceOffers } from "./mock";
 import { availableConnectors, connectorById } from "./registry";
 import { listConnections } from "./store";
 
@@ -17,7 +17,13 @@ const reportsOf = (id: string) => connectorById(id)?.reports.map(({ id, label, s
 /** The demo store has only its built-in sources (D-32); real workspaces only their own connections. */
 export async function importSources(orgKey: string): Promise<ImportSource[]> {
   if (isDemoOrg(orgKey)) {
-    return DEMO_SOURCES.map((d) => ({ connectionId: demoConnectionId(d.provider), label: `${connectorById(d.provider)!.label}: ${d.accountLabel}`, provider: d.provider, status: "connected", reports: reportsOf(d.provider) }));
+    return DEMO_SOURCES.map((d) => ({
+      connectionId: demoConnectionId(d.id),
+      label: `${connectorById(d.provider)!.label}: ${d.accountLabel}`,
+      provider: d.provider,
+      status: "connected",
+      reports: reportsOf(d.provider).filter((r) => demoSourceOffers(d, r.id)),
+    }));
   }
   return (await listConnections(orgKey)).flatMap((c) => {
     const connector = availableConnectors().find((x) => x.id === c.provider);
