@@ -25,7 +25,7 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | Purchase invoices: AI-assisted reading (D-68, D-69) | `feature/purchase-invoice-ai-reading` | #41 | Automation session |
-| Marketplace settlements → journal entries (D-70–D-73) | `feature/automation-marketplace-settlements` (based on #41) | — | Automation session |
+| Marketplace settlements → journal entries (D-70–D-73) | `feature/automation-marketplace-settlements` (based on #41) | #42 | Automation session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
