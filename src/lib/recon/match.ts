@@ -384,12 +384,14 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const side = rule.kind === "unmatched_left" ? "left" : "right";
       for (const r of side === "left" ? m.leftOnly : m.rightOnly) {
         if (!matches(r, rule.where)) continue;
-        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : c.amountOfSide(rule.link, side, r);
+        const own = c.amountOfSide(rule.link, side, r);
+        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : own;
+        const shown = own ?? v; // the row's own figure; `value` only prices it when there is one
         c.push({
           link: rule.link,
           key: c.displayKey(link, r, side),
           [side]: c.ref(r.slot, [r]),
-          ...(v !== undefined && { [side === "left" ? "leftValue" : "rightValue"]: round(v) }),
+          ...(shown !== undefined && { [side === "left" ? "leftValue" : "rightValue"]: round(shown) }),
           value: v ?? 0,
         });
       }
@@ -401,27 +403,31 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const leftExpr = rule.left ?? link.amount!.left;
       const rightExpr = rule.right ?? link.amount!.right;
       const tol = rule.tolerance ?? link.amount?.tolerance ?? 0;
-      for (const g of m.groups) {
+      const lone = rule.unmatchedAsZero && link.cardinality !== "many_to_one" ? m.leftOnly.map((r) => ({ key: "", left: [r], right: [] as Rec[] })) : [];
+      for (const g of [...m.groups, ...lone]) {
         const left = g.left.filter((r) => matches(r, rule.leftWhere));
         const right = g.right.filter((r) => matches(r, rule.rightWhere));
-        if (!left.length || (!right.length && !rule.rightWhere)) continue;
+        if (!left.length || (!right.length && !rule.rightWhere && !rule.unmatchedAsZero)) continue;
         let lv: number;
         let rv: number;
+        let get: (f: string) => number | undefined;
         if (link.cardinality === "many_to_one") {
           const recs = c.merged(rule.link, g);
           // Skip when the lookup chain broke (e.g. SKU has no rate-card entry): comparing
           // against a missing rate would report every such row as an overcharge.
           if (!c.chainComplete(rule.link, recs, [leftExpr, rightExpr])) continue;
-          const get = c.mergedGetter(recs);
+          get = c.mergedGetter(recs);
           lv = c.evalOn(leftExpr, get);
           rv = c.evalOn(rightExpr, get);
         } else {
           lv = c.sumOver(left, leftExpr);
           rv = c.sumOver(right, rightExpr);
+          get = (f) => left[0].num[f] ?? right[0]?.num[f];
         }
         const diff = lv - rv;
         const hit = rule.direction === "left_higher" ? diff > tol + 1e-9 : rule.direction === "right_higher" ? -diff > tol + 1e-9 : Math.abs(diff) > tol + 1e-9;
         if (!hit) continue;
+        const value = rule.value ? c.evalOn(rule.value, (f) => (f === "diff" ? diff : get(f))) : diff;
         c.push({
           link: rule.link,
           key: c.groupKey(link, g),
@@ -430,7 +436,7 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
           leftValue: round(lv),
           rightValue: round(rv),
           diff: round(diff),
-          value: diff,
+          value,
         });
       }
       return;
@@ -490,8 +496,8 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const side = li >= 0 && t.links[li].left === rule.slot ? "left" : "right";
       for (const r of c.datasets.get(rule.slot)!.rows) {
         if (!matches(r, rule.where)) continue;
-        const v = li >= 0 ? c.amountOfSide(li, side, r) : undefined;
-        c.push({ link: null, key: r.raw[rule.where.field] || `row ${r.rowNumber}`, [side]: c.ref(rule.slot, [r]), value: v ?? 0 });
+        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : li >= 0 ? c.amountOfSide(li, side, r) : undefined;
+        c.push({ link: null, key: r.raw[rule.key ?? rule.where.field] || `row ${r.rowNumber}`, [side]: c.ref(rule.slot, [r]), value: v ?? 0 });
       }
       return;
     }
@@ -518,7 +524,7 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
         const recs = c.merged(rule.link, g);
         const pick = (f: string) => [...recs.values()].map((r) => r.date[f]).find(Boolean);
         const d = pick(rule.date);
-        const from = pick(rule.from);
+        const from = rule.from ? pick(rule.from) : undefined;
         const to = pick(rule.to);
         if (!d || !((from && d < from) || (to && d > to))) continue;
         c.push({ link: rule.link, key: c.groupKey(link, g), left: c.ref(link.left, g.left), right: c.ref(link.right, g.right), value: 0, note: `Dated ${d}, price valid ${from ?? "…"} to ${to ?? "…"}` });

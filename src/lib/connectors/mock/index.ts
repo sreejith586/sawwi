@@ -17,7 +17,7 @@ export type DemoSource = {
 };
 
 /** Business Central reports that read the web store's books, served by the store company (D-52). */
-export const BC_STORE_REPORTS = ["web_sales_invoices", "web_sales_credit_memos"];
+export const BC_STORE_REPORTS = ["web_sales_invoices", "web_sales_credit_memos", "items", "web_sales_invoices_fx"];
 
 export const DEMO_SOURCES: DemoSource[] = [
   { id: "business-central", provider: "business-central", accountLabel: "Sawwi Demo Trading LLC (Sandbox)", credentials: DEMO_BC_CREDENTIALS },

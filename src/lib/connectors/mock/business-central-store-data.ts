@@ -16,6 +16,15 @@ import { DEMO_CREDIT_MEMOS, DEMO_INVOICES, DEMO_ORDERS } from "./magento-data";
 //   - 000000106: never posted (only a draft exists).
 //   - 000000108: a 15.00 goodwill refund posted as 20.00.
 //
+//  Items (web-erp-stock): the store's SKUs with their inventory, plus GIFT-BOX, which isn't sold
+//  online. Against Magento's stock: OUD-50 holds 4 (Magento sells 10), SND-42 holds 20 (Magento
+//  sells 15), and Magento's OUD-100 isn't an item here.
+//
+//  Multi-store, multi-currency (web-erp-fx): web invoices carry the store view in Global
+//  Dimension 1. 000000121 (SAR) was posted in AED; 000000122 was posted after the SAR rate moved
+//  (0.97 instead of Magento's 1/1.021), so its AED value is 19.26 lower; the Oman store's
+//  000000123 was never posted.
+//
 // It is kept apart from "Sawwi Demo Trading LLC" so the B2B demo results don't change.
 
 type Doc = Record<string, unknown>;
@@ -34,15 +43,19 @@ const invoiceDateOf = (inc: string) => {
 };
 const nextDay = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
-function webInvoice(number: string, orderInc: string, over: { total?: number; tax?: number; email?: string; name?: string; status?: string } = {}): Doc {
+const STORE_DIMENSION: Record<number, string> = { 1: "UAE_EN", 2: "KSA_AR", 3: "OMN_EN" };
+
+function webInvoice(number: string, orderInc: string, over: { total?: number; tax?: number; email?: string; name?: string; status?: string; currency?: string } = {}): Doc {
   const o = orderOf(orderInc);
   const total = over.total ?? Number(o.grand_total);
-  const tax = over.tax ?? r2((total * 5) / 105);
+  const tax = over.tax ?? (over.total === undefined ? Number(o.tax_amount) : r2((total * 5) / 105));
+  const orderCurrency = String(o.order_currency_code);
   const date = nextDay(invoiceDateOf(orderInc)); // the connector posts the day after
   return {
     id: guid(), number, externalDocumentNumber: orderInc, invoiceDate: date, postingDate: date, dueDate: date,
     customerNumber: "WEB", customerName: over.name ?? `${o.customer_firstname} ${o.customer_lastname}`, email: over.email ?? o.customer_email,
-    currencyCode: "", orderNumber: "", totalAmountExcludingTax: r2(total - tax), totalTaxAmount: tax, totalAmountIncludingTax: total,
+    currencyCode: over.currency ?? (orderCurrency === "AED" ? "" : orderCurrency), shortcutDimension1Code: STORE_DIMENSION[Number(o.store_id)] ?? "",
+    orderNumber: "", totalAmountExcludingTax: r2(total - tax), totalTaxAmount: tax, totalAmountIncludingTax: total,
     remainingAmount: 0, status: over.status ?? "Paid", salesInvoiceLines: [],
   };
 }
@@ -60,7 +73,19 @@ function webCreditMemo(number: string, orderInc: string, over: { total?: number;
   };
 }
 
+function item(number: string, displayName: string, inventory: number, unitPrice: number, type = "Inventory"): Doc {
+  return { id: guid(), number, displayName, type, inventory, baseUnitOfMeasureCode: "PCS", unitPrice, priceIncludesTax: true, blocked: false, gtin: "" };
+}
+
 export const DEMO_STORE_DATA: Record<string, Doc[]> = {
+  items: [
+    item("ABY-BLK-M", "Classic black abaya, M", 12, 420),
+    item("GIFT-BOX", "Gift box (showroom only)", 50, 15),
+    item("MAT-01", "Travel prayer mat", 30, 75),
+    item("OUD-50", "Oud perfume 50 ml", 4, 285),
+    item("SND-42", "Leather sandals, 42", 20, 199),
+    item("SHIP-STD", "Standard delivery", 0, 20, "Service"),
+  ],
   salesInvoices: [
     webInvoice("PSI-W1001", "000000101"),
     webInvoice("PSI-W1002", "000000102", { email: "guest@example.com", name: "Web guest" }),
@@ -69,6 +94,16 @@ export const DEMO_STORE_DATA: Record<string, Doc[]> = {
     webInvoice("PSI-W1005", "000000104"), // the same order posted again
     webInvoice("PSI-W1006", "000000106", { total: 504 }),
     webInvoice("PSI-W1008", "000000108", { tax: 0 }),
+    webInvoice("PSI-W1020", "000000120"),
+    webInvoice("PSI-W1021", "000000121", { currency: "" }), // a SAR order posted in AED
+    webInvoice("PSI-W1022", "000000122"),
+    // 000000123 (Oman store) is never posted: that store isn't connected to Business Central.
+  ],
+  // LCY (AED) per unit: relationalExchangeRateAmount ÷ exchangeRateAmount. SAR moves on 20 October.
+  currencyExchangeRates: [
+    { id: guid(), currencyCode: "SAR", startingDate: "2026-01-01", exchangeRateAmount: 1, relationalCurrencyCode: "", relationalExchangeRateAmount: 0.98 },
+    { id: guid(), currencyCode: "SAR", startingDate: "2026-10-20", exchangeRateAmount: 1, relationalCurrencyCode: "", relationalExchangeRateAmount: 0.97 },
+    { id: guid(), currencyCode: "OMR", startingDate: "2026-01-01", exchangeRateAmount: 1, relationalCurrencyCode: "", relationalExchangeRateAmount: 9.54 },
   ],
   salesCreditMemos: [
     webCreditMemo("PCM-W2001", "000000103"),

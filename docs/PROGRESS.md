@@ -28,9 +28,44 @@ _Updated in every commit. Newest first within each section._
 | Light by default, theme switch in the app only (D-51) | `feature/light-default-theme` | — | Logo session |
 | AI calls fail with an unscoped key: `ANTHROPIC_WORKSPACE_ID` (D-50) | `fix/anthropic-workspace-header` | #29 | Logo session |
 | Magento ↔ Business Central templates (D-52 →), a stack of 5 PRs. 1: store invoices vs. ERP posted invoices | `feature/magento-bc-invoices` | PR 1 | Magento↔BC session |
-| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | this PR | Magento↔BC session |
+| 2: store refunds vs. ERP credit notes (D-53), based on PR 1 | `feature/magento-bc-credit-memos` | PR 2 | Magento↔BC session |
+| 3: store stock vs. ERP inventory (D-54), based on PR 2 | `feature/magento-bc-stock` | PR 3 | Magento↔BC session |
+| 4: store prices vs. ERP prices (D-55), based on PR 3 | `feature/magento-bc-prices` | PR 4 | Magento↔BC session |
+| 5: webstore sales by payment method vs. payouts and bank (D-56), based on PR 4 | `feature/magento-payouts-by-method` | #36 | Magento↔BC session |
+| 6: gift cards and store credit roll-forward, Adobe Commerce (D-57), based on PR 5 | `feature/magento-gift-cards` | PR 6 | Magento↔BC session |
+| 7: multi-store, multi-currency store invoices vs. ERP (D-58), based on PR 6 | `feature/magento-multi-currency` | this PR | Magento↔BC session |
 
 ## Recent changes
+
+- **Multi-store, multi-currency store invoices vs. ERP** (D-58, `feature/magento-multi-currency`, PR 7 of the stack, based on PR 6; scenario 10, added by the user).
+  - New template `web-erp-fx`: each store view's invoices at the base value Magento recorded against Business Central's local-currency amount (tolerance 1.00). It also flags invoices in the wrong currency, invoices not posted, and stores missing from Business Central (by Global Dimension 1).
+  - Magento connector: new `invoice_currencies` report (store view, currencies, recorded rate). Business Central connector: new `web_sales_invoices_fx` report, with local currency worked out from the exchange rates table on the posting date (API v2.0 documents have no currency factor).
+  - Demo: KSA (SAR) and Oman (OMR) store views; the template fills in one click and finds its 8 planted exceptions. The Oman order is also "not synced" in the invoices template, and the payouts template now matches per provider and currency, so the SAR and OMR cash-on-delivery sales show with no payouts.
+  - 2 new tests, 5 updated.
+
+- **Gift cards and store credit roll-forward** (D-57, `feature/magento-gift-cards`, PR 6 of the stack, based on #36; scenario 9, added by the user).
+  - New template `web-gift-cards` (Adobe Commerce only): each gift card and store credit balance should roll forward (opening + issued − redeemed − expired = closing) against the redemptions on orders. Flags breaks, over-redeemed and negative balances, and redemptions with no issuance.
+  - Magento connector: new `gift_card_balances` report (`/V1/giftcardaccounts`, from each account's balance history) and `gift_card_redemptions` report (gift cards and store credit used on orders). Store credit balances come from the admin's export; Adobe Commerce documents no REST list for them.
+  - Engine: `compare.unmatchedAsZero` and `row_match.key`/`value`.
+  - Demo: the template fills in one click and finds its 6 planted exceptions; other demo results are unchanged. 2 new tests.
+
+- **Webstore sales by payment method vs. payouts and bank** (D-56, `feature/magento-payouts-by-method`, PR 5 of the stack, based on PR 4).
+  - New template `web-payouts-by-method`: Magento sales per payment provider (card, PayPal, Apple Pay, Tabby, COD…) against each provider's payouts before fees, and each payout against the bank. It shares the payouts file and payouts-to-bank link with "Bank statement vs. expected payouts", whose results are unchanged.
+  - Magento connector: new `payment_totals` report (payable orders per provider and method, net of online refunds).
+  - Demo: a payouts file named by provider; the template fills in one click and finds its 5 planted exceptions. 2 new tests (one keeps every template's summary within the 160-character page description; "Returns vs. invoiced items" was 163 and is trimmed).
+
+- **Store prices vs. ERP prices** (D-55, `feature/magento-bc-prices`, PR 4 of the stack, based on PR 3).
+  - New template `web-erp-prices`: each Magento SKU's price against Business Central's unit price, plus special prices past their end date and special prices above the regular price.
+  - Magento connector: new `product_prices` report (simple, virtual and downloadable products, special price and dates). Business Central: the `items` report from PR 3. Price list lines aren't in Business Central's standard API, so they aren't read (D-55).
+  - Engine: `date_outside` may leave out `from`.
+  - Demo: the template fills in one click and finds its 4 planted exceptions. 1 new test.
+
+- **Store stock vs. ERP inventory** (D-54, `feature/magento-bc-stock`, PR 3 of the stack, based on PR 2).
+  - New template `web-erp-stock`: Magento's sellable quantity per SKU (summed over in-stock sources) against Business Central's item inventory. Flags overselling, stock hidden from the store, and SKUs Business Central doesn't know.
+  - Magento connector: new `source_items` report (Multi-Source Inventory, current stock). Business Central connector: new `items` report (inventory and unit price), the first undated report.
+  - Demo: the store company's items and two Magento sources; the template fills in one click and finds its 3 planted exceptions.
+  - From the browser check: stock gaps are valued at quantity × unit price (a `value` expression on `compare`), "Explain" says "units" for quantity checks, and generated text keeps acronyms ("ERP", "VAT", "GRN") instead of lower-casing them. A remembered column mapping now also maps fields a template gained after it was saved, by name and without questions.
+  - 1 new test, 2 extended. A new SEO test checks each connector page lists every template its connector fills, with no duplicates; it found the Business Central page missing "B2B invoices vs. payment release", now listed.
 
 - **Store refunds vs. ERP credit notes** (D-53, `feature/magento-bc-credit-memos`, PR 2 of the stack, based on PR 1).
   - New template `web-erp-credit-memos`: every Magento credit memo should be a posted Business Central credit memo, once, for the same amount and VAT. Matched on the order number.
@@ -192,6 +227,12 @@ _Updated in every commit. Newest first within each section._
 
 ## Open questions
 
+- **Multi-currency with the design partner (live check):** do their web invoices carry the Magento store view code in Global Dimension 1, and do they ever change the currency factor on a document? Sawwi works out local currency from BC's exchange rates table, because API v2.0 documents don't carry it (D-58).
+
+- **Adobe Commerce gift cards (blocked on a live store):** confirm where Commerce's REST API returns a gift card account's balance history. Until then the gift card report stops with a clear message if it's missing, and store credit balances are uploaded (D-57). Does the design partner run Adobe Commerce or Magento Open Source?
+
+- **Business Central price lists:** the price template compares Magento with BC's item unit price. Checking promotions against BC price list lines needs a small custom API page (AL extension) in the tenant, since API v2.0 has none (D-55). Does the design partner want that?
+
 - **Demo store:** shared by all visitors (they can see each other's runs until the daily reset), with uploads and AI off. Do you want a private sandbox per visitor, or a small AI quota in the demo, instead?
 - **Data residency:** the database and functions are in Frankfurt (D-41). Do UAE or KSA (PDPL) customers need their data kept in-country? Decide before real customer data goes in.
 - **Neon plan:** Free for now. Upgrade before real customer data (storage, compute hours, restore window).
@@ -212,4 +253,4 @@ _Updated in every commit. Newest first within each section._
 
 - Dev-only "instant navigation" warnings on client navigation from the gallery to a template page. The production build is fine; investigated, no fix found yet.
 - Small files of whole numbers (e.g. 5 invoice lines, all with different quantities) profile the quantity column as an ID, so mapping asks one confirm question. This is a general profiling rule, not specific to PDFs. Connectors avoid it by writing decimals with 2 places (D-29).
-- "Value at risk" adds quantity differences into money totals for quantity checks (D-13).
+- "Value at risk" adds quantity differences into money totals for quantity checks (D-13), except where a check prices them with a `value` expression, as the stock template does (D-54).

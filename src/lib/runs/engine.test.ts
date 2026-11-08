@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { answerQuestion, ingestFile } from "./engine";
+import { fingerprintHeaders } from "@/lib/files/profile";
 import * as store from "./store";
 import { buildRunView } from "./view";
 
@@ -78,5 +79,23 @@ describe("run engine", () => {
     const run = await store.createRun("other-co", "web-orders-vs-gateway");
     await ingestFile(run, "gateway", "gateway.csv", gateway(["1", "2", "3"]), ctx);
     expect((await buildRunView(run.id))!.slots.find((s) => s.key === "gateway")!.file!.remembered).toBe(false);
+  });
+});
+
+describe("remembered layouts and template changes (D-54)", () => {
+  it("maps a field the template gained after the layout was remembered, by name, asking nothing", async () => {
+    const headers = ["SKU", "Description", "Inventory", "Unit price"];
+    const file = csv([headers, ["OUD-50", "Oud perfume 50 ml", "4.00", "285.00"], ["SND-42", "Leather sandals, 42", "20.00", "199.00"]]);
+    // Remembered before the stock template had a unit price field.
+    await store.saveCachedMapping("acme", "web-erp-stock", "erp_stock", fingerprintHeaders(headers), {
+      fields: { sku: { column: "SKU", source: "auto", confidence: 1 }, description: { column: "Description", source: "auto", confidence: 1 }, erp_qty: { column: "Inventory", source: "auto", confidence: 1 } },
+      dateFormats: {},
+    });
+    const run = await store.createRun("acme", "web-erp-stock");
+    await ingestFile(run, "erp_stock", "items.csv", file, ctx);
+    const slot = (await buildRunView(run.id))!.slots.find((s) => s.key === "erp_stock")!;
+    expect(slot.file!.remembered).toBe(false); // one field is new, so not all of it was remembered
+    expect(Object.fromEntries(slot.file!.fields.map((f) => [f.key, f.column]))).toMatchObject({ sku: "SKU", erp_qty: "Inventory", unit_price: "Unit price" });
+    expect((await buildRunView(run.id))!.openQuestions).toEqual([]);
   });
 });
