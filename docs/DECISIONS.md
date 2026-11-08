@@ -842,3 +842,56 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - The store company gains G/L accounts for each bucket and a "DEFAULT" general journal batch in the mock.
   - **Samples:** the demo's existing generic marketplace settlement file (settlements S-2026-10-A and -B), and an invented Amazon-style flat file with an unknown category, to show classifying one.
 - **Consequences:** no demo reconciliation result changes: the reconciliation reports don't read accounts or journals.
+
+### D-74: COD remittances → customer payments applied to invoices, the third Automation use case
+- **Context:** the user asked (8 Nov 2026) to continue with the next backlog item (D-60 #2): courier cash-on-delivery remittances. Applying them order by order is the slowest manual job in the month.
+- **Decision:**
+  - **In:** a courier's remittance report (Aramex, SMSA, J&T, Quiqup, iMile or any other) as CSV, Excel or PDF, read by the upload parser. Columns are found by name: AWB or tracking number, order reference, amount collected, COD fee, VAT on the fee, net remitted, and the remittance or batch ID and date. A file may hold several batches; each batch is one draft.
+  - **Matching each parcel to an invoice:**
+    - the order reference is matched against the ERP's posted sales invoices: External Document No. (the web order number, as in D-52), then the invoice number, then the order number;
+    - **open** invoices are read once per batch (`status eq 'Open'`); references still unmatched are looked up one by one to tell "already paid" from "no invoice".
+  - **One action per parcel:**
+    - **apply** to the invoice, for the full amount collected. When less was collected than is open, the rest stays open and the parcel is flagged "short"; when more, it's flagged "over" and the excess stays on account;
+    - **on account** (an unapplied payment to the invoice's customer, or to a default COD customer);
+    - **leave out.**
+    - A parcel with no invoice, or with an invoice already paid, blocks approval until the user picks one of these.
+  - **Out:**
+    - one customer payment per parcel, applied to its invoice, with document number = batch ID and external document number = AWB;
+    - one general journal per batch for the money side: Dr bank (net remitted), Dr COD fees, Dr input VAT on fees, Cr courier clearing (total collected);
+    - the customer payment batch's balancing account in Business Central must be the same courier clearing account, so the clearing account nets to zero. The screen says so.
+  - **Checks:**
+    - collected − fees − VAT = net remitted, per parcel and for the batch;
+    - an AWB already remitted in another batch is flagged;
+    - the batch ID already in Sawwi isn't captured twice.
+  - **Same review flow as D-66:** a queue, single and bulk approve (hash-bound), CSV, and push behind a confirmation.
+- **Consequences:** this also reaches cash collected but never invoiced, a common COD gap. The reconciliation template `web-cod-remittance` still checks delivered vs remitted. This turns what was remitted into entries.
+
+### D-75: Business Central customer payments
+- **Decision:**
+  - New connector capability `Connector.customerPayments` (Business Central only):
+    - `openInvoices` reads posted sales invoices with `status eq 'Open'`;
+    - `lookupInvoices` reads specific references (External Document No. or number) for "already paid";
+    - `listJournals` reads `customerPaymentJournals`;
+    - `findDocument` checks the batch's `customerPayments` and posted `generalLedgerEntries` for the batch ID;
+    - `createPayments` posts `customerPayments` with `customerNumber`, `appliesToInvoiceNumber`, `postingDate`, `documentNumber`, `externalDocumentNumber`, `amount` and `description`.
+  - **Amount sign:** a payment received is negative (a credit to the customer), as in Business Central's payment journal. This is to be confirmed on the user's sandbox before the first live push, along with whether `appliesToInvoiceNumber` is accepted on create.
+  - The money side reuses the general journal capability from D-71.
+  - **Unposted only.** If any write fails, the lines this push created are deleted. The permission set needs "D365 CASH RECEIPT" or "D365 JOURNALS, EDIT".
+- **Consequences:** two Business Central batches are configured per workspace: a customer payment batch and a general journal batch.
+
+### D-76: Sign convention and amounts for COD
+- **Decision:** courier reports show fees as positive numbers in a "fee" column, or negative in a long list. Sawwi stores collected, fee and VAT on the fee as positive amounts, and net = collected − fee − VAT. A report that gives net but not VAT, where net ≠ collected − fee, treats the difference as VAT on the fee when it's 5% (UAE), 10%, 15% (KSA) or 0% of the fee. Otherwise it's a blocking difference.
+- **Consequences:** most couriers' reports read without configuration. An odd one shows exactly which parcel doesn't add up.
+
+### D-77: COD demo: open November invoices in the web store company
+- **Decision:**
+  - The mock store company gains six November COD web invoices (PSI-W1031–W1036, orders 000000131–136), five of them open.
+  - **Samples:**
+    - an Aramex-style remittance (batch ARX-RMT-2026-11-07) with:
+      - parcels paid in full;
+      - one collected 10.00 short;
+      - one with no invoice;
+      - one whose invoice is already paid;
+    - an SMSA-style report, laid out differently, that repeats one AWB from the Aramex batch.
+  - November falls outside the October window the reconciliation demo pulls, so no reconciliation result changes.
+  - Pushes go to the store company's "CODRCPT" customer payment batch and DEFAULT general batch.
