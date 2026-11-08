@@ -25,10 +25,17 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | Purchase invoices: AI-assisted reading (D-68, D-69) | `feature/purchase-invoice-ai-reading` | #41 | Automation session |
+| Marketplace settlements → journal entries (D-70–D-73) | `feature/automation-marketplace-settlements` | — | Automation session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
+
+- **Plan: marketplace settlements → journal entries** (D-70–D-73, `feature/automation-marketplace-settlements`).
+  - Settlement reports in, one journal per settlement out. The reader handles Amazon-style long files (amount type and description per row) and wide files (a column per fee), as CSV, Excel or PDF.
+  - Categories go into buckets (sales, fees, VAT on fees, refunds, advertising…), each mapped to a G/L account. The payout goes to a clearing account.
+  - Same review queue, approval and CSV as purchase invoices. Push creates unposted journal lines in a Business Central batch (D-71).
+  - Duplicates are caught in Sawwi and in Business Central (D-72). In the demo, settlements post to the store company (D-73).
 
 - **Phase 9: Automation, starting with purchase invoices** (D-60–D-67 merged as #40 on 8 Nov 2026; D-68 and D-69 in `feature/purchase-invoice-ai-reading`).
   - **Automation section** next to Reconciliation. The sidebar is grouped into Workspace, Reconcile and Automate. `/automation` shows purchase invoices, plus eight more use cases ranked by value and marked "Coming soon":
