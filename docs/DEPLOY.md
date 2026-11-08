@@ -113,6 +113,13 @@ deployment keeps serving until the new one is promoted, against the same databas
   Where customer data may live (UAE, KSA PDPL) is an open question in PROGRESS.
 - Neon is on its Free plan: fine for previews and a soft launch, but its storage, compute hours and
   restore window are small. Move to a paid plan before real customer data goes in.
+- The Neon integration makes a database branch, `preview/<git branch>`, for each new preview git branch,
+  and Neon's Free plan holds 10 branches (main included). When it's full, every new preview fails within a
+  second with `Resource provisioning failed` and no build log (D-59). The **Delete preview database**
+  workflow (`.github/workflows/neon-preview-cleanup.yml`) deletes a PR's branch when the PR is closed. It
+  needs the `NEON_API_KEY` secret and the `NEON_PROJECT_ID` variable in the GitHub repository settings.
+  Run it by hand (Actions → Delete preview database → Run workflow) for a branch closed before it existed,
+  or delete old `preview/…` branches in the Neon console. More than 9 PRs open at once still fills the plan.
 - Background jobs (D-42) run every 15 minutes from Vercel Cron, on production deployments only (Vercel
   doesn't run cron on previews). Admin → Background jobs shows the last runs. To run one by hand:
   `curl -H "Authorization: Bearer $CRON_SECRET" https://sawwiapp.ai/api/cron/tick`.

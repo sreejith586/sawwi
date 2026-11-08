@@ -30,6 +30,11 @@ _Updated in every commit. Newest first within each section._
 
 ## Recent changes
 
+- **Vercel previews failing; preview databases now deleted when a PR closes** (D-59, `ci/neon-preview-cleanup`).
+  - Every preview of a new git branch since 7 Nov failed within a second with `Resource provisioning failed`. The Neon integration's 10-branch Free plan was full of databases from previews of merged PRs. The user deleted them on 8 Nov.
+  - New workflow `.github/workflows/neon-preview-cleanup.yml` deletes `preview/<branch>` in Neon when its PR closes.
+  - **Blocked on the user:** add the `NEON_API_KEY` secret and the `NEON_PROJECT_ID` variable in GitHub. Until then the workflow finishes with a warning and deletes nothing.
+
 - **Larger wordmark** (`feature/larger-wordmark`): "sawwiapp" next to the logo mark is 20px in headers (was 16px) and 18px in the footer (was 14px), at the user's request. The mark stays 28px and 24px.
 - **Light by default; theme switching only inside the app** (D-51, `feature/light-default-theme`).
   - With nothing saved, the theme is light (it used to follow the OS). "System" and "Dark" are still in Settings and the account menu.

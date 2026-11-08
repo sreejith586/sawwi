@@ -1,0 +1,57 @@
+name: Delete preview database
+
+# Vercel's Neon integration makes a database branch, "preview/<git branch>", for each new preview
+# git branch, and never deletes it. The Neon Free plan holds 10 branches, so once 9 previews exist
+# every new preview fails with "Resource provisioning failed" (D-59). This deletes the branch when
+# its PR is closed (merged or not). Only "preview/..." branches are ever touched, never main.
+#
+# Needs, in GitHub → Settings → Secrets and variables → Actions:
+#   secret   NEON_API_KEY     a Neon API key that can manage the neon-sawwi project
+#   variable NEON_PROJECT_ID  the Neon project id (Neon → project → Settings)
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Git branch whose preview database to delete (without preview/)"
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: neon-preview-cleanup-${{ github.event.pull_request.head.ref || inputs.branch }}
+
+jobs:
+  delete:
+    # Forks get no secrets; their previews aren't built against this project anyway.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete the Neon branch preview/<git branch>
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          GIT_BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEON_API_KEY}" ] || [ -z "${NEON_PROJECT_ID}" ]; then
+            echo "::warning::NEON_API_KEY or NEON_PROJECT_ID isn't set; nothing deleted."
+            exit 0
+          fi
+          name="preview/${GIT_BRANCH}"
+          api="https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches"
+          auth=(-H "Authorization: Bearer ${NEON_API_KEY}" -H "Accept: application/json")
+
+          id=$(curl -fsS "${auth[@]}" -G "$api" --data-urlencode "search=${name}" \
+            | jq -r --arg n "$name" '[.branches[] | select(.name == $n and (.default | not)) | .id] | first // empty')
+          if [ -z "$id" ]; then
+            echo "No Neon branch named ${name}; nothing to delete."
+            exit 0
+          fi
+          case "$name" in preview/*) ;; *) echo "::error::refusing to delete ${name}"; exit 1 ;; esac
+
+          curl -fsS -X DELETE "${auth[@]}" "${api}/${id}" > /dev/null
+          echo "Deleted Neon branch ${name} (${id})."
