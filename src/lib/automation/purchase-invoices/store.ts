@@ -21,6 +21,20 @@ export type CaptureSource = {
   ocr?: { pages: number; confidence: number };
   /** True when the PDF was one of the built-in samples (demo). */
   sample?: boolean;
+  /** Set when the AI read this invoice (D-69). */
+  ai?: AiSource;
+};
+
+export type AiSource = {
+  model: string;
+  /** Why the AI was asked: what the rules couldn't read or check. */
+  reasons: string[];
+  /** "ai": the draft is the AI's reading; "rules": the AI's reading checked worse, so the rules' was kept. */
+  used: "ai" | "rules";
+  /** Fields where the rules and the AI read different values. */
+  conflicts: string[];
+  notes: string;
+  at: string;
 };
 
 export type ErpRecord = {
@@ -107,6 +121,16 @@ export async function saveDraft(orgKey: string, id: string, draft: Draft, status
     `UPDATE purchase_invoices SET draft_json = ?, status = ?, approved_hash = NULL, approved_by = NULL, approved_at = NULL, updated_at = ?
      WHERE org_key = ? AND id = ? AND status NOT IN ('pushing', 'pushed')`,
     JSON.stringify(draft), status, now(), orgKey, id,
+  );
+  return r.changes === 1;
+}
+
+/** Replaces the draft and how it was read (a re-read). Clears any approval. Not once pushed. */
+export async function replaceReading(orgKey: string, id: string, draft: Draft, source: CaptureSource, status: CaptureStatus): Promise<boolean> {
+  const r = await getDb().run(
+    `UPDATE purchase_invoices SET draft_json = ?, source_json = ?, status = ?, approved_hash = NULL, approved_by = NULL, approved_at = NULL, updated_at = ?
+     WHERE org_key = ? AND id = ? AND status NOT IN ('pushing', 'pushed')`,
+    JSON.stringify(draft), JSON.stringify(source), status, now(), orgKey, id,
   );
   return r.changes === 1;
 }

@@ -1,18 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDemoOrg } from "@/lib/demo/demo";
-import { deleteFiles, putFile } from "@/lib/files/storage";
+import { deleteFiles, putFile, readStoredFile } from "@/lib/files/storage";
 import { demoConnectionId } from "@/lib/connectors/mock";
 import { connectorById } from "@/lib/connectors/registry";
 import { liveDeps, openConnection } from "@/lib/connectors/service";
 import { listConnections } from "@/lib/connectors/store";
 import { ConnectorError, type ConnectorDeps } from "@/lib/connectors/types";
 import { extractPdf, PdfInputError } from "@/lib/pdf";
+import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
 import { addDays, daysBetween, draftFromInvoice, normInvoiceNo, reviewDraft, type Draft, type Review } from "./draft";
+import { AiReadError, compareReadings, draftFromExtraction, EXTRACTION_MODEL, readInvoiceWithAi, type AiReader, type AiReading } from "./ai";
 import { applyMatches, learnFromDraft, type MasterData } from "./matching";
 import { samplePdfBytes, sampleSpec } from "./samples";
 import * as store from "./store";
-import type { Capture, CaptureStatus } from "./store";
+import type { Capture, CaptureSource, CaptureStatus } from "./store";
 
 // Purchase invoice capture (D-60–D-66): PDF → draft → review → approve → CSV or a draft
 // purchase invoice in the ERP. Everything here is scoped to one workspace (org key).
@@ -88,11 +90,117 @@ export const statusFor = (d: Draft, erp: boolean): CaptureStatus => (reviewDraft
 export type CaptureResult = { capture: Capture; existing: boolean };
 
 /** One PDF → one draft. The same file again opens the draft it already made (D-63). */
+/** Which reader to use when the rules fall short: the AI where it's on for this workspace (D-69), else none. */
+export const defaultAiReader = (orgKey: string): AiReader | null => (llmAvailable(orgKey) ? readInvoiceWithAi : null);
+
+/** What the rules couldn't read or check, which is when the AI is asked (D-69). Empty: the rules' reading stands. */
+export function aiReasons(d: Draft | undefined, source: Pick<CaptureSource, "method" | "ocr"> | undefined): string[] {
+  if (!d) return ["The text reader couldn't read this PDF as an invoice."];
+  const out: string[] = [];
+  const review = reviewDraft(d, { erp: false });
+  for (const c of review.checks) if (!c.ok) out.push(`${c.label}: ${c.detail}`);
+  if (!d.invoiceNumber) out.push("No invoice number found.");
+  if (!d.invoiceDate) out.push("No invoice date found.");
+  if (d.total === null) out.push("No total found.");
+  if (!d.supplierName && !d.supplierTrn) out.push("No supplier found.");
+  if (d.lines.length === 0 || (d.lines.length === 1 && d.lines[0].description === "Invoice total")) out.push("No line items found.");
+  else if (d.lines.some((l) => l.qty === null || l.unitPrice === null || l.net === null)) out.push("Some lines are incomplete.");
+  if (source?.method === "zatca_qr") out.push("Only the ZATCA QR code could be read.");
+  if (source?.ocr && source.ocr.confidence < 85) out.push(`The scan read at ${source.ocr.confidence}% confidence.`);
+  return out;
+}
+
+/** Failed checks and blockers, the yardstick for which reading to keep. */
+const faults = (d: Draft) => {
+  const r = reviewDraft(d, { erp: false });
+  return r.blockers.length + r.checks.filter((c) => !c.ok).length;
+};
+
+/** Fills blanks in `a` from `b`, header fields only. */
+function fillBlanks(a: Draft, b: Draft | undefined): Draft {
+  if (!b) return a;
+  const out = { ...a };
+  for (const k of ["supplierName", "supplierTrn", "invoiceNumber", "invoiceDate", "dueDate", "currency", "poNumber"] as const) if (!out[k] && b[k]) out[k] = b[k];
+  for (const k of ["subtotal", "vat", "total"] as const) if (out[k] === null && b[k] !== null) out[k] = b[k];
+  return out;
+}
+
+type Reading = { draft: Draft; source: CaptureSource; issuerKey: string };
+
+/**
+ * Rules first (no AI, D-61). If they fall short and the AI is on, the AI reads the PDF too: its
+ * reading is kept unless it checks worse than the rules', blanks are filled from the other, and
+ * every field the two read differently is listed for the reviewer (D-69).
+ */
+async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Array }, opts: { countries?: string[]; ai?: AiReader | null; force?: boolean }): Promise<Reading> {
+  let table: Awaited<ReturnType<typeof extractPdf>> | undefined;
+  let ruleError: CaptureError | undefined;
+  try {
+    table = await extractPdf(file.name, file.bytes, {
+      grain: "line",
+      countries: opts.countries,
+      layouts: { find: (issuer) => runStore.getPdfLayouts(orgKey, issuer), save: (recipe) => runStore.savePdfLayout(orgKey, recipe) },
+    });
+    if (!table.invoice || table.info.kind !== "invoice") ruleError = new CaptureError(`${file.name} doesn't look like an invoice. Upload the supplier's tax invoice PDF.`);
+  } catch (error) {
+    if (!(error instanceof PdfInputError)) throw error;
+    ruleError = new CaptureError(`${file.name}: ${error.message}`);
+  }
+  const rules = !ruleError && table?.invoice ? draftFromInvoice(table.invoice) : undefined;
+  const source: CaptureSource = table
+    ? {
+        method: table.info.method,
+        pages: table.info.pages,
+        layout: table.info.layout,
+        checks: table.info.checks,
+        ocr: table.info.ocr ? { pages: table.info.ocr.pages, confidence: table.info.ocr.confidence } : undefined,
+      }
+    : { method: "ocr", pages: 0, checks: [] };
+  const issuerOf = (d: Draft) => table?.issuer ?? (d.supplierTrn ? `trn:${d.supplierTrn}` : `name:${d.supplierName.toLowerCase()}`);
+
+  const reasons = opts.force ? ["Read again with AI on request."] : aiReasons(rules, rules ? source : undefined);
+  const ai = opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai;
+  if (reasons.length === 0 || !ai) {
+    if (!rules) throw ruleError!;
+    return { draft: rules, source, issuerKey: issuerOf(rules) };
+  }
+
+  let reading: AiReading;
+  try {
+    reading = await ai(file.bytes);
+  } catch (error) {
+    const usage = (error as { usage?: LlmUsage }).usage;
+    if (usage) await runStore.logUsage(null, "invoice_extraction", usage, orgKey);
+    if (!(error instanceof AiReadError)) console.error("AI invoice reading failed", error);
+    if (!rules) throw ruleError!;
+    return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: "The AI couldn't read it; this is the text reader's reading.", at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
+  }
+  await runStore.logUsage(null, "invoice_extraction", reading.usage, orgKey);
+  if (!reading.extraction.is_invoice) {
+    if (!rules) throw new CaptureError(`${file.name} doesn't look like an invoice${reading.extraction.notes ? `: ${reading.extraction.notes}` : "."} Upload the supplier's tax invoice PDF.`);
+  }
+  const aiDraft = draftFromExtraction(reading.extraction);
+  // The AI's reading wins unless it checks worse, or it says this isn't an invoice while the rules read one.
+  const useAi = !rules || (reading.extraction.is_invoice && faults(aiDraft) <= faults(rules));
+  const draft = useAi ? fillBlanks(aiDraft, rules) : fillBlanks(rules!, aiDraft);
+  const info = {
+    model: reading.model,
+    reasons,
+    used: useAi ? ("ai" as const) : ("rules" as const),
+    conflicts: rules ? compareReadings(rules, aiDraft) : [],
+    notes: reading.extraction.notes ?? "",
+    at: new Date().toISOString(),
+  };
+  if (!table) source.pages = 0;
+  return { draft, source: { ...source, ai: info }, issuerKey: issuerOf(draft) };
+}
+
+/** One PDF → one draft. The same file again opens the draft it already made (D-63). */
 export async function capturePdf(
   orgKey: string,
   userId: string | null,
   file: { name: string; bytes: Uint8Array },
-  opts: { sample?: boolean; countries?: string[]; deps?: ConnectorDeps } = {},
+  opts: { sample?: boolean; countries?: string[]; deps?: ConnectorDeps; ai?: AiReader | null } = {},
 ): Promise<CaptureResult> {
   if (!file.name.toLowerCase().endsWith(".pdf")) throw new CaptureError(`${file.name}: upload the supplier invoice as a PDF.`);
   if (file.bytes.length > MAX_PDF_BYTES) throw new CaptureError(`${file.name} is over 10 MB. Upload one invoice per PDF.`);
@@ -100,21 +208,7 @@ export async function capturePdf(
   const seen = await store.findByHash(orgKey, fileHash);
   if (seen) return { capture: seen, existing: true };
 
-  let table: Awaited<ReturnType<typeof extractPdf>>;
-  try {
-    table = await extractPdf(file.name, file.bytes, {
-      grain: "line",
-      countries: opts.countries,
-      layouts: { find: (issuer) => runStore.getPdfLayouts(orgKey, issuer), save: (recipe) => runStore.savePdfLayout(orgKey, recipe) },
-    });
-  } catch (error) {
-    if (error instanceof PdfInputError) throw new CaptureError(`${file.name}: ${error.message}`);
-    throw error;
-  }
-  if (!table.invoice || table.info.kind !== "invoice") throw new CaptureError(`${file.name} doesn't look like an invoice. Upload the supplier's tax invoice PDF.`);
-
-  const base = draftFromInvoice(table.invoice);
-  const issuerKey = table.issuer ?? (base.supplierTrn ? `trn:${base.supplierTrn}` : `name:${base.supplierName.toLowerCase()}`);
+  const { draft: base, source, issuerKey } = await readInvoice(orgKey, file, opts);
   const profile = await store.getProfile(orgKey, issuerKey, base.supplierTrn);
   const target = await currentTarget(orgKey);
   const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
@@ -132,21 +226,31 @@ export async function capturePdf(
     issuerKey,
     status: statusFor(draft, Boolean(target)),
     draft,
-    source: {
-      method: table.info.method,
-      pages: table.info.pages,
-      layout: table.info.layout,
-      checks: table.info.checks,
-      ocr: table.info.ocr ? { pages: table.info.ocr.pages, confidence: table.info.ocr.confidence } : undefined,
-      sample: opts.sample || undefined,
-    },
+    source: { ...source, sample: opts.sample || undefined },
     createdBy: userId,
   });
   return { capture, existing: false };
 }
 
+/** "Read again with AI" on a draft not pushed yet: the AI reads the kept PDF; ERP matches are redone. */
+export async function rereadWithAi(orgKey: string, id: string, opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<CaptureView> {
+  const c = await store.getCapture(orgKey, id);
+  if (!c) throw new CaptureError("That invoice no longer exists.");
+  if (c.status === "pushed" || c.status === "pushing") throw new CaptureError("This invoice was sent to the ERP and can't be read again.");
+  const ai = opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai;
+  if (!ai) throw new CaptureError("AI reading isn't available here.");
+  const bytes = c.storedPath ? await readStoredFile(c.storedPath) : undefined;
+  if (!bytes) throw new CaptureError("The invoice's PDF is no longer stored. Upload it again.");
+  const { draft: base, source, issuerKey } = await readInvoice(orgKey, { name: c.fileName, bytes }, { ...opts, ai, force: true });
+  const target = await currentTarget(orgKey);
+  const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
+  const draft = applyMatches(base, md, await store.getProfile(orgKey, issuerKey, base.supplierTrn), addDays);
+  await store.replaceReading(orgKey, id, draft, { ...source, sample: c.source.sample }, statusFor(draft, Boolean(target)));
+  return (await getView(orgKey, id))!;
+}
+
 /** The demo's built-in sample invoices (D-60), read through the same path as an upload. */
-export async function captureSample(orgKey: string, userId: string | null, sampleId: string, opts: { countries?: string[]; deps?: ConnectorDeps } = {}) {
+export async function captureSample(orgKey: string, userId: string | null, sampleId: string, opts: { countries?: string[]; deps?: ConnectorDeps; ai?: AiReader | null } = {}) {
   const bytes = samplePdfBytes(sampleId);
   if (!bytes) throw new CaptureError("Unknown sample.");
   return capturePdf(orgKey, userId, { name: `${sampleSpec(sampleId)!.number}.pdf`, bytes }, { ...opts, sample: true });
@@ -177,6 +281,15 @@ export function viewOf(c: Capture, all: Capture[], target: string | undefined): 
   for (const d of duplicates) {
     if (d.exact && d.id !== pushedTwin?.id) review.warnings.unshift(`Same supplier and invoice number as ${d.fileName}. Check it isn't the same invoice twice.`);
     if (!d.exact) review.warnings.unshift(`Possible duplicate: ${d.fileName} (${d.invoiceNumber}) has the same supplier, date and total.`);
+  }
+  // An AI reading is shown as such, with every field it and the text reader read differently (D-69).
+  if (c.source.ai && c.status !== "pushed") {
+    const ai = c.source.ai;
+    review.warnings.unshift(
+      ...ai.conflicts.map((x) => `Check against the PDF. ${x}`),
+      ...(ai.notes ? [`AI note: ${ai.notes}`] : []),
+      ai.used === "ai" ? "Read by AI because the text reader fell short. Check the figures against the PDF before approving." : "The AI also read this invoice but checked worse, so the text reader's reading is shown.",
+    );
   }
   return { ...c, review, duplicates, hash: draftHash(c.draft, target ?? "") };
 }

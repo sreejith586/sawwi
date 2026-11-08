@@ -21,6 +21,7 @@ export const PURPOSE_LABELS: Record<string, string> = {
   email_draft: "Email draft",
   explain: "Explain exception",
   chat: "Chat answer",
+  invoice_extraction: "Invoice reading (AI)",
 };
 
 export const purposeLabel = (p: string) => PURPOSE_LABELS[p] ?? p;

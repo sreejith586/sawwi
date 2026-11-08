@@ -23,6 +23,8 @@ export type QueueRow = {
   checksOk: boolean;
   hash: string;
   method: string;
+  /** Read by AI (D-69). */
+  ai: boolean;
   layout: string | null;
   erpNumber: string | null;
   createdAt: string;
@@ -378,8 +380,8 @@ export function Queue(props: Props) {
                         <td className="px-3 py-3">
                           <p>{d.invoiceNumber || <span className="text-warn">missing</span>}</p>
                           <p className="text-xs text-muted">
-                            {METHOD[r.method] ?? r.method}
-                            {r.layout === "remembered" ? " · layout remembered" : ""}
+                            {r.ai ? "Read by AI" : (METHOD[r.method] ?? r.method)}
+                            {r.layout === "remembered" && !r.ai ? " · layout remembered" : ""}
                           </p>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">

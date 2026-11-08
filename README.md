@@ -73,7 +73,8 @@ pnpm build
     day at 00:00 UTC. Turn it off with `SAWWI_DEMO=off`.
 15. **Automation → Purchase invoices** (D-60–D-66): upload supplier invoice PDFs (text, scans, ZATCA
     e-invoices), up to 50 at a time, or on a phone photograph an invoice page by page. Each becomes a draft: supplier, TRN, invoice number and dates,
-    currency, lines and totals, read with no AI. A review queue shows them all with their checks, for
+    currency, lines and totals, read by rules first. Where the rules fall short, Claude Opus 5.5 reads the PDF, and its reading is checked
+    and compared with the rules' (needs `ANTHROPIC_API_KEY`; off in the demo). A review queue shows them all with their checks, for
     approving one at a time or in bulk. Each invoice also has a review page with its PDF next to an
     editable form. Approved drafts download as CSV, or push to Business Central as unposted purchase
     invoices after a confirmation. Vendors and items are matched to Business Central's, and choices are
