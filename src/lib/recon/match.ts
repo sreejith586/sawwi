@@ -403,10 +403,11 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const leftExpr = rule.left ?? link.amount!.left;
       const rightExpr = rule.right ?? link.amount!.right;
       const tol = rule.tolerance ?? link.amount?.tolerance ?? 0;
-      for (const g of m.groups) {
+      const lone = rule.unmatchedAsZero && link.cardinality !== "many_to_one" ? m.leftOnly.map((r) => ({ key: "", left: [r], right: [] as Rec[] })) : [];
+      for (const g of [...m.groups, ...lone]) {
         const left = g.left.filter((r) => matches(r, rule.leftWhere));
         const right = g.right.filter((r) => matches(r, rule.rightWhere));
-        if (!left.length || (!right.length && !rule.rightWhere)) continue;
+        if (!left.length || (!right.length && !rule.rightWhere && !rule.unmatchedAsZero)) continue;
         let lv: number;
         let rv: number;
         let get: (f: string) => number | undefined;
@@ -495,8 +496,8 @@ function evaluateRule(rule: CheckRule, c: RuleCtx) {
       const side = li >= 0 && t.links[li].left === rule.slot ? "left" : "right";
       for (const r of c.datasets.get(rule.slot)!.rows) {
         if (!matches(r, rule.where)) continue;
-        const v = li >= 0 ? c.amountOfSide(li, side, r) : undefined;
-        c.push({ link: null, key: r.raw[rule.where.field] || `row ${r.rowNumber}`, [side]: c.ref(rule.slot, [r]), value: v ?? 0 });
+        const v = rule.value ? c.evalOn(rule.value, (f) => r.num[f]) : li >= 0 ? c.amountOfSide(li, side, r) : undefined;
+        c.push({ link: null, key: r.raw[rule.key ?? rule.where.field] || `row ${r.rowNumber}`, [side]: c.ref(rule.slot, [r]), value: v ?? 0 });
       }
       return;
     }

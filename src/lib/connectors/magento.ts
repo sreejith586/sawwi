@@ -91,6 +91,7 @@ async function get<T>(creds: MagentoCredentials, path: string, deps: ConnectorDe
         `The store refused access${resource ? ` (${resource})` : ""}. Check the access token, that the integration is active with read access to Sales → Operations (Orders, Invoices, Credit Memos, Shipments), and on Magento 2.4.4+ that “Allow OAuth Access Tokens to be used as standalone Bearer tokens” is Yes (Stores → Configuration → Services → OAuth).`,
       );
     }
+    if (res.status === 404 && path.startsWith("giftcardaccounts")) throw new ConnectorError("This store has no gift card accounts API. Gift cards are an Adobe Commerce feature, not part of Magento Open Source.");
     if (res.status === 404 && path.startsWith("inventory/")) throw new ConnectorError("This store has no Multi-Source Inventory API (Magento 2.3 or later, with the Inventory modules enabled), so stock can't be read. Export the stock from the admin and upload it instead.");
     if (res.status === 404) throw new ConnectorError("No Magento REST API answered at that address. Check the store URL.");
     if (!res.ok || body === undefined) throw new ConnectorError(`The store returned HTTP ${res.status}${body?.message ? `: ${body.message}` : ""}.`);
@@ -152,6 +153,9 @@ export const MAGENTO_CREDIT_MEMO_COLUMNS = ["Order ID", "Credit memo ID", "Refun
 export const MAGENTO_SOURCE_ITEM_COLUMNS = ["SKU", "Source", "Source quantity", "Stock status", "Sellable quantity"] as const;
 export const MAGENTO_PRICE_COLUMNS = ["SKU", "Product", "Product type", "Status", "Price", "Special price", "Special price from", "Special price to", "Checked on"] as const;
 export const MAGENTO_PAYMENT_TOTAL_COLUMNS = ["Payment provider", "Payment method", "Method code", "Orders", "Order total", "Refunded online", "Expected to receive", "Currency", "Period from", "Period to"] as const;
+export const MAGENTO_GIFT_CARD_COLUMNS = ["Account", "Status", "Created", "Expires", "Opening balance", "Issued", "Expired", "Closing balance", "Period from", "Period to"] as const;
+export const MAGENTO_REDEMPTION_COLUMNS = ["Account", "Type", "Order ID", "Redemption date", "Redeemed amount", "Currency"] as const;
+export const MAGENTO_INVOICE_CURRENCY_COLUMNS = ["Order ID", "Store invoice no.", "Invoice date", "Store code", "Store", "Order currency", "Invoice total (FCY)", "Base currency", "Invoice total (base)", "Rate (base to order)", "Total ÷ rate"] as const;
 export const MAGENTO_SHIPMENT_COLUMNS = ["AWB / tracking number", "Order ID", "Shipment ID", "Ship date", "Carrier", "Declared weight (kg)", "Store weight unit", "Items shipped"] as const;
 
 type Report = { id: string; label: string; description: string; slots: string[]; columns: readonly string[] };
@@ -192,6 +196,27 @@ const REPORTS: Report[] = [
     description: "Orders placed in the period that are being fulfilled or done, totalled per payment provider and method, net of refunds paid back through the provider.",
     slots: ["web-payouts-by-method/method_sales"],
     columns: MAGENTO_PAYMENT_TOTAL_COLUMNS,
+  },
+  {
+    id: "gift_card_balances",
+    label: "Gift card accounts (Adobe Commerce only)",
+    description: "Adobe Commerce only (not Magento Open Source): every gift card account with its balance at the start and end of the period, and what was issued and expired in between.",
+    slots: ["web-gift-cards/gift_cards"],
+    columns: MAGENTO_GIFT_CARD_COLUMNS,
+  },
+  {
+    id: "gift_card_redemptions",
+    label: "Gift card and store credit redemptions (Adobe Commerce only)",
+    description: "Adobe Commerce only: one row per gift card or store credit amount used on an order placed in the period.",
+    slots: ["web-gift-cards/redemptions"],
+    columns: MAGENTO_REDEMPTION_COLUMNS,
+  },
+  {
+    id: "invoice_currencies",
+    label: "Invoices by store and currency",
+    description: "One row per invoice created in the period, with its store view, the order currency, the base currency and the exchange rate Magento recorded.",
+    slots: ["web-erp-fx/store_invoices"],
+    columns: MAGENTO_INVOICE_CURRENCY_COLUMNS,
   },
   { id: "shipment_tracks", label: "Shipments (tracking numbers)", description: "One row per tracking number on shipments created in the period, with the order and weight.", slots: ["shipments"], columns: MAGENTO_SHIPMENT_COLUMNS },
 ];
@@ -285,8 +310,88 @@ export function paymentTotalRows(orders: Doc[], w: PullWindow): string[][] {
     groups.set(key, g);
   }
   return [...groups.values()]
-    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title))
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.title.localeCompare(b.title) || a.currency.localeCompare(b.currency))
     .map((g) => [g.provider, g.title, g.code, num(g.orders), num(g.total), num(g.refunded), num(g.total - g.refunded), g.currency, w.from, w.to]);
+}
+
+// ─── Adobe Commerce: gift cards and store credit (D-57) ─────────────────────
+// Gift card accounts are Adobe Commerce's `/V1/giftcardaccounts` (ACL Magento_GiftCardAccount::giftcardaccount).
+// The roll-forward needs each account's balance history (actions as in Commerce's gift card
+// history: 0 created, 1 used, 2 sent, 3 redeemed to store credit, 4 expired, 5 updated). Sawwi
+// reads it from `history` on the account; until a live Commerce store confirms where the API
+// returns it, an account without one stops the pull with a message rather than guessing.
+
+type HistoryEntry = { updated_at?: string; action?: number | string; balance_delta?: number | string; balance_amount?: number | string };
+const EXPIRED = 4;
+
+export function giftCardRow(a: Doc, w: PullWindow): string[] | null {
+  const history = a.history as HistoryEntry[] | undefined;
+  if (!Array.isArray(history)) {
+    throw new ConnectorError("This store's gift card API doesn't return balance history, so the roll-forward can't be built. Export the gift card accounts history from the admin and upload it instead.");
+  }
+  const created = str(a.date_created).slice(0, 10);
+  if (created && created > w.to) return null;
+  const entries = [...history].sort((x, y) => str(x.updated_at).localeCompare(str(y.updated_at)));
+  const day = (e: HistoryEntry) => str(e.updated_at).slice(0, 10);
+  const before = entries.filter((e) => day(e) < w.from);
+  const inside = entries.filter((e) => day(e) >= w.from && day(e) <= w.to);
+  const opening = before.length ? Number(before[before.length - 1].balance_amount ?? 0) : 0;
+  const closing = inside.length ? Number(inside[inside.length - 1].balance_amount ?? 0) : opening;
+  let issued = 0;
+  let expired = 0;
+  for (const e of inside) {
+    const delta = Number(e.balance_delta ?? 0);
+    if (Number(e.action) === EXPIRED) expired += -delta;
+    else if (delta > 0) issued += delta;
+  }
+  if (!opening && !closing && !issued && !expired) return null;
+  const status = Number(a.status) === 1 ? "Active" : "Inactive";
+  return [str(a.code), status, created, str(a.date_expires).slice(0, 10), num(opening), num(issued), num(expired), num(closing), w.from, w.to];
+}
+
+/** Gift cards used on an order: Commerce keeps them as a JSON list of {c: code, a: amount}. */
+function giftCardsOn(o: Doc): { code: string; amount: number }[] {
+  const raw = (o.extension_attributes as Doc | undefined)?.gift_cards ?? o.gift_cards;
+  let list: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      list = JSON.parse(raw);
+    } catch {
+      list = [];
+    }
+  }
+  return (Array.isArray(list) ? list : []).map((g: Doc) => ({ code: str(g.c ?? g.code), amount: Number(g.a ?? g.amount ?? 0) })).filter((g) => g.code && g.amount);
+}
+
+export function redemptionRows(o: Doc): string[][] {
+  if (str(o.state) === "canceled") return [];
+  const base = [str(o.increment_id), isoTime(o.created_at)];
+  const currency = str(o.order_currency_code);
+  const rows = giftCardsOn(o).map((g) => [g.code, "Gift card", ...base, num(g.amount), currency]);
+  const credit = Number(o.customer_balance_amount ?? 0);
+  if (credit > 0) rows.push([str(o.customer_email), "Store credit", ...base, num(credit), currency]);
+  return rows;
+}
+
+/** Store views by ID, for their codes; empty if the integration can't read Stores → Settings. */
+async function storeViews(creds: MagentoCredentials, deps: ConnectorDeps): Promise<Map<number, { code: string; name: string }>> {
+  try {
+    const views = await get<Doc[]>(creds, "store/storeViews", deps);
+    return new Map(views.map((v) => [Number(v.id), { code: str(v.code), name: str(v.name) }]));
+  } catch (error) {
+    if (error instanceof ConnectorError && /refused access/.test(error.message)) return new Map();
+    throw error;
+  }
+}
+
+/** Magento records base_to_order_rate on each document: base total × rate = total in the order currency. */
+export function invoiceCurrencyRow(inv: Doc, orderNo: string, view: { code: string; name: string } | undefined): string[] {
+  const rate = Number(inv.base_to_order_rate ?? 1) || 1;
+  const total = Number(inv.grand_total ?? 0);
+  return [
+    orderNo, str(inv.increment_id), isoTime(inv.created_at), view?.code ?? str(inv.store_id), view?.name ?? "", str(inv.order_currency_code), num(total),
+    str(inv.base_currency_code), num(inv.base_grand_total ?? total), num(rate), num(Math.round((total / rate) * 100) / 100),
+  ];
 }
 
 /** Refunded items; configurable parents and their zero-priced children are collapsed to one line. */
@@ -349,10 +454,19 @@ export const magento: Connector<MagentoCredentials> = {
       const invoices = await search(creds, "invoices", window, deps);
       const orders = await orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps);
       rows = invoices.map((i) => invoiceRow(i, orders.get(Number(i.order_id)) ?? NO_ORDER));
+    } else if (report === "invoice_currencies") {
+      const invoices = await search(creds, "invoices", window, deps);
+      const [orders, views] = await Promise.all([orderInfo(creds, invoices.map((i) => Number(i.order_id)), deps), storeViews(creds, deps)]);
+      rows = invoices.map((i) => invoiceCurrencyRow(i, orders.get(Number(i.order_id))?.number ?? "", views.get(Number(i.store_id))));
     } else if (report === "credit_memos") {
       const memos = await search(creds, "creditmemos", window, deps);
       const orders = await orderInfo(creds, memos.map((m) => Number(m.order_id)), deps);
       rows = memos.map((m) => creditMemoTotalRow(m, orders.get(Number(m.order_id)) ?? NO_ORDER));
+    } else if (report === "gift_card_balances") {
+      const accounts = await searchAll(creds, "giftcardaccounts", [], deps, ["giftcard_id"]);
+      rows = accounts.map((a) => giftCardRow(a, window)).filter((r): r is string[] => r !== null);
+    } else if (report === "gift_card_redemptions") {
+      rows = (await search(creds, "orders", window, deps)).flatMap(redemptionRows);
     } else if (report === "payment_totals") {
       rows = paymentTotalRows(await search(creds, "orders", window, deps), window);
     } else if (report === "product_prices") {

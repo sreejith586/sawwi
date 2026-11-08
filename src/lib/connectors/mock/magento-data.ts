@@ -24,6 +24,14 @@ const SHOPPERS: [first: string, last: string][] = [["Layla", "Haddad"], ["Omar",
 type Line = [sku: string, qty: number];
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Adobe Commerce gift cards used on an order, as Commerce stores them (a JSON list of {c, a}). In this
+ * mock the order totals are left as they were, so the other demos don't change (D-57).
+ */
+const giftCards = (...cards: [code: string, amount: number][]): Doc => ({
+  gift_cards: JSON.stringify(cards.map(([c, a]) => ({ c, a, ba: a }))), gift_cards_amount: cards.reduce((s, [, a]) => s + a, 0),
+});
+
 function shopper(entity: number): Doc {
   const [first, last] = SHOPPERS[entity % SHOPPERS.length];
   return { customer_firstname: first, customer_lastname: last, customer_email: `${first}.${last.replace(/\s+/g, "")}@example.com`.toLowerCase() };
@@ -40,33 +48,63 @@ function order(entity: number, inc: string, created: string, status: string, met
     entity_id: entity, increment_id: inc, created_at: created, updated_at: created, status, state: status === "canceled" ? "canceled" : status,
     store_id: 1, store_name: STORE_NAME, ...shopper(entity), order_currency_code: "AED", base_currency_code: "AED",
     subtotal: r2(subtotalIncl - (subtotalIncl * 5) / 105), discount_amount: 0, shipping_amount: shipping + cod, tax_amount: tax, grand_total: grand, total_paid: paid,
+    base_grand_total: grand, base_to_order_rate: 1,
     payment: { method, additional_information: [PAYMENTS[method]] },
     items: lines.map(([sku, qty], i) => ({ item_id: entity * 10 + i, sku, name: PRODUCTS[sku].name, qty_ordered: qty, price: PRODUCTS[sku].price, weight: PRODUCTS[sku].weight })),
     ...extra,
   };
 }
 
+// Store views (D-58): one website, base currency AED, three store views in their own currency.
+export const DEMO_STORE_VIEWS: Doc[] = [
+  { id: 1, code: "uae_en", name: DEMO_STORE_NAME, website_id: 1, store_group_id: 1, is_active: 1 },
+  { id: 2, code: "ksa_ar", name: "Sawwi Demo Store KSA", website_id: 1, store_group_id: 1, is_active: 1 },
+  { id: 3, code: "omn_en", name: "Sawwi Demo Store Oman", website_id: 1, store_group_id: 1, is_active: 1 },
+];
+const ABROAD: Record<string, { id: number; currency: string; rate: number; vat: number }> = {
+  ksa_ar: { id: 2, currency: "SAR", rate: 1.021, vat: 15 },
+  omn_en: { id: 3, currency: "OMR", rate: 0.1048, vat: 5 },
+};
+
+/** An order in another store view: totals in its currency at the rate Magento recorded, base in AED. */
+function abroad(entity: number, created: string, store: string, base: number, lines: Line[]): Doc {
+  const s = ABROAD[store];
+  const grand = r2(base * s.rate);
+  const tax = r2((grand * s.vat) / (100 + s.vat));
+  const view = DEMO_STORE_VIEWS.find((v) => v.id === s.id)!;
+  return order(entity, String(entity).padStart(9, "0"), created, "complete", "cashondelivery", lines, {
+    store_id: s.id, store_name: `Main Website\nMain Website Store\n${view.name}`, order_currency_code: s.currency,
+    subtotal: r2(grand - tax), shipping_amount: 0, tax_amount: tax, grand_total: grand, total_paid: grand, base_grand_total: base, base_to_order_rate: s.rate,
+  });
+}
+
 export const DEMO_ORDERS: Doc[] = [
   order(100, "000000100", "2026-09-30 23:30:00", "complete", "stripe_payments", [["OUD-50", 1]]),
-  order(101, "000000101", "2026-10-01 08:12:44", "complete", "stripe_payments", [["ABY-BLK-M", 1], ["MAT-01", 1]]),
+  order(101, "000000101", "2026-10-01 08:12:44", "complete", "stripe_payments", [["ABY-BLK-M", 1], ["MAT-01", 1]], { ...giftCards(["GC-AAA1", 120]), customer_balance_amount: 30 }),
   order(102, "000000102", "2026-10-02 19:40:03", "complete", "cashondelivery", [["SND-42", 1]]),
   order(103, "000000103", "2026-10-04 11:05:51", "closed", "stripe_payments", [["OUD-50", 1]], { total_refunded: 305, total_online_refunded: 305 }),
-  order(104, "000000104", "2026-10-07 21:18:30", "complete", "tabby_installments", [["ABY-BLK-M", 2]]),
+  order(104, "000000104", "2026-10-07 21:18:30", "complete", "tabby_installments", [["ABY-BLK-M", 2]], giftCards(["GC-BBB2", 250])),
   order(105, "000000105", "2026-10-09 14:02:11", "canceled", "cashondelivery", [["MAT-01", 2]]),
-  order(106, "000000106", "2026-10-12 09:55:27", "complete", "stripe_payments", [["SND-42", 1], ["OUD-50", 1]], { total_refunded: 199, total_online_refunded: 199 }),
+  order(106, "000000106", "2026-10-12 09:55:27", "complete", "stripe_payments", [["SND-42", 1], ["OUD-50", 1]], { total_refunded: 199, total_online_refunded: 199, customer_balance_amount: 60 }),
   order(107, "000000107", "2026-10-15 17:31:09", "processing", "cashondelivery", [["ABY-BLK-M", 1]]),
-  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]], { total_refunded: 15, total_offline_refunded: 15, total_online_refunded: 0 }),
+  order(108, "000000108", "2026-10-21 12:47:38", "complete", "stripe_payments", [["MAT-01", 3]], { total_refunded: 15, total_offline_refunded: 15, total_online_refunded: 0, ...giftCards(["GC-ZZZ9", 40]) }),
   order(109, "000000109", "2026-10-26 20:20:20", "processing", "tabby_installments", [["OUD-50", 1], ["SND-42", 1]]),
   order(110, "000000110", "2026-10-31 23:59:00", "pending", "stripe_payments", [["MAT-01", 1]]),
   order(111, "000000111", "2026-11-01 00:10:00", "pending", "cashondelivery", [["SND-42", 1]]),
+  // The KSA (SAR, 15% VAT) and Oman (OMR) store views, cash on delivery and delivered (D-58).
+  abroad(120, "2026-10-10 10:00:00", "ksa_ar", 1000, [["ABY-BLK-M", 2]]),
+  abroad(121, "2026-10-14 15:30:00", "ksa_ar", 500, [["OUD-50", 1]]),
+  abroad(122, "2026-10-24 18:45:00", "ksa_ar", 2000, [["ABY-BLK-M", 4]]),
+  abroad(123, "2026-10-27 12:10:00", "omn_en", 500, [["SND-42", 2]]),
 ];
 
 /** Invoices: card and Tabby orders are invoiced when paid, COD orders when delivered. */
 function invoice(entity: number, inc: string, orderId: number, created: string): Doc {
   const o = DEMO_ORDERS.find((x) => x.entity_id === orderId)!;
   return {
-    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, state: 2, order_currency_code: "AED",
-    subtotal: o.subtotal, shipping_amount: o.shipping_amount, discount_amount: 0, tax_amount: o.tax_amount, grand_total: o.grand_total,
+    entity_id: entity, increment_id: inc, order_id: orderId, created_at: created, state: 2, store_id: o.store_id,
+    order_currency_code: o.order_currency_code, base_currency_code: o.base_currency_code, base_to_order_rate: o.base_to_order_rate,
+    subtotal: o.subtotal, shipping_amount: o.shipping_amount, discount_amount: 0, tax_amount: o.tax_amount, grand_total: o.grand_total, base_grand_total: o.base_grand_total,
   };
 }
 
@@ -78,6 +116,10 @@ export const DEMO_INVOICES: Doc[] = [
   invoice(404, "000000404", 104, "2026-10-07 21:19:00"),
   invoice(406, "000000406", 106, "2026-10-12 09:56:00"),
   invoice(408, "000000408", 108, "2026-10-21 12:48:00"),
+  invoice(420, "000000420", 120, "2026-10-11 16:00:00"), // KSA and Oman COD orders, invoiced on delivery
+  invoice(421, "000000421", 121, "2026-10-15 17:00:00"),
+  invoice(422, "000000422", 122, "2026-10-25 12:00:00"),
+  invoice(423, "000000423", 123, "2026-10-28 14:00:00"),
   // 107 (COD, not delivered), 109 (Tabby, not captured) and 110 (pending) have no invoice yet.
 ];
 
@@ -161,4 +203,21 @@ export const DEMO_PRODUCTS: Doc[] = [
   product(4, "SND-42", PRODUCTS["SND-42"].name, 189),
   product(5, "MAT-01", PRODUCTS["MAT-01"].name, 75, special(80)),
   product(6, "OUD-100", "Oud perfume 100 ml", 450),
+];
+
+// Adobe Commerce gift card accounts (web-gift-cards, D-57), with the balance history the
+// roll-forward reads (actions: 0 created, 1 used, 4 expired). Planted:
+//  - GC-BBB2: issued 200, used for 250 on order 104 (over-redeemed, balance -50).
+//  - GC-CCC3: 300, expired 100, yet the balance says 250 (roll-forward break).
+//  - GC-DDD4: created after October, left out of the month.
+//  - Order 108 used GC-ZZZ9, which has no account (redeemed without issuance).
+const history = (...e: [day: string, action: number, delta: number, balance: number][]) => e.map(([d, action, balance_delta, balance_amount]) => ({ updated_at: `${d} 09:00:00`, action, balance_delta, balance_amount }));
+const card = (id: number, code: string, created: string, balance: number, h: ReturnType<typeof history>): Doc => ({
+  giftcard_id: id, code, status: 1, state: balance > 0 ? 0 : 1, date_created: created, date_expires: "2027-12-31", website_id: 1, balance, is_redeemable: 1, history: h,
+});
+export const DEMO_GIFT_CARDS: Doc[] = [
+  card(1, "GC-AAA1", "2026-08-01", 380, history(["2026-08-01", 0, 500, 500], ["2026-10-01", 1, -120, 380])),
+  card(2, "GC-BBB2", "2026-10-03", -50, history(["2026-10-03", 0, 200, 200], ["2026-10-07", 1, -250, -50])),
+  card(3, "GC-CCC3", "2026-06-01", 250, history(["2026-06-01", 0, 300, 300], ["2026-10-15", 4, -100, 250])),
+  card(4, "GC-DDD4", "2026-11-02", 100, history(["2026-11-02", 0, 100, 100])),
 ];

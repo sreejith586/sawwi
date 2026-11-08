@@ -148,6 +148,21 @@ export const FINANCE_FILES: DemoFile[] = [
     ],
   },
   {
+    id: "store_credit_balances",
+    label: "Store credit balances (export)",
+    description:
+      "The demo store's Adobe Commerce store credit per customer for October, as exported from the admin. Planted: one balance that doesn't roll forward, and a customer who spent store credit with no balance on file.",
+    slots: ["web-gift-cards/store_credit"],
+    headers: ["Account", "Opening balance", "Issued", "Expired", "Closing balance"],
+    dateColumn: -1,
+    rows: [
+      ["mariam.fares@example.com", "100.00", "0.00", "0.00", "40.00"], // spent 60.00 on order 106
+      ["layla.haddad@example.com", "0.00", "15.00", "0.00", "15.00"], // order 108's goodwill refund
+      ["omar.saleh@example.com", "50.00", "0.00", "0.00", "70.00"], // nothing issued, yet 20.00 more
+      // khalid.nasser@example.com spent 30.00 on order 101 but has no store credit on file.
+    ],
+  },
+  {
     id: "payouts_by_provider",
     label: "Payouts by payment provider",
     description:

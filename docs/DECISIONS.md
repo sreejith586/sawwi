@@ -613,3 +613,49 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Demo:** order 108's 15.00 goodwill refund is offline. A payouts file named by provider, with fees: Stripe paid 5.00 short (108's capture), Tabby hasn't paid out order 109, COD was collected 10.00 short; the bank file is `bank-payouts`'s.
 - **Rejected alternatives:** matching provider totals straight to bank credits by narration: payouts are net of fees and several land per month, so per-provider totals wouldn't meet single credits; payout IDs do. Expected payout from `total_paid`: Magento only sets it when an invoice is paid, so COD orders delivered but not yet invoiced would be missed.
 - **Consequences:** 28 templates. Magento has eight reports. Timing shows up as "not yet paid out": sales at month end are paid out next month. Comparing a full month of sales with the same month's payouts is the intended use.
+
+### D-57: Gift cards and store credit roll-forward (Adobe Commerce)
+- **Context:** the user added scenario 9 (relayed by the Phase 6 session, 2026-11-08): per gift card account or customer, opening + issued − redeemed − expired should equal the closing balance, with redemptions taken from orders. Flag cards redeemed above their balance, negative balances and redemptions with no issuance. Gift cards and store credit are Adobe Commerce features, not Magento Open Source, and the template and copy must say so. The user asked for the work to be finished without them, so these calls are recorded here instead of asked.
+- **Decision:**
+  - New template `web-gift-cards` with three files: gift card balances, store credit balances (optional) and redemptions on orders. Each balance file links to the redemptions by account (gift card code, or the customer's e-mail for store credit). The link's amount is opening + issued − expired − closing on the left against redeemed on the right.
+  - **Checks, for gift cards and for store credit each:**
+    - the balance doesn't roll forward;
+    - redeemed above opening + issued − expired;
+    - negative closing balance;
+    - redeemed with no issuance (a redemption whose account isn't in the balances; `where` on the redemption type keeps gift cards and store credit apart).
+  - **Engine:** `compare` takes `unmatchedAsZero`, so an account with no redemptions in the period must still roll forward. `row_match` takes `key` and `value`, so a negative balance is keyed by its account and valued at the shortfall.
+  - **Gift cards through the connector:** new report `gift_card_balances` reads Adobe Commerce's documented `/V1/giftcardaccounts` (ACL `Magento_GiftCardAccount::giftcardaccount`). It builds each account's opening and closing balance and the issued and expired amounts from the account's balance history, using Commerce's history actions (created, used, sent, redeemed, expired, updated).
+  - **Not confirmed yet:** whether a live Commerce store returns that history through REST. So the report reads `history` on the account when it's there, and otherwise stops with a message to upload the history export. It never guesses a balance. This waits on a live Adobe Commerce store.
+  - A Magento Open Source store gets "an Adobe Commerce feature" for the 404.
+  - **Redemptions through the connector:** new report `gift_card_redemptions` reads orders in the period. Gift cards come from the order's `gift_cards` list (Commerce's `{c: code, a: amount}`), and store credit from `customer_balance_amount`, keyed by the customer's e-mail. Cancelled orders are left out.
+  - **Store credit balances by upload, not a mocked endpoint:** Adobe Commerce documents no admin REST list of customer balances (store credit is in GraphQL for the shopper only). Inventing a route would make a connector claim Sawwi can't back, so the slot takes the admin's store credit export. The demo store's built-in "Demo data" source supplies an invented one.
+  - **Demo:** four Commerce gift card accounts with history, and redemptions on orders 101, 104, 106 and 108. The order totals are left as they were, so every other demo result is unchanged. Planted:
+    - GC-BBB2 redeemed above its balance, closing at −50;
+    - GC-CCC3's balance doesn't roll forward;
+    - GC-ZZZ9 used with no account;
+    - a store credit balance that doesn't roll forward;
+    - a customer spending store credit with no balance on file.
+- **Rejected alternatives:**
+  - Mocking a customer balance REST endpoint (the relayed brief suggested it): Adobe Commerce documents none.
+  - Deriving the opening balance as closing + redeemed − issued: that assumes the movements are complete, which is what the roll-forward is meant to prove.
+- **Consequences:** 29 templates. Magento has ten reports, two of them Adobe Commerce only (labelled so). The Magento 2 public page says gift cards and store credit need Adobe Commerce.
+
+### D-58: Multi-store, multi-currency store invoices vs. ERP
+- **Context:** the user added scenario 10 (relayed 2026-11-08), to be finished without them. For each store view or website, convert totals at the rate Magento recorded (`base_to_order_rate`, `base_grand_total` vs `grand_total`). Compare that with what BC booked, by currency code, amount in that currency (FCY) and in local currency (LCY). Flag FX differences above a tolerance, invoices posted in the wrong currency and stores missing from BC.
+- **Decision:**
+  - New template `web-erp-fx`, built on invoices like `web-erp-invoices`, since an invoice is what gets posted. Link 0 is the order number: Magento's base total against BC's LCY amount, tolerance 1.00 in base currency, plus the currencies compared as text. Link 1 is the store: Magento's store view code against BC's Global Dimension 1.
+  - **Checks:** FX difference, wrong currency, not posted, and a store missing from BC (one finding per invoice of that store, valued at its base total).
+  - **New Magento report `invoice_currencies`:** each invoice's store view code and name (`/V1/store/storeViews`), order currency and total, base currency and total, the recorded rate, and total ÷ rate as a cross-check. Without Stores → Settings access, the store ID stands in for the code.
+  - **New BC report `web_sales_invoices_fx`:** posted web invoices with currency (blank means LCY), FCY amount, the rate and the LCY amount, and `shortcutDimension1Code` as the store.
+  - **LCY is calculated, not read.** API v2.0 posted invoices have no currency factor and no LCY amounts. So Sawwi applies the rate BC would use from the standard `currencyExchangeRates` table: the latest starting date on or before the posting date, LCY per unit = relational ÷ exchange rate amount. An invoice whose rate was changed by hand on the document isn't visible this way. Reading customer ledger entries' "Amount (LCY)" would need a custom API page, like D-55.
+  - **Assumption for the live check:** web invoices carry the Magento store view code in Global Dimension 1. That is a common setup, not a given, so it is noted in PROGRESS.
+  - **Payouts by payment method (D-56) now match per provider and currency.** With SAR and OMR sales in the demo, provider-only matching would have summed SAR into AED payouts. The demo now also shows the KSA and Oman cash-on-delivery sales with no payouts.
+  - **Demo:** a KSA store view (SAR, 15% VAT) and an Oman one (OMR) with four delivered cash-on-delivery orders, and three SAR invoices posted in the store company, with SAR rates that move on 20 October. Planted:
+    - one SAR invoice posted in AED;
+    - one posted after the rate moved (19.26 lower in AED);
+    - the Oman store never posted.
+  - The Oman order also shows in `web-erp-invoices` as not synced. Other templates are unchanged: the new orders are cash on delivery, so the card and Tabby templates skip them, and they have no shipments or refunds.
+- **Rejected alternatives:**
+  - Orders instead of invoices: orders that aren't invoiced yet aren't owed a posting.
+  - A percentage tolerance: the engine compares absolute amounts, and 1.00 in base currency covers rounding at GCC rates.
+- **Consequences:** 30 templates. Magento has eleven reports, Business Central twelve.
