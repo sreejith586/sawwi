@@ -16,7 +16,7 @@ _Updated in every commit. Newest first within each section._
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
-| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40). In review: AI-assisted reading (D-68, D-69, #41). In review: marketplace settlements → journal entries (D-70–D-73) |
+| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40); AI-assisted reading (D-68, D-69, #41). In review: marketplace settlements → journal entries (D-70–D-73, #42) |
 
 ## In flight
 
@@ -24,14 +24,13 @@ _Updated in every commit. Newest first within each section._
 | --- | --- | --- | --- |
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
-| Purchase invoices: AI-assisted reading (D-68, D-69) | `feature/purchase-invoice-ai-reading` | #41 | Automation session |
-| Marketplace settlements → journal entries (D-70–D-73) | `feature/automation-marketplace-settlements` (based on #41) | #42 | Automation session |
+| Marketplace settlements → journal entries (D-70–D-73) | `feature/automation-marketplace-settlements` | #42 | Automation session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
 
-- **Marketplace settlements → journal entries** (D-70–D-73, `feature/automation-marketplace-settlements`, based on #41). The second Automation use case, now live on `/automation`.
+- **Marketplace settlements → journal entries** (D-70–D-73, `feature/automation-marketplace-settlements`, #42). The second Automation use case, now live on `/automation`.
   - **Reading:** settlement reports in Amazon's long flat file layout (V2: a summary row, then one row per amount with type and description) or a wide layout (a column per fee: Noon, generic marketplaces), as CSV, TSV, Excel or PDF. A file with several settlements gives one journal each.
   - **Classifying:** amount names go into buckets (sales, shipping, promotions, refunds, commission, fulfilment, storage, advertising, VAT on fees, output VAT, reimbursements, other fees, reserve):
     - a built-in dictionary handles Amazon's CamelCase names, Noon's columns and the demo's;
