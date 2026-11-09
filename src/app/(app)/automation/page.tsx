@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { AutomationIcon, InvoiceIcon, RunsIcon } from "@/components/icons";
+import { AutomationIcon, CalendarIcon, InvoiceIcon, RunsIcon } from "@/components/icons";
 import { buttonClass } from "@/components/ui";
 import { listCaptures } from "@/lib/automation/purchase-invoices/store";
 import { listJournals } from "@/lib/automation/settlements/store";
+import { listRemittances } from "@/lib/automation/cod/store";
 import { USE_CASES } from "@/lib/automation/use-cases";
 import { getCurrentSession } from "@/lib/saas/session";
 
@@ -16,7 +17,7 @@ export const metadata: Metadata = { title: "Automation" };
 async function LiveCounts({ id }: { id: string }) {
   const session = await getCurrentSession();
   if (!session) return null;
-  const all = id === "purchase-invoices" ? await listCaptures(session.org.key) : await listJournals(session.org.key);
+  const all = id === "purchase-invoices" ? await listCaptures(session.org.key) : id === "cod-remittances" ? await listRemittances(session.org.key) : await listJournals(session.org.key);
   const count = (s: string) => all.filter((c) => c.status === s).length;
   const toReview = count("needs_review") + count("ready");
   return (
@@ -29,7 +30,7 @@ async function LiveCounts({ id }: { id: string }) {
 export default function AutomationPage() {
   const live = USE_CASES.filter((u) => u.status === "live");
   const soon = USE_CASES.filter((u) => u.status !== "live");
-  const ICONS: Record<string, typeof InvoiceIcon> = { "purchase-invoices": InvoiceIcon, "marketplace-settlements": RunsIcon };
+  const ICONS: Record<string, typeof InvoiceIcon> = { "purchase-invoices": InvoiceIcon, "marketplace-settlements": RunsIcon, "cod-remittances": CalendarIcon };
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Automation</h1>

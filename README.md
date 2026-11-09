@@ -86,6 +86,10 @@ pnpm build
     marketplace's CSV, Excel or PDF), map each kind of amount to a G/L account once, and get one balanced journal per
     settlement. Review and approve them, then download CSV or add them to a Business Central journal batch, unposted.
     In the demo store, try the two sample reports.
+17. **Automation → COD remittances** (D-74–D-77): upload a courier's cash-on-delivery remittance report. Every parcel is
+    matched to its sales invoice and its cash applied, and parcels collected short, never invoiced, already paid or remitted
+    twice are flagged for a decision. The courier's fees and the bank go into a journal. Review and approve, then download CSV or
+    add the payments and journal to Business Central, unposted. In the demo store, try the Aramex and SMSA samples.
 
 Local data lives in `.data/`, which is git-ignored: the database (`.data/pglite`, an in-process
 Postgres, D-37) and files (`.data/files`; a private Vercel Blob store when one is connected (`BLOB_STORE_ID`) or `BLOB_READ_WRITE_TOKEN` is set, D-39). Set `DATABASE_URL` to use a real Postgres instead (e.g. a Neon

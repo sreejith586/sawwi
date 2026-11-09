@@ -139,3 +139,29 @@ Object.assign(DEMO_STORE_DATA, {
     { id: guid(), entryNumber: 5101, postingDate: "2026-10-14", documentNumber: "S-2026-10-A", accountNumber: "1150", description: "Marketplace settlement S-2026-10-A", debitAmount: 1286.65, creditAmount: 0 },
   ],
 });
+
+// November cash-on-delivery web invoices for COD remittances (D-77). They're outside the October
+// window the reconciliation demo pulls, so its results don't change. W1035 is already paid.
+export const DEMO_STORE_PAYMENT_JOURNAL_ID = "5707e000-0000-4000-8000-000000000a02";
+const codInvoice = (number: string, order: string, date: string, total: number, name: string, paid = false): Doc => ({
+  id: guid(), number, externalDocumentNumber: order, invoiceDate: date, postingDate: date, dueDate: date, customerNumber: "WEB", customerName: name, email: "",
+  currencyCode: "", shortcutDimension1Code: "AE", orderNumber: "", totalAmountExcludingTax: r2((total * 100) / 105), totalTaxAmount: r2((total * 5) / 105),
+  totalAmountIncludingTax: total, remainingAmount: paid ? 0 : total, status: paid ? "Paid" : "Open", salesInvoiceLines: [],
+});
+(DEMO_STORE_DATA.salesInvoices as Doc[]).push(
+  codInvoice("PSI-W1031", "000000131", "2026-11-02", 430, "Mariam Al Hashimi"),
+  codInvoice("PSI-W1032", "000000132", "2026-11-02", 229, "Omar Haddad"),
+  codInvoice("PSI-W1033", "000000133", "2026-11-03", 380, "Layla Nasser"),
+  codInvoice("PSI-W1035", "000000135", "2026-11-04", 295, "Ahmed Saleh", true),
+  codInvoice("PSI-W1036", "000000136", "2026-11-04", 159, "Fatima Rahman"),
+);
+Object.assign(DEMO_STORE_DATA, {
+  customers: [
+    { id: guid(), number: "WEB", displayName: "Web store customers", blocked: " " },
+    { id: guid(), number: "COD-UNAPPLIED", displayName: "COD cash not yet matched", blocked: " " },
+  ],
+  customerPaymentJournals: [{ id: DEMO_STORE_PAYMENT_JOURNAL_ID, code: "CODRCPT", displayName: "COD receipts (balancing account 1170 Courier clearing)" }],
+});
+(DEMO_STORE_DATA.accounts as Doc[]).push(
+  ...[["1020", "Bank: Emirates NBD current"], ["1170", "Courier COD clearing"], ["6150", "Courier COD fees"]].map(([number, displayName]) => ({ id: guid(), number, displayName, category: "", accountType: "Posting", directPosting: true, blocked: false })),
+);

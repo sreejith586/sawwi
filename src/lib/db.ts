@@ -359,6 +359,35 @@ CREATE TABLE IF NOT EXISTS settlement_settings (
   updated_at TEXT NOT NULL
 );`,
   },
+  {
+    id: 8,
+    name: "COD remittances (D-74–D-77)",
+    sql: `
+CREATE TABLE IF NOT EXISTS cod_remittances (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  courier TEXT NOT NULL,
+  batch_id TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  draft_json TEXT NOT NULL,
+  approved_hash TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  erp_json TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cod_remittances_key ON cod_remittances (org_key, courier, batch_id);
+CREATE INDEX IF NOT EXISTS cod_remittances_org ON cod_remittances (org_key, created_at);
+CREATE TABLE IF NOT EXISTS cod_settings (
+  org_key TEXT PRIMARY KEY,
+  settings_json TEXT NOT NULL,
+  target_connection TEXT,
+  updated_at TEXT NOT NULL
+);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

@@ -55,6 +55,8 @@ export type Connector<C extends Record<string, string> = Record<string, string>>
   purchaseInvoices?: PurchaseInvoiceWriter<C>;
   /** Writing unposted general journal lines (D-71). */
   journals?: JournalWriter<C>;
+  /** Reading open invoices and writing unposted customer payments (D-75). */
+  customerPayments?: CustomerPaymentWriter<C>;
 };
 
 // ─── Writes (D-64) ───────────────────────────────────────────────────────────
@@ -103,4 +105,41 @@ export type JournalWriter<C> = {
   findDocument(credentials: C, journalId: string, documentNumber: string, deps: ConnectorDeps): Promise<{ where: "unposted" | "posted"; detail: string }[]>;
   /** Adds unposted lines to the batch; never posts. On a failed line, deletes the lines it added. */
   createLines(credentials: C, journalId: string, lines: ErpJournalLine[], deps: ConnectorDeps): Promise<{ company: string; journal: string; count: number }>;
+};
+
+export type ErpInvoiceRef = {
+  number: string;
+  externalDocumentNumber: string;
+  orderNumber: string;
+  customerNumber: string;
+  customerName: string;
+  remainingAmount: number;
+  status: string;
+  currency: string;
+};
+
+export type ErpCustomerPayment = {
+  customerNumber: string;
+  /** "" for a payment on account. */
+  appliesToInvoiceNumber: string;
+  postingDate: string;
+  documentNumber: string;
+  externalDocumentNumber: string;
+  /** Negative for a payment received (a credit to the customer). */
+  amount: number;
+  description: string;
+};
+
+export type CustomerPaymentWriter<C> = {
+  /** Posted sales invoices still open. */
+  openInvoices(credentials: C, deps: ConnectorDeps): Promise<ErpInvoiceRef[]>;
+  /** Posted sales invoices by external document number or number, open or not (for "already paid"). */
+  lookupInvoices(credentials: C, refs: string[], deps: ConnectorDeps): Promise<ErpInvoiceRef[]>;
+  customers(credentials: C, deps: ConnectorDeps): Promise<{ number: string; name: string }[]>;
+  /** Customer payment journal batches. */
+  listJournals(credentials: C, deps: ConnectorDeps): Promise<{ id: string; code: string; name: string }[]>;
+  findDocument(credentials: C, journalId: string, documentNumber: string, deps: ConnectorDeps): Promise<{ where: "unposted" | "posted"; detail: string }[]>;
+  /** Adds unposted payments; on a failed one, deletes those it added. Returns their ids for a later rollback. */
+  createPayments(credentials: C, journalId: string, payments: ErpCustomerPayment[], deps: ConnectorDeps): Promise<{ company: string; journal: string; ids: string[] }>;
+  deletePayments(credentials: C, journalId: string, ids: string[], deps: ConnectorDeps): Promise<void>;
 };

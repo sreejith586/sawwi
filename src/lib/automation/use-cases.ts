@@ -36,10 +36,11 @@ export const USE_CASES: UseCase[] = [
   {
     id: "cod-remittances",
     title: "Cash on delivery remittances",
-    flow: "Courier remittance (Aramex, SMSA, J&T, Quiqup…) → cash receipts",
-    summary: "Apply each COD remittance to the orders it pays, with the courier's charges booked, and flag orders delivered but never remitted.",
+    flow: "Courier remittance (Aramex, SMSA, J&T, Quiqup…) → customer payments applied to invoices",
+    summary: "Every parcel matched to its sales invoice and its cash applied; parcels short, never invoiced or already paid flagged; the courier's fees booked. Review, approve, then CSV or unposted payments and journal in Business Central.",
     value: "COD is still a large share of GCC orders, and applying remittances order by order is the slowest job in the month.",
-    status: "coming_soon",
+    status: "live",
+    href: "/automation/cod",
   },
   {
     id: "gateway-payouts",
