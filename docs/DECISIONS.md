@@ -796,3 +796,49 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Sonnet or Haiku for this: the user put accuracy first.
   - Sending the rules' reading to the AI as a hint: it would anchor the AI on the rules' mistakes. The two readings are independent, then compared.
 - **Consequences:** a repeat supplier whose layout the rules can't read is read by AI each time. Learning a layout recipe from an AI reading is a possible follow-up. Live checks against the API wait for the user, as tests use a fake reader.
+
+### D-70: Marketplace settlements → journal entries, the second Automation use case
+- **Context:** the user asked (8 Nov 2026) to continue with the top of the D-60 backlog: turn marketplace settlement reports into journal entries.
+- **Decision:**
+  - **In:** settlement reports as CSV, TSV, Excel or PDF, read by the existing upload parser. A file may hold several settlements.
+  - **Two layouts are recognised:**
+    - **long:** one row per amount, with a type and description column, as in Amazon's settlement flat file (V2). The `total-amount` and `deposit-date` on its summary row give the stated payout;
+    - **wide:** one row per order or transaction, with a column per amount type, as in Noon's and most other marketplaces' statements and the demo's generic marketplace. A "net paid" column gives the stated payout.
+  - **One journal per settlement:**
+    - each amount category, summed over the settlement, goes to the G/L account its bucket is mapped to;
+    - the payout goes to a marketplace clearing (or bank) account;
+    - the journal balances by construction when the categories add up to the payout. If they don't, the difference blocks approval ("a line may be missing").
+  - **Buckets:** sales, shipping charged, promotions, refunds, commission, fulfilment, storage, advertising, VAT on fees (input VAT), output VAT, reimbursements, other fees, reserve held/released, and payout.
+    - Common category names (Amazon's `amount-description`, Noon's columns, the demo's) are classified by a built-in dictionary.
+    - Anything else is left for the user to classify once; the choice is remembered per workspace and marketplace.
+  - **Accounts:**
+    - each bucket maps to a G/L account once per workspace, picked from the ERP's accounts or typed when there is no ERP;
+    - mapping "Sales" to a marketplace receivable instead of a sales account suits sellers who already invoice marketplace sales in the ERP; the screen says so;
+    - an optional "sales include VAT at n%" setting splits output VAT out of sales, shipping, promotions and refunds.
+  - **Same review flow as purchase invoices (D-66):** a queue with every settlement's figures and checks, single and bulk approve, CSV, and push behind a confirmation. Approval is for an exact content hash.
+- **Consequences:** the D-60 backlog's first item is live, and the Automation page lists it as available. Rows are aggregated per category, not posted per order: order-level detail stays in the reconciliation templates (`mkt-settlement-vs-sales` and others).
+
+### D-71: Pushing journal lines to Business Central
+- **Decision:**
+  - The connector capability `Connector.journals` (Business Central only) has three operations:
+    - `listJournals` reads the general journal batches;
+    - `findDocument` looks for the settlement's document number among the batch's unposted lines (`journals({id})/journalLines`) and among posted G/L entries (`generalLedgerEntries`);
+    - `createLines` posts one `journalLines` row per journal line: `accountType` "G/L Account", `accountNumber`, `postingDate` = deposit date (else settlement end), `documentNumber` = settlement ID (the first 20 characters), `externalDocumentNumber` = the marketplace, the amount (positive = debit) and a description.
+  - **Unposted only.** The lines wait in the chosen batch for the user to post, as with draft purchase invoices (D-64). If a line fails, Sawwi deletes the lines it created in that push, by id, and nothing else.
+  - **Same safeguards as D-64:** a confirmation per push bound to each journal's hash; `liveDeps` / `assertPublicUrl`; the fixed API host; `runBlocker()`.
+  - The Entra app's permission set must allow general journals (e.g. "D365 JOURNALS, EDIT").
+  - **Currency:** a settlement in a currency other than the company's local currency can't be pushed; it downloads as CSV. API v2.0 journal lines carry no currency code. This waits on a live tenant.
+- **Consequences:** every push is visible in Business Central before posting. The batch is chosen once per workspace.
+
+### D-72: Duplicate settlements
+- **Decision:**
+  - The same marketplace and settlement ID already in Sawwi is not captured twice: the upload says which draft has it.
+  - Before every push, Business Central is asked for the document number in the batch's unposted lines and in posted G/L entries. If it's there, the push is refused.
+- **Consequences:** re-uploading a month's file that overlaps an earlier one only adds the new settlements.
+
+### D-73: The demo's settlements post to the web store company
+- **Decision:**
+  - The demo marketplace seller's books are the mock "Sawwi Demo Store LLC" (D-52). In the demo, settlements push there (`demo:business-central-store`), while purchase invoices keep going to the trading company.
+  - The store company gains G/L accounts for each bucket and a "DEFAULT" general journal batch in the mock.
+  - **Samples:** the demo's existing generic marketplace settlement file (settlements S-2026-10-A and -B), and an invented Amazon-style flat file with an unknown category, to show classifying one.
+- **Consequences:** no demo reconciliation result changes: the reconciliation reports don't read accounts or journals.

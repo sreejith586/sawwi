@@ -330,6 +330,35 @@ CREATE TABLE IF NOT EXISTS automation_prefs (
 ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS org_key TEXT;
 CREATE INDEX IF NOT EXISTS llm_usage_org ON llm_usage (org_key, created_at);`,
   },
+  {
+    id: 7,
+    name: "marketplace settlement journals (D-70–D-72)",
+    sql: `
+CREATE TABLE IF NOT EXISTS settlement_journals (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  marketplace TEXT NOT NULL,
+  settlement_id TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  draft_json TEXT NOT NULL,
+  approved_hash TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  erp_json TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS settlement_journals_key ON settlement_journals (org_key, marketplace, settlement_id);
+CREATE INDEX IF NOT EXISTS settlement_journals_org ON settlement_journals (org_key, created_at);
+CREATE TABLE IF NOT EXISTS settlement_settings (
+  org_key TEXT PRIMARY KEY,
+  settings_json TEXT NOT NULL,
+  target_connection TEXT,
+  updated_at TEXT NOT NULL
+);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

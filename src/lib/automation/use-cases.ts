@@ -28,9 +28,10 @@ export const USE_CASES: UseCase[] = [
     id: "marketplace-settlements",
     title: "Marketplace settlements",
     flow: "Amazon, Noon, Namshi, Trendyol settlement → journal entry",
-    summary: "Turn each settlement into one balanced journal: sales, refunds, commission, fulfilment and advertising fees, VAT on fees, and the payout.",
+    summary: "Upload settlement reports and get one balanced journal per settlement: sales, refunds, fees, VAT on fees and ads on their accounts, the payout on your clearing account. Review, approve, then CSV or unposted lines in a Business Central journal.",
     value: "Every marketplace seller has them every fortnight, with dozens of fee lines each. Sawwi already reads them for reconciliation.",
-    status: "coming_soon",
+    status: "live",
+    href: "/automation/settlements",
   },
   {
     id: "cod-remittances",

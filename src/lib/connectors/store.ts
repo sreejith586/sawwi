@@ -58,7 +58,7 @@ export async function setConnectionStatus(orgKey: string, id: string, status: Co
 export async function deleteConnection(orgKey: string, id: string) {
   await getDb().run("DELETE FROM connections WHERE id = ? AND org_key = ?", id, orgKey);
   // Vendors, items and accounts cached for purchase invoice capture (D-62) go with it.
-  await getDb().run("DELETE FROM erp_master_data WHERE connection_id = ? AND org_key = ?", id, orgKey);
+  await getDb().run("DELETE FROM erp_master_data WHERE (connection_id = ? OR connection_id LIKE ?) AND org_key = ?", id, `${id}#%`, orgKey);
 }
 
 export type SyncRecord = {

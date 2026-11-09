@@ -360,7 +360,7 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
-## 10. Automation (Phase 9, D-60–D-69)
+## 10. Automation (Phase 9, D-60–D-73)
 
 Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
 
@@ -381,3 +381,22 @@ Reconciliation checks work after it's done; Automation does the work: a document
 **Access:** capture, approve and push go through `runBlocker()` (role, plan, trial). Viewers can see everything and download, but change nothing. The demo store takes no uploads: it has four sample invoices (`samples.ts`, PDFs as base64 in `samples-data.ts`, drawn by `fixtures/samples.ts`) and pushes to the mock Business Central, which now accepts draft purchase invoice writes, `eq` filters, and vendors, items and accounts.
 
 **Tests:** `purchase-invoices.test.ts` covers the draft model, matching, BC writes against the mock (deep insert, cleanup on failure, read-only 403, host pinning), and the demo flow end to end: capture, re-upload, approve and withdraw, push with a hash, refusal of an invoice BC already has, learning a supplier's item code, an OCR'd scan, and bulk approve plus CSV; photos made into one- and two-page PDFs and read by OCR.
+
+**Marketplace settlements** (`src/lib/automation/settlements/`, `/automation/settlements`, D-70–D-73):
+
+1. **Read** (`parse.ts`): any settlement report through `parseUploads` (CSV, TSV, Excel, PDF). The layout is detected:
+   - **long:** Amazon's flat file (V2). The summary row gives the period, deposit date and stated payout; then one row per amount; a refund's amounts are named apart ("Refund · …");
+   - **wide:** every numeric column that isn't an ID, quantity, rate, date or net becomes an amount type, and the net column sums to the payout.
+   Amounts are summed per settlement and amount type. The marketplace is guessed from a marketplace column or the file name.
+2. **Classify** (`buckets.ts`): an ordered dictionary of patterns. Names are split on CamelCase and lower-cased. The `Bucket`s run from sales to reserve, plus "Not posted". The user's classifications are remembered per marketplace (`settlement_settings.categories`).
+3. **Journal** (`journal.ts`, browser-safe):
+   - each bucket's total is a line on its account, with the sign flipped (+ debit), and the payout is a debit on the payout account;
+   - checks: the amounts add up to the stated payout (rounding up to a cent a row goes to Other fees), and debits equal credits once everything is classified;
+   - the optional output VAT split takes rate/(100+rate) out of sales, shipping, promotions and refunds;
+   - CSV: one row per line.
+4. **Review, approve, push** (`service.ts`): the same statuses and hash-bound approval as purchase invoices. The hash covers the draft, accounts, VAT split, batch and target, and changing any of them voids an approval (`refreshStatuses`).
+   - Push uses `Connector.journals` (`bcJournals`): `journals`, `journals({id})/journalLines` (POST; DELETE to roll back its own lines) and `generalLedgerEntries` for the duplicate check (`documentNumber` = settlement ID, at most 20 characters).
+   - A settlement in a currency other than the company's local one is CSV only.
+   - Accounts and journal batches are cached an hour per connection (`erp_master_data`, key `<connection>#journals`).
+5. **Tables** (migration 7): `settlement_journals` (unique per workspace, marketplace and settlement ID) and `settlement_settings` (accounts, classifications, VAT split, batch, target).
+6. **Demo:** pushes go to the mock store company (`demo:business-central-store`). It has a chart of accounts, a DEFAULT batch and a posted S-2026-10-A. Samples are in `samples.ts`.

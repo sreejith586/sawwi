@@ -112,3 +112,30 @@ export const DEMO_STORE_DATA: Record<string, Doc[]> = {
     webCreditMemo("PCM-W2004", "000000108", { total: 20 }),
   ],
 };
+
+// The marketplace seller's chart of accounts and a general journal batch, for settlement journals
+// (D-71, D-73). Settlement S-2026-10-A is already posted, so the demo shows a duplicate refused (D-72).
+// Added after the documents, so their ids don't move.
+export const DEMO_STORE_JOURNAL_ID = "5707e000-0000-4000-8000-000000000a01";
+Object.assign(DEMO_STORE_DATA, {
+  accounts: [
+    ["1150", "Marketplace clearing"],
+    ["1160", "Marketplace reserve"],
+    ["2310", "Output VAT"],
+    ["2320", "Input VAT"],
+    ["4010", "Marketplace sales"],
+    ["4020", "Shipping income"],
+    ["4030", "Sales returns and refunds"],
+    ["4040", "Promotions and discounts"],
+    ["4090", "Other income"],
+    ["6110", "Marketplace commission"],
+    ["6120", "Fulfilment fees"],
+    ["6130", "Storage fees"],
+    ["6140", "Advertising"],
+    ["6190", "Other marketplace fees"],
+  ].map(([number, displayName]) => ({ id: guid(), number, displayName, category: "", accountType: "Posting", directPosting: true, blocked: false })),
+  journals: [{ id: DEMO_STORE_JOURNAL_ID, code: "DEFAULT", displayName: "Default journal batch", templateDisplayName: "GENERAL" }],
+  generalLedgerEntries: [
+    { id: guid(), entryNumber: 5101, postingDate: "2026-10-14", documentNumber: "S-2026-10-A", accountNumber: "1150", description: "Marketplace settlement S-2026-10-A", debitAmount: 1286.65, creditAmount: 0 },
+  ],
+});
