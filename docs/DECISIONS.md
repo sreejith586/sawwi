@@ -901,3 +901,19 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Decision:** `read.ts` imports `pdfjs-dist/legacy/build/pdf.worker.mjs` by its literal name, which the tracer follows, and sets it as `globalThis.pdfjsWorker`. pdf.js checks that before it imports anything. The catch-all now logs the real error to the server logs. A test opens a PDF with `workerSrc` pointing at a file that doesn't exist.
 - **Rejected alternative:** `outputFileTracingIncludes` for the worker file. It works, but it keeps a path to a file in `next.config.ts` that is easy to lose on a pdfjs upgrade. The import fails at build or typecheck time if the module moves.
 
+### D-79: The OCR files are added to every function's trace
+- **Context:** after D-78, text PDFs worked on production, but scanned ones still failed: the demo's scanned sample (ANP-0419) showed "Something went wrong. Try again." on 10 Nov 2026. tesseract.js runs OCR in a worker thread. The thread loads its code, the tesseract core (`.js` + `.wasm`, with the variant picked at runtime) and the language data from paths the file tracer can't follow. The build's trace had only the worker's entry file. It had no core, no `wasm-feature-detect` or `zlibjs`, and only the `4.0.0` language files, not the `4.0.0_best_int` ones `ocr.ts` reads.
+- **Decision:** `outputFileTracingIncludes` in `next.config.ts` adds these files to every route (`/**`):
+  - `tesseract.js/src`;
+  - the six core variants as `.js` + `.wasm`, without the base64 `.wasm.js` copies;
+  - the worker's dependencies;
+  - the two `4.0.0_best_int` language files.
+
+  The globs go through pnpm's `.pnpm/tesseract.js@*/node_modules/` folder, so the symlinks Node resolves through are deployed too. This was checked by copying only the traced files of a route into an empty folder and running OCR there.
+- **Rejected alternatives:**
+  - Only the routes that run OCR: PDF parsing is reached from about 25 routes, and missing one fails silently the way this did.
+  - A literal import, as in D-78: the worker script can't be loaded on the main thread.
+- **Consequences:**
+  - Each function grows by about 25 MB; a route's traced `node_modules` is about 98 MB, under Vercel's 250 MB limit.
+  - A tesseract.js upgrade that renames core files or moves its dependencies needs these globs checked. The sandbox check is in the PR.
+
