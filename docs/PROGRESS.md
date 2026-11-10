@@ -25,10 +25,13 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
+| Fix: every PDF upload failed in production (pdf.js worker not deployed, D-78) | `fix/pdf-worker-vercel-trace` | this PR | PDF fix session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
+
+- **Fix: PDF uploads failed in production** (D-78, `fix/pdf-worker-vercel-trace`). Every PDF on sawwiapp.ai showed "Sawwi couldn't open this PDF", for example CAS-55188.pdf on the demo account. pdf.js loads its worker from a path only known at runtime, so Vercel never deployed `pdf.worker.mjs`. `read.ts` now imports the worker by name and gives it to pdf.js through `globalThis.pdfjsWorker`. The build's trace for the upload route now includes the worker. The real error is logged when a PDF still can't be opened. A regression test opens a PDF with the worker path broken. Still to check: an upload on production after the deploy.
 
 - **COD remittances → customer payments applied to invoices** (D-74–D-77, `feature/automation-cod-remittances`, #43). The third Automation use case, now live on `/automation`.
   - **Reading:** courier remittance reports (Aramex, SMSA, J&T, Quiqup, iMile, Naqel or any other; CSV, Excel or PDF). Columns are found by name, and totals rows are left out.
