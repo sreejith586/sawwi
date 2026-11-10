@@ -212,6 +212,20 @@ describe("scanned PDFs (local OCR)", () => {
   }, 60_000);
 });
 
+describe("pdf.js worker", () => {
+  it("opens PDFs without importing pdf.worker.mjs by path (it isn't traced into Vercel functions)", async () => {
+    const { GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const before = GlobalWorkerOptions.workerSrc;
+    GlobalWorkerOptions.workerSrc = "./not-deployed.mjs";
+    try {
+      const table = await parseUpload("jan.pdf", await F.statementPdf({ opening: 10000, txns: F.JANUARY, printTotals: true }));
+      expect(table.rows.length).toBe(4);
+    } finally {
+      GlobalWorkerOptions.workerSrc = before;
+    }
+  });
+});
+
 describe("refused PDFs", () => {
   it("refuses a password-protected PDF", async () => {
     await expect(parseUpload("locked.pdf", F.passwordPdf())).rejects.toThrow(/password-protected/);

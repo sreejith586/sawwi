@@ -895,3 +895,9 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - an SMSA-style report, laid out differently, that repeats one AWB from the Aramex batch.
   - November falls outside the October window the reconciliation demo pulls, so no reconciliation result changes.
   - Pushes go to the store company's "CODRCPT" customer payment batch and DEFAULT general batch.
+
+### D-78: The pdf.js worker is imported by name so Vercel deploys it
+- **Context:** every PDF upload in production (seen on the demo account with CAS-55188.pdf, 10 Nov 2026) failed with "Sawwi couldn't open this PDF". In Node, pdf.js runs its worker on the main thread and loads it with `import(workerSrc)`, a path known only at runtime. Vercel's file tracing can't follow that, so `pdf.worker.mjs` was missing from the deployed functions, the import failed, and the error fell into `loadPdf`'s catch-all. Locally the whole `node_modules` is there, so tests and `next dev` never showed it.
+- **Decision:** `read.ts` imports `pdfjs-dist/legacy/build/pdf.worker.mjs` by its literal name, which the tracer follows, and sets it as `globalThis.pdfjsWorker`. pdf.js checks that before it imports anything. The catch-all now logs the real error to the server logs. A test opens a PDF with `workerSrc` pointing at a file that doesn't exist.
+- **Rejected alternative:** `outputFileTracingIncludes` for the worker file. It works, but it keeps a path to a file in `next.config.ts` that is easy to lose on a pdfjs upgrade. The import fails at build or typecheck time if the module moves.
+

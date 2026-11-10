@@ -23,6 +23,12 @@ function pdfjs(): Promise<PdfJs> {
     console.warn = quiet(warn);
     console.log = quiet(log);
     try {
+      // On Node, pdf.js runs its worker on the main thread and finds it with `import(workerSrc)`, a
+      // runtime path that Vercel's file tracing can't follow: pdf.worker.mjs was left out of the
+      // deployment and every PDF failed to open in production. A literal import gets the file traced;
+      // `globalThis.pdfjsWorker` is where pdf.js looks for an already-loaded worker before importing one.
+      const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = worker;
       return await import("pdfjs-dist/legacy/build/pdf.mjs");
     } finally {
       console.warn = warn;
@@ -70,6 +76,8 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
       throw new PdfInputError("This PDF is password-protected. Open it, save or print a copy without the password, and upload that.");
     }
     if (name === "InvalidPDFException") throw new PdfInputError("This file isn't a readable PDF. Check it opens on your computer, or export the data as CSV/Excel.");
+    // The user sees a generic message; keep the real cause in the server logs.
+    console.error("pdf.js could not open a PDF:", error);
     throw new PdfInputError("Sawwi couldn't open this PDF. Export it as CSV/Excel, or try saving it again as PDF.");
   }
 
