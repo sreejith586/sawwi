@@ -7,7 +7,7 @@ import { syncRows } from "@/lib/connectors/rows";
 import { listConnections } from "@/lib/connectors/store";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
-import { AddConnection, ConnectionList, SyncHistory } from "./connections-panel";
+import { AddConnection, ConnectionList, OAuthResult, SyncHistory } from "./connections-panel";
 
 export const metadata: Metadata = { title: "Connections" };
 
@@ -21,10 +21,17 @@ async function Connections() {
   const enabled = connectorsEnabled();
   // Only what the browser needs: no secrets ever leave the server.
   const items = (await listConnections(orgKey)).map(({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }) => ({ id, provider, accountLabel, status, lastError, lastSyncAt, createdAt }));
-  const connectors = availableConnectors().map(({ id, label, description, fields }) => ({ id, label, description, fields }));
+  const connectors = availableConnectors().map(({ id, label, description, fields, oauth }) => ({
+    id,
+    label,
+    description,
+    fields,
+    ...(oauth ? { oauth: { ready: oauth.app() !== null, envVars: oauth.envVars } } : {}),
+  }));
 
   return (
     <div className="space-y-10">
+      <OAuthResult />
       <p className="text-sm text-muted">
         Connect a source once and pull its data straight into a reconciliation instead of exporting and uploading a file. Sawwi only reads, and
         imported data goes through the same column mapping as an upload, so it is remembered next time.
@@ -69,7 +76,7 @@ function DemoConnections({ labels, history }: { labels: Record<string, string>; 
   return (
     <div className="space-y-10">
       <p className="text-sm text-muted">
-        This live demo has built-in sources with invented data: two Business Central companies (a trading company and the web store&rsquo;s books), a Magento store, and demo files for the other side of
+        This live demo has built-in sources with invented data: two Business Central companies (a trading company and the web store&rsquo;s books), a Magento store, a distributor&rsquo;s books in QuickBooks Online, Xero and NetSuite, and demo files for the other side of
         each reconciliation (marketplace, gateway, courier, warehouse, bank). On a reconciliation, click <strong>Fill with demo data</strong>, or use
         “Import from a connection” on a file. In your own workspace you connect your real systems here.
       </p>

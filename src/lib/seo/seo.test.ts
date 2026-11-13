@@ -24,7 +24,7 @@ describe("SEO pages (D-47)", () => {
         }
       }
     }
-    expect(connectorsFor(TEMPLATES.find((t) => t.id === "p2p-three-way-match")!).map((c) => c.id)).toEqual(["business-central"]);
+    expect(connectorsFor(TEMPLATES.find((t) => t.id === "p2p-three-way-match")!).map((c) => c.id)).toEqual(["business-central", "quickbooks", "xero", "netsuite"]);
   });
 
   it("every page points at real templates, unique slugs, and short enough titles", () => {

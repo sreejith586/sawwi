@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useActionState, useState, useTransition } from "react";
 import { addConnectionAction, removeConnectionAction, type ConnectionActionState } from "@/app/actions/connections";
 import { Pill } from "@/components/data-table";
@@ -13,7 +14,34 @@ import type { CredentialField } from "@/lib/connectors/types";
 const when = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 const field = "h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-foreground/40";
 
-export type ConnectorOption = { id: string; label: string; description: string; fields: CredentialField[] };
+export type ConnectorOption = {
+  id: string;
+  label: string;
+  description: string;
+  fields: CredentialField[];
+  /** Connected by signing in at the provider (D-81); `ready` is false until the server has its app keys. */
+  oauth?: { ready: boolean; envVars: string[] };
+};
+
+/** The result of a "Connect with …" sign-in, which comes back as ?connected= or ?error= (D-81). */
+export function OAuthResult() {
+  const params = useSearchParams();
+  const connected = params.get("connected");
+  const error = params.get("error");
+  if (error) {
+    return (
+      <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+        {error}
+      </p>
+    );
+  }
+  if (!connected) return null;
+  return (
+    <p role="status" className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
+      Connected to {connected}.
+    </p>
+  );
+}
 export type ConnectionItem = { id: string; provider: string; accountLabel: string; status: string; lastError: string | null; lastSyncAt: string | null; createdAt: string };
 
 export function AddConnection({ connectors }: { connectors: ConnectorOption[] }) {
@@ -57,7 +85,22 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
         </select>
         {c && <span className="mt-1 block text-xs text-muted">{c.description}</span>}
       </label>
-      {c?.fields.map((f) => (
+      {c?.oauth ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {c.oauth.ready ? (
+            // A plain link: the sign-in leaves Sawwi and comes back to this page.
+            <a href={`/api/connections/oauth/${c.id}/start`} className={buttonClass("primary")}>
+              Connect with {c.label}
+            </a>
+          ) : (
+            <span className="text-sm text-muted">
+              {c.label} isn&rsquo;t set up on this server yet: it needs Sawwi&rsquo;s app keys ({c.oauth.envVars.map((v) => <code key={v} className="mx-0.5">{v}</code>)}).
+            </span>
+          )}
+          <span className="text-xs text-muted">You sign in at {c.label} and pick the company. Sawwi gets read-only access and stores it encrypted.</span>
+        </div>
+      ) : null}
+      {c?.oauth ? null : c?.fields.map((f) => (
         <label key={`${provider}-${f.key}`} className="block text-sm">
           <span className="font-medium">
             {f.label}
@@ -77,8 +120,8 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
           {f.help && <span className="mt-1 block text-xs text-muted">{f.help}</span>}
         </label>
       ))}
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending || !c} className={buttonClass("primary")}>
+      <div className={`flex flex-wrap items-center gap-3 ${c?.oauth ? "hidden" : ""}`}>
+        <button type="submit" disabled={pending || !c || !!c.oauth} className={buttonClass("primary")}>
           {pending ? "Checking…" : "Test and connect"}
         </button>
         <span className="text-xs text-muted">Sawwi checks the credentials with a read-only call, then stores them encrypted. Secrets are never shown again.</span>

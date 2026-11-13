@@ -26,10 +26,23 @@ _Updated in every commit. Newest first within each section._
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
 | Fix: scanned PDFs failed in production (OCR files not deployed, D-79) | `fix/ocr-vercel-trace` | this PR | PDF fix session |
+| QuickBooks Online, Xero and NetSuite connectors with "Connect with …" OAuth (D-80–D-85) | `feature/accounting-connectors` | this PR | Accounting connectors session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
+
+- **QuickBooks Online, Xero and NetSuite connectors** (D-80–D-85, `feature/accounting-connectors`). Read-only. Their reports fill the same template slots as Business Central's and use its column names, so they map with no questions.
+  - **"Connect with …" sign-in (D-81)**, new for QuickBooks and Xero: an owner or admin signs in at the provider and picks the company. The state is checked against a short-lived cookie bound to the workspace. Tokens are encrypted like other secrets; rotated refresh tokens are saved back on every renewal. Signing in again to the same account replaces its tokens instead of adding a second connection.
+  - **QuickBooks Online (D-82):** invoices (status from the open balance), invoice lines, credit memos, purchase order lines, bill lines (with the PO number looked up) and products and services.
+  - **Xero (D-83):** the same six reports; posted documents only; one organisation per connection; granular read-only scopes.
+  - **NetSuite (D-84):** token-based auth (account ID, consumer key and secret, token ID and secret, pasted), SuiteQL. Nine reports, adding sales order lines, item fulfillments and item receipts, so it fills order → delivery → invoice and the full three-way match.
+  - **Demo (D-85):** one invented distributor served by three mocks in each provider's own JSON shape. They are listed as built-in demo sources after the existing ones, so earlier demo results don't change. NetSuite's three-way match finds the planted price and short-receipt exceptions on PO-7702.
+  - SEO coverage lists the three connectors on the templates they fill.
+  - 20 new tests (`accounting.test.ts`); 2 updated (demo source list, three-way match connectors). No live provider called.
+  - **Waits for the user:**
+    - register Sawwi's apps at developer.intuit.com (production keys need Intuit's app assessment) and developer.xero.com, with the redirect URIs in docs/DEPLOY.md, and set the four variables in Vercel;
+    - then a live check on a QuickBooks sandbox company, a Xero demo company and a NetSuite sandbox (role with token login, REST web services and SuiteAnalytics Workbook). Confirm the Xero scope for purchase orders and the SuiteQL field names listed in D-83 and D-84.
 
 - **Fix: scanned PDFs failed in production** (D-79, `fix/ocr-vercel-trace`). After #44, the demo's scanned sample ANP-0419 still showed "Something went wrong. Try again." The OCR worker's core, its dependencies and the `4.0.0_best_int` language data weren't in the deployed functions. `next.config.ts` now adds them to every route's trace with `outputFileTracingIncludes`. A route's traced files alone, copied to an empty folder, now OCR a scanned invoice. Still to check: the scanned sample on production after the deploy.
 - **Fix: PDF uploads failed in production** (D-78, #44, merged). Every PDF on sawwiapp.ai showed "Sawwi couldn't open this PDF", for example CAS-55188.pdf on the demo account. pdf.js loads its worker from a path only known at runtime, so Vercel never deployed `pdf.worker.mjs`. `read.ts` now imports the worker by name and gives it to pdf.js through `globalThis.pdfjsWorker`. The build's trace for the upload route now includes the worker. The real error is logged when a PDF still can't be opened. A regression test opens a PDF with the worker path broken. Checked on production on 10 Nov 2026: the CAS-55188 sample reads, with its totals check passing.
@@ -332,6 +345,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 4. **Live check of the Magento 2 connector** with a real store: an integration token with read-only Sales and Stores resources (D-30). Include Sales → Operations → Invoices for the new invoices report (D-52).
    - With the design partner: confirm their Magento↔BC sync writes the Magento order number to External Document No. and the shopper's e-mail to Sell-to E-mail, or the web templates need a different key (D-52).
 5. Scheduled connector pulls, as a new job kind on the jobs table (D-26, D-27, D-42). Not chosen for Phase 8.
+6. **Accounting connectors (D-80–D-85):** register the Intuit and Xero apps and set their keys, then live-check QuickBooks, Xero and NetSuite on sandboxes.
 
 ## Open questions
 
@@ -350,6 +364,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 - **Business Central live test:** needs the design partner's IT to register an Entra app and enable it in BC (D-29). Which environment (Sandbox first?) and company? Do they want customer/vendor ledger entries too? Those need a small AL extension (custom API page), since API v2.0 has none.
 - **Magento live test:** which store? On 2.4.4+ the merchant must allow integration tokens as Bearer tokens (or we add OAuth 1.0a signing). Magento 1 stays upload-only.
 - **Next connector:** Odoo (easy, free trial) or Amazon SP-API (most valuable, needs a developer registration, which only the user can start).
+- **QuickBooks, Xero and NetSuite writes:** Automation pushes drafts, journals and payments to Business Central only. Should purchase invoices, settlement journals and COD payments also push to QuickBooks bills / journal entries / payments, Xero bills / manual journals / payments, or NetSuite? Each needs write scopes and its own sandbox check (D-80).
 - **Production key management:** built (D-40): a key ring in a sensitive Vercel variable, rotated from Admin. Add a cloud KMS (AWS or GCP) later?
 - **Scheduled runs:** the run is created on Start rather than pre-created (D-26), so unused schedules don't use plan runs. Is that what you want?
 - **Real PDF samples:** anonymised Emirates NBD, ADCB, Al Rajhi and SNB statements and Noon/Amazon invoices, to tune the header vocabulary and layouts. Arabic PDFs are so far tested only with synthetic positioned text, and Arabic OCR not on a real scan.

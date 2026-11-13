@@ -126,7 +126,7 @@ describe("Fill with demo data", () => {
     const again = await fillRunWithDemoData(run, { countries: ["AE"] });
     expect(first.filled).toHaveLength(2);
     expect(again.filled).toEqual([]);
-    expect((await importSources(DEMO_ORG_KEY)).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:business-central-store", "demo:magento", "demo:demo-data"]);
+    expect((await importSources(DEMO_ORG_KEY)).map((s) => s.connectionId)).toEqual(["demo:business-central", "demo:business-central-store", "demo:magento", "demo:demo-data", "demo:quickbooks", "demo:xero", "demo:netsuite"]);
     expect((await runStore.getUsage(run.id)).calls).toBe(0); // no AI calls
   });
 

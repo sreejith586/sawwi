@@ -24,9 +24,32 @@ export const liveDeps: ConnectorDeps = {
 
 const aad = (orgKey: string, provider: string) => `sawwi:${orgKey}:${provider}`;
 
+/** Deps that save rotated credentials back to this connection, sealed again (D-81). */
+function savingDeps(deps: ConnectorDeps, orgKey: string, connectionId: string, provider: string): ConnectorDeps {
+  return { ...deps, saveCredentials: (next) => store.updateConnectionSecret(orgKey, connectionId, encryptSecret(next, aad(orgKey, provider))) };
+}
+
+/**
+ * Finishes "Connect with …" (D-81): swaps the provider's callback for credentials, tests them,
+ * and saves the connection, or replaces the tokens of the same account connected before.
+ */
+export async function completeOAuthConnection(orgKey: string, provider: string, query: URLSearchParams, redirectUri: string, createdBy: string | null, deps: ConnectorDeps = liveDeps) {
+  const connector = connectorById(provider);
+  const app = connector?.oauth?.app();
+  if (!connector?.oauth || !app) throw new ConnectorError("That source can't be connected on this server.");
+  const denied = query.get("error");
+  if (denied) throw new ConnectorError(denied === "access_denied" ? `${connector.label} access wasn't granted, so nothing was connected.` : `${connector.label} sign-in failed (${denied.slice(0, 60)}).`);
+  // Validate the shape (realm, tenant), then test before saving anything.
+  const credentials = connector.parseCredentials(await connector.oauth.complete(app, query, redirectUri, deps));
+  const { accountLabel } = await connector.test(credentials, deps);
+  const secretEnc = encryptSecret(credentials, aad(orgKey, provider));
+  return (await store.reconnect(orgKey, provider, accountLabel, secretEnc)) ?? (await store.insertConnection({ orgKey, provider, accountLabel, secretEnc, createdBy }));
+}
+
 export async function addConnection(orgKey: string, provider: string, input: Record<string, string>, createdBy: string | null, deps: ConnectorDeps = liveDeps) {
   const connector = connectorById(provider);
   if (!connector) throw new ConnectorError("Unknown source.");
+  if (connector.oauth) throw new ConnectorError(`Use “Connect with ${connector.label}”.`);
   const credentials = connector.parseCredentials(input);
   const { accountLabel } = await connector.test(credentials, deps);
   return await store.insertConnection({ orgKey, provider, accountLabel, secretEnc: encryptSecret(credentials, aad(orgKey, provider)), createdBy });
@@ -51,7 +74,7 @@ export async function openConnection(
   const sealed = connection && await store.getConnectionSecret(orgKey, connectionId);
   const connector = connection && connectorById(connection.provider);
   if (!connection || !sealed || !connector) throw new ConnectorError("That connection no longer exists.");
-  return { connector, credentials: decryptSecret<Record<string, string>>(sealed, aad(orgKey, connector.id)), deps, accountLabel: connection.accountLabel, demo: false };
+  return { connector, credentials: decryptSecret<Record<string, string>>(sealed, aad(orgKey, connector.id)), deps: savingDeps(deps, orgKey, connectionId, connector.id), accountLabel: connection.accountLabel, demo: false };
 }
 
 export function validWindow(w: PullWindow): boolean {
@@ -93,7 +116,7 @@ export async function pullIntoRun(
   try {
     table = demo
       ? await connector.pull(demo.credentials, report, window, demoDeps)
-      : await connector.pull(decryptSecret(sealed!, aad(run.orgKey, provider)), report, window, deps);
+      : await connector.pull(decryptSecret(sealed!, aad(run.orgKey, provider)), report, window, savingDeps(deps, run.orgKey, connectionId, provider));
   } catch (error) {
     // Auth, scope or provider problems: flag the connection so Settings shows it.
     if (error instanceof ConnectorError && !demo) await store.setConnectionStatus(run.orgKey, connectionId, "needs_attention", error.message);

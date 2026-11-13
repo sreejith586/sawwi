@@ -50,6 +50,19 @@ export async function listConnections(orgKey: string): Promise<Connection[]> {
   return ((await getDb().all("SELECT * FROM connections WHERE org_key = ? ORDER BY created_at", orgKey)) as Row[]).map(toConnection);
 }
 
+/** Stores rotated OAuth tokens (D-81). */
+export async function updateConnectionSecret(orgKey: string, id: string, secretEnc: string) {
+  await getDb().run("UPDATE connections SET secret_enc = ? WHERE id = ? AND org_key = ?", secretEnc, id, orgKey);
+}
+
+/** Reconnecting the same account through OAuth replaces its tokens instead of adding a duplicate (D-81). */
+export async function reconnect(orgKey: string, provider: string, accountLabel: string, secretEnc: string): Promise<Connection | undefined> {
+  const existing = (await listConnections(orgKey)).find((c) => c.provider === provider && c.accountLabel === accountLabel);
+  if (!existing) return undefined;
+  await getDb().run("UPDATE connections SET secret_enc = ?, status = 'connected', last_error = NULL WHERE id = ? AND org_key = ?", secretEnc, existing.id, orgKey);
+  return getConnection(orgKey, existing.id);
+}
+
 export async function setConnectionStatus(orgKey: string, id: string, status: ConnectionStatus, error: string | null, syncedAt?: string) {
   await getDb().run("UPDATE connections SET status = ?, last_error = ?, last_sync_at = COALESCE(?, last_sync_at) WHERE id = ? AND org_key = ?", status, error, syncedAt ?? null, id, orgKey);
 }
