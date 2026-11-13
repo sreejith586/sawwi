@@ -917,3 +917,55 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Each function grows by about 25 MB; a route's traced `node_modules` is about 98 MB, under Vercel's 250 MB limit.
   - A tesseract.js upgrade that renames core files or moves its dependencies needs these globs checked. The sandbox check is in the PR.
 
+
+### D-80: QuickBooks Online, Xero and NetSuite connectors, read-only, in one PR
+- **Context:** asked for connectors to the three accounting systems GCC SMEs and mid-market companies most often run besides Business Central and Odoo. The plan (ARCHITECTURE §9, row 6) put them after Zoho Books, "as customers ask".
+- **Decision:** add all three in one PR (`feature/accounting-connectors`), read-only, on the existing framework, so the shared OAuth piece (D-81) lands once. Each fills the same template slots as Business Central's sales and purchasing reports, with the same column names wherever the data is the same, so the mapping heuristics map them with no questions:
+  - QuickBooks Online and Xero: invoices, invoice lines, credit memos/notes, purchase order lines, bill lines and items. That's 8 templates (cash application, B2B payment release, settlement vs sales, price compliance, returns vs credit notes, three-way match without GRN, ERP stock and prices).
+  - NetSuite: also sales order lines, item fulfillment lines and item receipt lines. That covers order → delivery → invoice and the full three-way match with GRN.
+- **Not included:** writes (draft bills, journals, payments) for Automation, which today pushes to Business Central only (D-64, D-71, D-75). Customer and supplier ledgers (statement templates) and payments are left out too. Each is a follow-up when a customer on that system asks.
+
+### D-81: "Connect with …" OAuth 2.0 sign-in for connectors, with rotating tokens saved back
+- **Context:** QuickBooks Online has no other way in: a company authorises an app at Intuit (authorization code). Xero's alternative, Custom Connections, is paid and only available in a few countries, not the GCC. Until now every connector took pasted credentials.
+- **Decision:**
+  - A connector may declare `oauth` (`types.ts`): Sawwi's own app keys from the environment, an authorize URL and a `complete` step that turns the callback into credentials. Its `fields` are empty, and Settings → Connections shows "Connect with QuickBooks / Xero" instead of a form.
+  - `/api/connections/oauth/[provider]/start` (owners and admins, not the demo, keys present) sends the user to the provider. It sets a random `state` in an httpOnly, 10-minute cookie scoped to the OAuth path, bound to the provider and workspace. `/callback` checks the state, provider and signed-in workspace match before using the code, then tests and saves the connection. Errors come back to Settings as `?error=`.
+  - The redirect URI is `APP_URL` + `/api/connections/oauth/<provider>/callback`. It must be registered with each provider.
+  - Credentials hold the access token, its expiry and the refresh token. Both providers rotate refresh tokens, so `ConnectorDeps.saveCredentials` writes the new ones back, re-encrypted, whenever a call refreshes (`oauth.ts`, `service.ts`). The access token is reused until 2 minutes before it expires.
+  - Signing in again to the same account (same provider and label) replaces the tokens of the existing connection instead of adding a second one. That is how a revoked or expired sign-in is fixed.
+- **Rejected:** each customer registering their own Intuit/Xero app and pasting its keys. That is unusual for these platforms and much harder for a finance user.
+- **Consequences:**
+  - Production needs `SAWWI_QUICKBOOKS_CLIENT_ID` / `_SECRET` and `SAWWI_XERO_CLIENT_ID` / `_SECRET` from apps the user registers at developer.intuit.com and developer.xero.com. Until then the button says the server isn't set up.
+  - Intuit requires an app assessment before production keys are issued.
+  - Disconnecting doesn't revoke the token at the provider yet (the user can revoke it there).
+
+### D-82: QuickBooks Online details
+- Accounting API v3 query endpoint (`SELECT * FROM <Entity> WHERE TxnDate …`, 1,000 rows a page with STARTPOSITION/MAXRESULTS), `minorversion=75`, scope `com.intuit.quickbooks.accounting`, GET only.
+- The realm ID from the callback must be digits. Hosts are fixed. `SAWWI_QUICKBOOKS_ENVIRONMENT=sandbox` makes new connections use Intuit's sandbox API host, and the environment is stored per connection.
+- Home currency comes from Preferences. Invoice status is worked out from Balance vs TotalAmt (Paid / Partially paid / Open).
+- A bill's PO number is looked up from its `LinkedTxn` PurchaseOrder IDs, 100 at a time.
+- Subtotal and discount lines are left out of line reports. Purchase order lines have no received or billed quantity in the API, so QuickBooks fills the three-way match's PO and invoice files, not the GRN.
+
+### D-83: Xero details
+- Accounting API 2.0. Invoices and credit notes are filtered by `where` on Type and Date, with `Statuses=AUTHORISED,PAID`, so drafts, submitted, voided and deleted documents are left out. Purchase orders use DateFrom/DateTo, without drafts or deleted ones. Paging uses `page` and `pageSize=1000` until Xero's `pagination.pageCount`. 429s wait as `Retry-After` says.
+- Scopes are read-only and granular (`accounting.invoices.read accounting.settings.read accounting.contacts.read` plus `offline_access`), since Xero requires granular scopes of apps created from 2026. `SAWWI_XERO_SCOPES` overrides them if the app was registered with the older broad scopes. Which granular scope covers purchase orders is to be confirmed on the registered app.
+- **One connection is one organisation.** A sign-in's refresh token is shared by every organisation picked in it and rotates on use, so two connections can't share it. The callback takes the organisation from this sign-in's `authentication_event_id` and refuses a sign-in that picked several ("connect each organisation separately").
+- Line amounts excluding VAT respect `LineAmountTypes` (Inclusive lines subtract their tax). A bill's Reference is passed through as "Reference" (often the PO number, but not reliably), not as "PO number".
+
+### D-84: NetSuite details
+- Token-based authentication (OAuth 1.0a, HMAC-SHA256) with five values the admin pastes: account ID, consumer key and secret (integration record) and token ID and secret (access token for a role). This suits a company connecting its own account, with no Sawwi app at Oracle.
+- Every report is one SuiteQL query: POST `/services/rest/query/v1/suiteql`, 1,000 rows a page by offset (SuiteQL's limit is 100,000 rows).
+  - Dates come back as `TO_CHAR(…, 'YYYY-MM-DD')`, so the user's date format doesn't matter.
+  - Line reports read only item lines (not header, tax or COGS lines) and take absolute values, since NetSuite stores sales lines as negative.
+  - Header reports use `foreigntotal` and `foreignamountremaining` in the document's currency (`currency.symbol`).
+  - Totals excluding VAT aren't read, because SuiteTax and legacy tax accounts store tax differently. Invoices carry the total incl. VAT and the amount remaining.
+- The host is built from the validated account ID only (`1234567_SB1` → `1234567-sb1.suitetalk.api.netsuite.com`).
+- The role needs Log in using Access Tokens, REST Web Services, SuiteAnalytics Workbook and view access to transactions and items. To confirm on a live sandbox: the field names `foreignamountremaining`, `quantityshiprecv`, `quantitybilled` and `totalquantityonhand` in the customer's account.
+
+### D-85: Demo books for the three accounting connectors
+- **Decision:** one invented distributor ("Sawwi Demo Distribution LLC", October 2026, AED, `mock/accounting-data.ts`), served by three in-process mocks in each provider's own JSON shape:
+  - QuickBooks: query language, refresh grant;
+  - Xero: `where`, paging, code and refresh grants, `/connections`;
+  - NetSuite: recognises each SuiteQL query, and checks the OAuth 1.0a signature with its own code.
+- The demo store lists them as three more built-in sources, after the existing ones, so "Fill with demo data" still picks Business Central, Magento and the demo files first. The B2B and purchasing demo results don't change.
+- **Planted:** a part-paid and an overdue invoice, a credit note against INV-2042, and PO-7702 billed 2.00 a unit above the order and received 2 short. NetSuite's three-way match finds `price_above_po` and `short_received` on PO-7702 and nothing on PO-7701.
