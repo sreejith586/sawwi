@@ -23,6 +23,8 @@ a person, never by an agent or committed to the repo.
 | `SAWWI_DATABASE_URL` | Neon integration | Neon integration | Postgres connection (D-38). `DATABASE_URL` also works. |
 | `BLOB_STORE_ID` | Blob integration | Blob integration | File store (D-39). |
 | `SAWWI_CONNECTOR_KEYS` | Sensitive, required for connections | Sensitive, a **different** key | Key ring for connection secrets: `k1:<openssl rand -base64 32>` (D-40). Never remove a key that still has secrets (Admin → Connection secrets). |
+| `SAWWI_QUICKBOOKS_CLIENT_ID`, `SAWWI_QUICKBOOKS_CLIENT_SECRET` | Production keys, Sensitive | Development keys + `SAWWI_QUICKBOOKS_ENVIRONMENT=sandbox` | "Connect with QuickBooks" (D-81, D-82). Redirect URI `https://sawwiapp.ai/api/connections/oauth/quickbooks/callback` registered at developer.intuit.com. Without them the button says it isn't set up. |
+| `SAWWI_XERO_CLIENT_ID`, `SAWWI_XERO_CLIENT_SECRET` | Sensitive | Optional | "Connect with Xero" (D-81, D-83). Redirect URI `https://sawwiapp.ai/api/connections/oauth/xero/callback`. `SAWWI_XERO_SCOPES` only if the app uses the older broad scopes. |
 | `ANTHROPIC_API_KEY` | Sensitive | Optional | AI mapping and writing. Without it, rule-based fallbacks. |
 | `SAWWI_AGENT_CALLS_PER_DAY` | Config | Optional | Chat agent model calls per workspace in any 24 hours (D-96). Default 400. |
 | `SAWWI_AI_INVOICES_PER_DAY` | Config | Optional | Paid AI invoice readings per workspace in any 24 hours (D-89). Default 200. |
