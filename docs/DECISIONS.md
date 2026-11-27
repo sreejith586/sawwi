@@ -1060,3 +1060,8 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - the push confirmation said "unposted draft" for invoices posted against a PO; it now says the order lines are set up to invoice, and names the PO;
   - the review page gives the form two thirds of the width on wide screens, so the GRN and PO table fits.
 - **Consequences:** the match can be shown and tested on a customer's real invoices before their sandbox exists. A real sandbox replaces it with no code change.
+
+### D-95: The app's work area uses the full screen width
+- **Context:** the user asked (27 Nov 2026) for the work area to be truly full screen: on a wide screen the main column stopped at 72rem (`max-w-6xl`), leaving the review page's PDF, form and GRN/PO table cramped beside empty margins.
+- **Decision:** the app shell's `<main>` has no maximum width; it fills the space beside the sidebar, with the same side padding. Pages that read better narrow keep their own width: Settings (forms, 56rem), a template's detail page (64rem), and paragraphs that already cap their line length. Public pages (landing, checkout, onboarding) are unchanged.
+- **Consequences:** queues, run reports and the invoice review use the whole screen. A page that needs a reading width sets it itself.
