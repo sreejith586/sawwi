@@ -408,6 +408,23 @@ CREATE TABLE IF NOT EXISTS ai_invoice_readings (
   PRIMARY KEY (org_key, file_hash, model)
 );`,
   },
+  {
+    id: 11,
+    name: "chat agent actions awaiting the user's confirmation (D-96)",
+    sql: `
+CREATE TABLE IF NOT EXISTS agent_actions (
+  id TEXT PRIMARY KEY,
+  org_key TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  result_json TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_actions_org ON agent_actions (org_key, created_at);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

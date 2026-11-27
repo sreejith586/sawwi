@@ -807,7 +807,7 @@ async function learn(orgKey: string, c: Capture) {
 /** Which invoices a bulk download covers: the queue's tabs (D-90). */
 export type ExportScope = "all" | "open" | "failed" | "approved" | "pushed";
 
-const inScope = (c: Capture, scope: ExportScope) =>
+export const inScope = (c: Capture, scope: ExportScope) =>
   scope === "all"
     ? true
     : scope === "open"

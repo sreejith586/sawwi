@@ -83,7 +83,9 @@ pnpm build
     re-read on request), and AI readings are capped per workspace per day (`SAWWI_AI_INVOICES_PER_DAY`, D-89). Vendors and items are matched to Business Central's, and choices are
     remembered per supplier. In the demo store, try the five sample invoices against the mock Business
     Central (GLS-2360 is invoiced against PO-7002). Locally, `SAWWI_MOCK_BC_SANDBOX` points any workspace at a mock
-    Business Central sandbox built from a JSON file of vendors, items, POs and GRNs (D-94; see `src/lib/connectors/mock/sandbox.ts`). To push to a real tenant, the connection's Entra app needs a permission set that can create
+    Business Central sandbox built from a JSON file of vendors, items, POs and GRNs (D-94; see `src/lib/connectors/mock/sandbox.ts`).
+    With AI on, **Ask Sawwi** (the chat panel) works on purchase invoices for you (D-96): ask what needs attention, have it fix
+    GRN/PO matches and line coding, and confirm the approvals, pushes and AI readings it lines up as cards. To push to a real tenant, the connection's Entra app needs a permission set that can create
     purchase documents (e.g. D365 PURCH DOC, EDIT). Re-make the sample PDFs with
     `pnpm dlx tsx scripts/make-purchase-invoice-samples.mts`.
 16. **Automation → Marketplace settlements** (D-70–D-73): upload settlement reports (Amazon flat files, Noon or any

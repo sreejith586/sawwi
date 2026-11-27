@@ -1065,3 +1065,25 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Context:** the user asked (27 Nov 2026) for the work area to be truly full screen: on a wide screen the main column stopped at 72rem (`max-w-6xl`), leaving the review page's PDF, form and GRN/PO table cramped beside empty margins.
 - **Decision:** the app shell's `<main>` has no maximum width; it fills the space beside the sidebar, with the same side padding. Pages that read better narrow keep their own width: Settings (forms, 56rem), a template's detail page (64rem), and paragraphs that already cap their line length. Public pages (landing, checkout, onboarding) are unchanged.
 - **Consequences:** queues, run reports and the invoice review use the whole screen. A page that needs a reading width sets it itself.
+
+### D-96: The chat panel becomes an agent that works on purchase invoices, with a person confirming every consequential action
+- **Context:** the user asked (27 Nov 2026) to "empower the chat agent to help automate whatever the user would want to do in it". Outside a reconciliation, the panel only answered four fixed questions (D-35), and its text box was a "coming soon" placeholder.
+- **Decision:**
+  - **Agent:** Claude Opus 5.5 with tools (`lib/agent/`), in the general panel wherever AI is on. It's off in the demo store and without a key, where the fixed questions stay. The loop runs on the server (`/api/agent`, NDJSON events: steps, text, action cards, the conversation). The browser keeps the conversation for the tab and sends it back whole each turn (append-only).
+  - **Scope v1: the workspace's purchase invoices.** Read tools: overview, list and search, one invoice in full, download links. Edit tools: link a GRN or PO, match again, code a line, post against the PO or standalone. Edits change only Sawwi's draft and withdraw an approval, as on the page (`purchase-invoices/assist.ts`).
+  - **Consequential actions need a person.** Approve, confirm a PO/GRN match, push, read with AI, retry failed reads and delete are never run by the agent: `propose_action` stores a proposal (`agent_actions`, migration 11) that the chat shows as a card listing every invoice, with Confirm and Cancel.
+    - Only the proposer can confirm it, once, within 30 minutes, under their own permissions (`runBlocker`).
+    - A push carries the content hash each invoice was shown with; anything changed since is refused.
+    - Invoices that can't take the action are left out up front, with the reason.
+    - An approve card also confirms a suggested PO/GRN match, and says so per invoice, so one click does both.
+    - The card's result is passed to the agent with the user's next message.
+    - So text inside a supplier's invoice can never approve, push, spend or delete anything.
+  - **Limits:** viewers get the read tools only; at most 10 model calls per message; `SAWWI_AGENT_CALLS_PER_DAY` (default 400) per workspace; conversations over 600,000 characters are closed. Usage is logged as `agent_chat`. Unexpected errors are logged and shown as a plain message, never raw.
+  - **Prompt and thinking:** byte-stable instructions cached for an hour; effort `medium`. With `thinking.block_binding.prefix_mismatch_behavior: "drop_block"` (beta `thinking-binding-controls-2026-08-01`), a deploy that changes the instructions or tools drops Claude's earlier thinking instead of failing an open chat (found in testing: a 400).
+  - **Chat UI** (`components/shell/agent-chat.tsx`): steps as they happen, answers with links inside Sawwi (download links as plain file links; links elsewhere shown as text), action cards, "New chat", suggestions in a fresh chat.
+- **Checked live** (27 Nov 2026, the client's 15 invoices and the mock sandbox, D-94):
+  - "What needs my attention?": a correct summary of the blocked, suggested and approved invoices, each blocker explained;
+  - "Switch 6664 to post against its purchase order, then get 002952 and 002956 ready": an edit, then a confirm-match card. Confirmed;
+  - "Approve 002952, 002956, 6641 and 6645, then give me an Excel": one approve card, which noted the two matches it would also confirm, plus an explanation of why 6664 still can't go. Confirmed: four approved, and the Excel link worked;
+  - 15 model calls in all, USD 0.52 (about 3.5¢ a call; 10–15¢ for a request of several steps).
+- **Consequences:** reconciliations keep their own chat (Phase 4). Settlements, COD and reconciliation runs can join this agent as more tools. Each new action kind gets a card, never a direct run.

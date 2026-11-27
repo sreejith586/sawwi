@@ -360,7 +360,7 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
-## 10. Automation (Phase 9, D-60–D-94)
+## 10. Automation (Phase 9, D-60–D-96)
 
 Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
 
@@ -433,3 +433,13 @@ Reconciliation checks work after it's done; Automation does the work: a document
    - Duplicates are checked in the payment batch, in the general batch's unposted lines and in posted G/L entries, by document number = batch ID.
 5. **Tables** (migration 8): `cod_remittances` (unique per workspace, courier and batch) and `cod_settings`. The ERP cache key is `<connection>#cod`.
 6. **Demo:** the store company's November COD invoices, customers, CODRCPT batch and bank, clearing and fee accounts. Samples are in `samples.ts`.
+
+## 11. Chat agent (D-96)
+
+"Ask Sawwi" outside a reconciliation is an agent over the workspace's purchase invoices, where AI is on (otherwise the fixed questions of D-35).
+
+- **Loop** (`lib/agent/agent.ts`, `/api/agent`): Claude Opus 5.5 at effort `medium`, with tools, cached instructions, server-side refusal fallback, and `drop_block` for thinking bound to older instructions. One user message is at most `MAX_STEPS` (10) model calls. Events stream as NDJSON: `step`, `text`, `proposal`, `changed` (the page refreshes), `done` (the conversation to keep), `error`. The browser keeps the conversation in sessionStorage and sends it back whole; tools always run on the server as the signed-in user.
+- **Tools** (`lib/agent/tools.ts`): read (`workspace_overview`, `list_invoices`, `get_invoice`, `download_link`); edit (`link_grn`, `link_po`, `match_again`, `code_line`, `set_post_to`, through `purchase-invoices/assist.ts` and `saveEdits`); and `propose_action`. Viewers get the read tools only.
+- **Actions** (`lib/agent/actions.ts`, `agent_actions`, migration 11): approve (also confirming a suggested match), confirm_match, push (with each invoice's hash), read_with_ai, retry_failed, delete. Proposed by the agent, decided by the user at `/api/agent/actions/[id]` (proposer only, once, 30 minutes, `runBlocker`). The table is the audit trail.
+- **Limits:** `SAWWI_AGENT_CALLS_PER_DAY` per workspace (default 400, counted from `llm_usage` purpose `agent_chat`); conversations over 600,000 characters end.
+
