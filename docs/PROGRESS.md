@@ -52,7 +52,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
     - item codes are kept clean (code only, alphanumeric allowed), with a barcode check-digit warning;
     - added bulk "Read with AI".
     - The client's 002946, 6641 and 4272 read by AI match the hand transcription line for line.
-  - **Bulk download (D-90):** each tab downloads as one Excel or CSV. A BC-importable Excel needs the client's configuration package template (tables 38/39) exported from their BC; not built yet.
+  - **Bulk download (D-90):** each tab downloads as one Excel or CSV. Business Central gets invoices through the API push only (user decision); no BC import from Excel.
   - **AI cost, measured:** about USD 0.05 for a one-page invoice with 5 lines and USD 0.17 for a three-page one with 52 lines (Opus 5.5). Mostly output tokens; a repeat read of the same PDF costs nothing (D-89).
   - **Not checked:** a live push against a Business Central sandbox.
   - 10 new tests (329 in all).
@@ -361,7 +361,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Open questions
 
-- **BC import from Excel (D-90):** ask the client's BC partner for a configuration package with Purchase Header (38) and Purchase Line (39), exported to Excel. Sawwi would fill it. Do they keep barcodes as Item References or in the item's GTIN?
+- **Barcodes in the client's BC:** are they in the item's GTIN field (Sawwi matches on it, D-62) or kept as Item References (Sawwi would need to read those too)?
 - **Purchase invoices against POs (D-88), for the client's BC partner:**
   - Is the client on Business Central or Dynamics 365 Finance & Operations? Sawwi's connector is Business Central only.
   - API v2.0 can't set the Vendor Invoice No. on an order or link an invoice to receipt lines. Should Sawwi ship a small AL extension (an API page) so the push leaves nothing to type in BC?
