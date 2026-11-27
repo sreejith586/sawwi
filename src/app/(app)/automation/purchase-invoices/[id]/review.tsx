@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
-import type { ErpOpenOrderLine } from "@/lib/connectors/types";
+import type { ErpOpenOrderLine, ErpReceipt } from "@/lib/connectors/types";
 import { PoMatch } from "./po-match";
 import { approveAction, discardAction, erpDuplicatesAction, pushAction, rereadWithAiAction, retryReadAction, saveDraftAction, unapproveAction } from "@/app/actions/automation";
 import { reviewDraft, type Draft, type DraftLine } from "@/lib/automation/purchase-invoices/draft";
@@ -77,6 +77,7 @@ export function Review({
   canEdit,
   aiAvailable,
   orderLines: props_orders,
+  receipts,
 }: {
   view: View;
   target: { connectionId: string; label: string } | null;
@@ -85,6 +86,8 @@ export function Review({
   aiAvailable: boolean;
   /** Open purchase order lines for the PO match (D-88); null when the target can't read orders. */
   orderLines: ErpOpenOrderLine[] | null;
+  /** The vendor's recent GRNs for the match (D-92). */
+  receipts: ErpReceipt[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(view.draft);
@@ -122,7 +125,10 @@ export function Review({
         if (j !== i) return l;
         const next = { ...l, ...patch };
         // Another item: the PO line no longer fits (D-88).
-        if ("erpNo" in patch && patch.erpNo !== l.erpNo) next.po = null;
+        if ("erpNo" in patch && patch.erpNo !== l.erpNo) {
+          next.po = null;
+          next.grn = null;
+        }
         // Quantity or price changed: the line amount and its VAT follow.
         if (("qty" in patch || "unitPrice" in patch) && next.qty !== null && next.unitPrice !== null) next.net = r2(next.qty * next.unitPrice);
         if (("qty" in patch || "unitPrice" in patch || "vatRate" in patch || "net" in patch) && next.net !== null && next.vatRate !== null) next.vat = r2((next.net * next.vatRate) / 100);
@@ -364,7 +370,7 @@ export function Review({
           </fieldset>
 
           {target && props_orders !== null && (
-            <PoMatch viewId={view.id} draft={draft} lines={props_orders} locked={locked} onChange={(next) => set(next)} onError={setError} />
+            <PoMatch viewId={view.id} draft={draft} lines={props_orders} receipts={receipts} locked={locked} onChange={(next) => set(next)} onError={setError} />
           )}
 
           <fieldset disabled={locked} className="min-w-0">
@@ -421,7 +427,7 @@ export function Review({
                           {l.po && (
                             <span className="block text-xs text-muted" title="The purchase order line and goods receipt (GRN) this line invoices">
                               {l.po.orderNumber}
-                              {l.po.receipts.length ? ` · GRN ${l.po.receipts.join(", ")}` : ""} · {l.po.open} open at {l.po.poPrice}
+                              {l.grn ? ` · GRN ${l.grn.number}` : l.po.receipts.length ? ` · GRN ${l.po.receipts.join(", ")}` : ""} · {l.po.open} open at {l.po.poPrice}
                             </span>
                           )}
                         </td>

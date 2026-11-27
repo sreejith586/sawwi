@@ -532,6 +532,26 @@ export const bcOpenOrderLines: NonNullable<PurchaseInvoiceWriter<BusinessCentral
   );
 };
 
+export const bcReceipts: NonNullable<PurchaseInvoiceWriter<BusinessCentralCredentials>["receipts"]> = async (creds, by, deps) => {
+  const s = await openSession(creds, deps);
+  const { root } = await companyContext(s);
+  const filter =
+    "receiptNumber" in by
+      ? `number eq ${odataString(by.receiptNumber.trim())}`
+      : `vendorNumber eq ${odataString(by.vendorNumber)} and postingDate ge ${/^\d{4}-\d{2}-\d{2}$/.test(by.since) ? by.since : "1900-01-01"}`;
+  const docs = await collect(s, `${root}/purchaseReceipts?$filter=${encodeURIComponent(filter)}&$expand=purchaseReceiptLines`);
+  return docs.map((r) => ({
+    id: str(r.id),
+    number: str(r.number),
+    orderNumber: str(r.orderNumber),
+    vendorNumber: str(r.vendorNumber),
+    postingDate: str(r.postingDate),
+    lines: lines(r, "purchaseReceiptLines")
+      .filter((l) => str(l.lineType) === "Item" && qty(l.quantity) > 0)
+      .map((l) => ({ itemNumber: str(l.lineObjectNumber), description: str(l.description), quantity: qty(l.quantity), unitCost: qty(l.unitCost) })),
+  }));
+};
+
 export const bcPrepareOrderInvoice: NonNullable<PurchaseInvoiceWriter<BusinessCentralCredentials>["prepareOrderInvoice"]> = async (creds, plan, deps) => {
   const s = await openSession(creds, deps);
   const { root, name } = await companyContext(s);
@@ -789,7 +809,7 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
     return { headers: [...spec.columns], rows };
   },
 
-  purchaseInvoices: { ...bcPurchaseInvoices, openOrderLines: bcOpenOrderLines, prepareOrderInvoice: bcPrepareOrderInvoice },
+  purchaseInvoices: { ...bcPurchaseInvoices, openOrderLines: bcOpenOrderLines, prepareOrderInvoice: bcPrepareOrderInvoice, receipts: bcReceipts },
   journals: bcJournals,
   customerPayments: bcCustomerPayments,
 };

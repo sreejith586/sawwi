@@ -81,6 +81,18 @@ function eqFilter(filter: string): [string, string][] | undefined {
   return parts.every(Boolean) ? parts.map((m) => [m![1], m![2].replace(/''/g, "'")]) : undefined;
 }
 
+/** `a eq 'x' and d ge 2026-01-01 …`: equality on text and ge/le on dates, joined with `and`. */
+function mixedFilter(filter: string): ((d: Doc) => boolean) | undefined {
+  const parts = filter.split(" and ").map((p) => p.match(/^(\w+) (?:eq '((?:[^']|'')*)'|(ge|le) (\d{4}-\d{2}-\d{2}))$/));
+  if (!parts.every(Boolean)) return undefined;
+  return (d) =>
+    parts.every((m) => {
+      const v = String(d[m![1]] ?? "");
+      if (m![2] !== undefined) return v === m![2].replace(/''/g, "'");
+      return m![3] === "ge" ? v >= m![4] : v <= m![4];
+    });
+}
+
 function totalsOf(lines: Doc[]) {
   const ex = r2(lines.reduce((a, l) => a + Number(l.netAmount ?? 0), 0));
   const tax = r2(lines.reduce((a, l) => a + Number(l.netTaxAmount ?? 0), 0));
@@ -266,8 +278,9 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     if (filter) {
       const f = filter.match(/^(\w+) ge (\d{4}-\d{2}-\d{2}) and (\w+) le (\d{4}-\d{2}-\d{2})$/);
       const eq = f ? undefined : eqFilter(filter);
-      if ((!f || f[1] !== f[3]) && !eq) return reply(odataError(400, "BadRequest", `Unsupported filter in the mock: ${filter}`));
-      rows = f ? rows.filter((d) => String(d[f[1]]) >= f[2] && String(d[f[1]]) <= f[4]) : rows.filter((d) => eq!.every(([k, v]) => String(d[k] ?? "") === v));
+      const mixed = f || eq ? undefined : mixedFilter(filter);
+      if ((!f || f[1] !== f[3]) && !eq && !mixed) return reply(odataError(400, "BadRequest", `Unsupported filter in the mock: ${filter}`));
+      rows = f ? rows.filter((d) => String(d[f[1]]) >= f[2] && String(d[f[1]]) <= f[4]) : eq ? rows.filter((d) => eq.every(([k, v]) => String(d[k] ?? "") === v)) : rows.filter(mixed!);
     }
     const expand = u.searchParams.get("$expand");
     if (expand && expand !== LINES[entity]) return reply(odataError(400, "BadRequest", `Could not find a property named '${expand}'.`));

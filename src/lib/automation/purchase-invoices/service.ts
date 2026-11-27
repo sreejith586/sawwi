@@ -5,7 +5,7 @@ import { demoConnectionId } from "@/lib/connectors/mock";
 import { connectorById } from "@/lib/connectors/registry";
 import { liveDeps, openConnection } from "@/lib/connectors/service";
 import { listConnections } from "@/lib/connectors/store";
-import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine } from "@/lib/connectors/types";
+import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine, type ErpReceipt } from "@/lib/connectors/types";
 import { extractPdf, PdfInputError } from "@/lib/pdf";
 import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
@@ -93,7 +93,8 @@ async function linkOrders(orgKey: string, d: Draft, target: PushTarget | undefin
   // A match the user confirmed stays as they confirmed it.
   if (!target || !d.vendorNo || d.poConfirmed) return d;
   try {
-    return matchOrders(d, await orderLinesFor(orgKey, d, deps));
+    const { lines, receipts } = await matchDataFor(orgKey, d, deps);
+    return matchOrders(d, lines, receipts);
   } catch (error) {
     if (!(error instanceof ConnectorError)) console.error("purchase order matching failed", error);
     return d;
@@ -116,6 +117,51 @@ export async function orderLinesFor(orgKey: string, d: Pick<Draft, "vendorNo" | 
   ]);
   const seen = new Set(byVendor.map((l) => l.lineId));
   return [...byVendor, ...byOrder.filter((l) => !seen.has(l.lineId))];
+}
+
+/** How far back the vendor's goods receipts (GRNs) are read for matching (D-92). */
+export const GRN_LOOKBACK_DAYS = 180;
+
+/**
+ * The vendor's posted receipts (GRNs) from the last 180 days, plus the one linked to (or printed
+ * on) the invoice, to suggest and show side by side (D-92). Empty without a target that reads them.
+ */
+export async function receiptsFor(orgKey: string, d: Pick<Draft, "vendorNo" | "grnNumber">, deps?: ConnectorDeps): Promise<ErpReceipt[]> {
+  const target = await currentTarget(orgKey);
+  if (!target || (!d.vendorNo && !d.grnNumber)) return [];
+  const { w, credentials, deps: use } = await writer(orgKey, target.connectionId, deps ?? liveDeps);
+  if (!w.receipts) return [];
+  const since = new Date(Date.now() - GRN_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const [byVendor, byNumber] = await Promise.all([
+    d.vendorNo ? w.receipts(credentials, { vendorNumber: d.vendorNo, since }, use) : [],
+    d.grnNumber?.trim() ? w.receipts(credentials, { receiptNumber: d.grnNumber }, use) : [],
+  ]);
+  const seen = new Set(byVendor.map((r) => r.id));
+  return [...byVendor, ...byNumber.filter((r) => !seen.has(r.id) && (!d.vendorNo || r.vendorNumber === d.vendorNo))];
+}
+
+/** Everything the three-way match reads: open PO lines and GRNs. */
+export async function matchDataFor(orgKey: string, d: Pick<Draft, "vendorNo" | "poNumber" | "grnNumber">, deps?: ConnectorDeps) {
+  const [lines, receipts] = await Promise.all([orderLinesFor(orgKey, d, deps), receiptsFor(orgKey, d, deps)]);
+  return { lines, receipts };
+}
+
+/** One GRN by number, for "Link GRN" on the review page (D-92), with its order's lines. Refuses another vendor's receipt. */
+export async function pullReceipt(orgKey: string, id: string, receiptNumber: string, deps?: ConnectorDeps): Promise<{ receipts: ErpReceipt[]; lines: ErpOpenOrderLine[] }> {
+  const c = await store.getCapture(orgKey, id);
+  if (!c) throw new CaptureError("That invoice no longer exists.");
+  const no = receiptNumber.trim().slice(0, 20);
+  if (!no) throw new CaptureError("Type the GRN (posted purchase receipt) number from Business Central.");
+  const target = await currentTarget(orgKey);
+  if (!target) throw new CaptureError("Choose the Business Central connection first.");
+  const { w, credentials, deps: use } = await writer(orgKey, target.connectionId, deps ?? liveDeps);
+  if (!w.receipts || !w.openOrderLines) throw new CaptureError("This connection can't read goods receipts.");
+  const receipts = await w.receipts(credentials, { receiptNumber: no }, use);
+  if (!receipts.length) throw new CaptureError(`No posted purchase receipt ${no} in Business Central.`);
+  const r = receipts[0];
+  if (c.draft.vendorNo && r.vendorNumber !== c.draft.vendorNo) throw new CaptureError(`GRN ${no} is from vendor ${r.vendorNumber}, not ${c.draft.vendorNo}.`);
+  const lines = r.orderNumber ? await w.openOrderLines(credentials, { orderNumber: r.orderNumber }, use) : [];
+  return { receipts, lines };
 }
 
 /** One PO by number, for "Link PO" on the review page (D-88). Refuses another vendor's order. */

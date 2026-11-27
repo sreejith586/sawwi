@@ -480,6 +480,7 @@ export function Queue(props: Props) {
                             <p className={`text-xs ${d.poConfirmed ? "text-success" : "text-warn"}`}>
                               {d.poConfirmed ? "✓ " : "PO suggested: "}
                               {[...new Set(d.lines.flatMap((l) => (l.po ? [l.po.orderNumber] : [])))].join(", ")}
+                              {d.lines.some((l) => l.grn) ? ` · GRN ${[...new Set(d.lines.flatMap((l) => (l.grn ? [l.grn.number] : [])))].join(", ")}` : ""}
                             </p>
                           )}
                         </td>

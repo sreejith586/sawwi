@@ -22,7 +22,12 @@ export type DraftLine = {
   matchedBy?: MatchedBy;
   /** The open purchase order line, with goods received and not yet invoiced, this line invoices (D-88). */
   po?: PoLink | null;
+  /** The goods receipt (GRN) line this invoice line is for (D-92): suggested from the vendor's receipts, or linked. */
+  grn?: GrnLink | null;
 };
+
+/** A posted purchase receipt (GRN) line in the ERP: which receipt, its order, and how much it received of the item. */
+export type GrnLink = { number: string; orderNumber: string; postingDate: string; quantity: number };
 
 /** A purchase order line in the ERP and the receipts (GRNs) that brought its goods in (D-88). */
 export type PoLink = {
@@ -63,6 +68,8 @@ export type Draft = {
    * the invoice prints the PO number and every line agrees with it; any change to a link clears it.
    */
   poConfirmed?: boolean;
+  /** A GRN number the user linked (or the invoice printed) to match against (D-92). */
+  grnNumber?: string;
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -263,11 +270,21 @@ function orderChecks(d: Draft, blockers: string[], warnings: string[]) {
     }
     d.lines.forEach((l, i) => {
       if (!l.po) return blockers.push(`${name(i)} isn't on an open purchase order of this vendor with goods received and not invoiced. Post it as a standalone invoice, or receive it in Business Central first.`);
-      const grn = l.po.receipts.length ? ` (GRN ${l.po.receipts.join(", ")})` : "";
+      const grns = l.grn ? [l.grn.number] : l.po.receipts;
+      const grn = grns.length ? ` (GRN ${grns.join(", ")})` : "";
       if (l.qty !== null && l.qty > l.po.open + 1e-9) blockers.push(`${name(i)}: ${l.qty} invoiced, but only ${l.po.open} received and not yet invoiced on ${l.po.orderNumber}${grn}.`);
       if (l.unitPrice !== null && l.po.poPrice > 0 && Math.abs(l.unitPrice - l.po.poPrice) > l.po.poPrice * PRICE_TOLERANCE) {
         const pct = ((l.unitPrice - l.po.poPrice) / l.po.poPrice) * 100;
         warnings.push(`${name(i)}: price ${l.unitPrice} against ${l.po.poPrice} on ${l.po.orderNumber} (${pct > 0 ? "+" : ""}${pct.toFixed(1)}%). The invoice price goes on the order line.`);
+      }
+    });
+    // GRN against invoice and PO (D-92): the receipt must be for the line's order; a different quantity is worth a look.
+    d.lines.forEach((l, i) => {
+      if (!l.grn) return;
+      if (l.po && l.grn.orderNumber && l.grn.orderNumber !== l.po.orderNumber) {
+        blockers.push(`${name(i)}: GRN ${l.grn.number} is for ${l.grn.orderNumber}, but the line is matched to ${l.po.orderNumber}. Pick the order line or GRN that belong together.`);
+      } else if (l.qty !== null && Math.abs(l.qty - l.grn.quantity) > 1e-9) {
+        warnings.push(`${name(i)}: ${l.qty} on the invoice, ${l.grn.quantity} received on GRN ${l.grn.number}.`);
       }
     });
     const seen = new Map<string, number>();
@@ -314,6 +331,7 @@ export function sanitizeDraft(input: unknown): Draft | undefined {
     vendorMatchedBy: by(o.vendorMatchedBy),
     postTo: o.postTo === "order" ? "order" : o.postTo === "invoice" ? "invoice" : undefined,
     poConfirmed: o.poConfirmed === true ? true : undefined,
+    grnNumber: str(o.grnNumber, 20) || undefined,
     lines: o.lines.map((raw) => {
       const l = (raw ?? {}) as Record<string, unknown>;
       const erpType = l.erpType === "item" || l.erpType === "account" ? l.erpType : null;
@@ -329,6 +347,7 @@ export function sanitizeDraft(input: unknown): Draft | undefined {
         erpNo: erpType ? str(l.erpNo, 20) : "",
         matchedBy: by(l.matchedBy),
         po: sanitizePo(l.po),
+        grn: sanitizeGrn(l.grn),
       };
     }),
   };
@@ -343,6 +362,14 @@ function sanitizePo(v: unknown): PoLink | null {
   if (typeof p.orderNumber !== "string" || !GUID.test(String(p.orderId)) || !GUID.test(String(p.lineId)) || Number.isNaN(n(p.open)) || Number.isNaN(n(p.poPrice))) return null;
   const receipts = Array.isArray(p.receipts) ? p.receipts.filter((r): r is string => typeof r === "string").map((r) => r.slice(0, 20)).slice(0, 20) : [];
   return { orderNumber: p.orderNumber.slice(0, 20), orderId: String(p.orderId), lineId: String(p.lineId), receipts, open: n(p.open), poPrice: n(p.poPrice) };
+}
+
+function sanitizeGrn(v: unknown): GrnLink | null {
+  if (!v || typeof v !== "object") return null;
+  const g = v as Record<string, unknown>;
+  if (typeof g.number !== "string" || !g.number.trim() || typeof g.quantity !== "number" || !Number.isFinite(g.quantity)) return null;
+  const s = (x: unknown) => (typeof x === "string" ? x.slice(0, 20) : "");
+  return { number: g.number.trim().slice(0, 20), orderNumber: s(g.orderNumber), postingDate: /^\d{4}-\d{2}-\d{2}$/.test(String(g.postingDate)) ? String(g.postingDate) : "", quantity: g.quantity };
 }
 
 // ─── CSV (D-65) ────────────────────────────────────────────────────────────
@@ -403,7 +430,7 @@ export function csvRows(d: Draft): string[][] {
     plain(d.total),
     d.postTo === "order" ? "Purchase order" : "Purchase invoice",
     l.po?.orderNumber ?? "",
-    l.po?.receipts.join(" ") ?? "",
+    l.grn?.number ?? l.po?.receipts.join(" ") ?? "",
     plain(l.po?.poPrice ?? null),
     plain(l.po?.open ?? null),
   ]);

@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import Papa from "papaparse";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bcOpenOrderLines, bcPrepareOrderInvoice, bcPurchaseInvoices } from "@/lib/connectors/business-central";
+import { bcOpenOrderLines, bcPrepareOrderInvoice, bcPurchaseInvoices, bcReceipts } from "@/lib/connectors/business-central";
 import { DEMO_BC_CREDENTIALS, mockBusinessCentral } from "@/lib/connectors/mock/business-central";
 import { demoDeps, resetDemoErpWrites } from "@/lib/connectors/mock";
-import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine } from "@/lib/connectors/types";
+import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine, type ErpReceipt } from "@/lib/connectors/types";
 import { capturesWorkbook } from "./excel";
-import { candidatesFor, matchOrders, orderPlan, pickOrderLine } from "./orders";
+import { candidatesFor, grnOptionsFor, matchOrders, orderPlan, pickGrn, pickOrderLine } from "./orders";
 import ExcelJS from "exceljs";
 import { DEMO_ORG_KEY } from "@/lib/demo/demo";
 import { readStoredFile } from "@/lib/files/storage";
@@ -284,7 +284,9 @@ describe("capture → review → approve → push, in the demo store", () => {
     const { capture: c } = await sample("gulf-lighting-gls-2360");
     // The PO number is printed and the order agrees, so the match needs no confirmation.
     expect(c.draft).toMatchObject({ vendorNo: "V0002", poNumber: "PO-7002", postTo: "order", poConfirmed: true });
-    expect(c.draft.lines[0]).toMatchObject({ erpNo: "LED-40", qty: 300, po: { orderNumber: "PO-7002", receipts: ["PRC-8002"], open: 500, poPrice: 22 } });
+    expect(c.draft.lines[0]).toMatchObject({ erpNo: "LED-40", qty: 300, po: { orderNumber: "PO-7002", receipts: ["PRC-8002"], open: 500, poPrice: 22 }, grn: { number: "PRC-8002", orderNumber: "PO-7002", quantity: 500 } });
+    // The GRN received 500, the invoice bills 300: a partial invoice, worth a look but not a blocker (D-92).
+    expect((await service.getView(ORG, c.id))!.review.warnings).toContainEqual(expect.stringContaining("300 on the invoice, 500 received on GRN PRC-8002"));
     expect(c.status).toBe("ready");
     await service.approveMany(ORG, [c.id], USER);
     const v = (await service.getView(ORG, c.id))!;
@@ -402,6 +404,29 @@ describe("three-way match: invoice lines against PO lines and GRNs (D-88)", () =
     expect(candidatesFor("A", [...pool, open({ lineId: G(98), invoiced: 10 })]).map((o) => o.lineId)).toEqual([G(10)]);
   });
 
+  it("finds the GRN that matches the invoice, and takes the PO line from that GRN's order (D-92)", () => {
+    const pool = [
+      open({ lineId: G(10), orderNumber: "PO-1", orderDate: "2026-10-01", received: 20 }),
+      open({ lineId: G(11), orderId: G(2), orderNumber: "PO-2", orderDate: "2026-10-05", received: 6 }),
+    ];
+    const receipt = (number: string, orderNumber: string, postingDate: string, qty: number): ErpReceipt => ({ id: number, number, orderNumber, vendorNumber: "V1", postingDate, lines: [{ itemNumber: "A", description: "", quantity: qty, unitCost: 5 }] });
+    const receipts = [receipt("GRN-1", "PO-1", "2026-10-03", 20), receipt("GRN-2", "PO-2", "2026-10-07", 6)];
+    // 6 on the invoice: GRN-2 received exactly 6, so its order PO-2 is used, though PO-1 is older and covers it.
+    const d = matchOrders(draft([{ no: "A", qty: 6, price: 5 }]), pool, receipts);
+    expect(d.lines[0]).toMatchObject({ grn: { number: "GRN-2", orderNumber: "PO-2", quantity: 6 }, po: { orderNumber: "PO-2" } });
+    expect(d.poConfirmed).toBeUndefined();
+    expect(reviewDraft({ ...d, poConfirmed: true }, { erp: true }).blockers).toEqual([]);
+    // A GRN linked by the user narrows it; when the lines agree with it exactly, the match is confirmed.
+    const linked = matchOrders(draft([{ no: "A", qty: 20, price: 5 }], { grnNumber: "grn-1" }), pool, receipts);
+    expect(linked).toMatchObject({ poConfirmed: true, lines: [{ grn: { number: "GRN-1" }, po: { orderNumber: "PO-1" } }] });
+    // Picking another GRN moves the order line to that GRN's order and withdraws a confirmation.
+    const moved = pickGrn(linked, 0, grnOptionsFor("A", receipts).find((g) => g.number === "GRN-2")!, pool);
+    expect(moved).toMatchObject({ poConfirmed: undefined, lines: [{ grn: { number: "GRN-2" }, po: { orderNumber: "PO-2" } }] });
+    // A GRN on one PO while the line is matched to another blocks.
+    const mixed = { ...d, poConfirmed: true, lines: [{ ...d.lines[0], grn: { ...d.lines[0].grn!, orderNumber: "PO-1" } }] };
+    expect(reviewDraft(mixed, { erp: true }).blockers).toContainEqual(expect.stringContaining("GRN GRN-2 is for PO-1, but the line is matched to PO-2"));
+  });
+
   it("keeps PO links through sanitizing only when they look like Business Central's", () => {
     const d = matchOrders(draft([{ no: "A", qty: 1, price: 5 }]), [open({})]);
     expect(sanitizeDraft(JSON.parse(JSON.stringify(d)))!.lines[0].po).toEqual(d.lines[0].po);
@@ -426,6 +451,17 @@ describe("three-way match: invoice lines against PO lines and GRNs (D-88)", () =
     // Another vendor's order, or another item on the line, is refused before anything changes.
     await expect(bcPrepareOrderInvoice(DEMO_BC_CREDENTIALS, [{ orderId: led.orderId, orderNumber: "PO-7002", vendorNumber: "V0001", lines: [{ lineId: led.lineId, itemNumber: "LED-40", invoiceQuantity: 1, directUnitCost: 22 }] }], deps)).rejects.toThrow(/belongs to vendor V0002/);
     await expect(bcPrepareOrderInvoice(DEMO_BC_CREDENTIALS, [{ orderId: led.orderId, orderNumber: "PO-7002", vendorNumber: "V0002", lines: [{ lineId: led.lineId, itemNumber: "AC-18K", invoiceQuantity: 1, directUnitCost: 22 }] }], deps)).rejects.toThrow(/not AC-18K/);
+  });
+
+  it("reads a vendor's recent GRNs, or one by number (mock BC, D-92)", async () => {
+    const deps: ConnectorDeps = { fetch: mockBusinessCentral(), sleep: async () => {} };
+    const recent = await bcReceipts(DEMO_BC_CREDENTIALS, { vendorNumber: "V0002", since: "2026-06-01" }, deps);
+    expect(recent.map((r) => [r.number, r.orderNumber, r.lines.map((l) => [l.itemNumber, l.quantity])])).toEqual([
+      ["PRC-8002", "PO-7002", [["LED-40", 500]]],
+      ["PRC-8003", "PO-7003", [["FAN-1200", 100]]],
+    ]);
+    expect(await bcReceipts(DEMO_BC_CREDENTIALS, { vendorNumber: "V0002", since: "2026-12-01" }, deps)).toEqual([]);
+    expect((await bcReceipts(DEMO_BC_CREDENTIALS, { receiptNumber: "PRC-8001" }, deps)).map((r) => [r.vendorNumber, r.orderNumber])).toEqual([["V0001", "PO-7001"]]);
   });
 
   it("is refused cleanly by an app that can't edit purchase documents", async () => {

@@ -7,14 +7,16 @@ import ExcelJS from "exceljs";
 export type SheetColumn = {
   header: string;
   key: string;
-  type?: "text" | "number" | "money" | "date";
+  type?: "text" | "number" | "integer" | "money" | "date";
   width?: number;
   /** Overrides the type's number format, e.g. "0.0%" or "$#,##0.0000". */
   numFmt?: string;
 };
 
 const MONEY = "#,##0.00;[Red]-#,##0.00";
-const NUMBER = "#,##0.##;[Red]-#,##0.##";
+// General, not "#,##0.##": that pattern shows a stray dot after whole numbers ("37.").
+const NUMBER = "General";
+const INTEGER = "#,##0;[Red]-#,##0";
 
 export type SheetSpec = { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] };
 
@@ -39,7 +41,7 @@ function addSheet(wb: ExcelJS.Workbook, opts: SheetSpec) {
       header: c.header,
       key: c.key,
       width: c.width ?? Math.min(60, Math.max(10, longest + 2)),
-      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : c.type === "text" ? { numFmt: "@" } : {},
+      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "integer" ? { numFmt: INTEGER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : c.type === "text" ? { numFmt: "@" } : {},
     };
   });
 

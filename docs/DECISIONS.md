@@ -1016,3 +1016,21 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **VAT per line:** where an invoice prints VAT only in its totals, the line's VAT is worked out from the invoice's own rate (VAT ÷ net, when it's a standard rate) and labelled "Worked out from invoice rate"; printed figures are labelled "Printed". The draft itself is unchanged.
   - **Formats:** item codes and invoice numbers are text cells (leading zeros kept); amounts are numbers; dates are dates.
 - **Consequences:** the CSV (D-65) keeps its column order for anyone already importing it.
+
+### D-92: GRNs matched like POs: suggested from the vendor's receipts, or linked by number
+- **Context:** the user asked (27 Nov 2026) to bring the GRN in the way the PO is: Sawwi finds the matching GRN, or the user types a GRN number and Sawwi pulls it. Until now a GRN showed only as every receipt on the matched PO line's order.
+- **Decision:**
+  - **Reading:** `Connector.purchaseInvoices.receipts` reads posted purchase receipts with their item lines (`purchaseReceipts` with `purchaseReceiptLines`, API v2.0): a vendor's from the last 180 days, or one by number. The mock filters on vendor and date together.
+  - **Matching** (`orders.ts`, before the PO lines):
+    - each invoice item line gets a GRN line for the same item;
+    - the receipt whose lines best agree with the invoice (same item, then same quantity) is taken first, so a delivery's invoice stays on one GRN; other lines look at the vendor's other receipts, newest first;
+    - the PO line then comes from that GRN's order, or any open order for the item if that one has nothing left to invoice;
+    - a GRN number on the draft (`grnNumber`, linked by the user) narrows the search to that receipt.
+  - **Confirmation:** as for POs (D-88), a suggested match must be confirmed. A linked GRN, or a printed PO, needs none when every line agrees: GRN quantity, open PO quantity, price, and the GRN on the line's order.
+  - **Checks:**
+    - blocked: a line whose GRN is for another order than its PO line;
+    - warning: invoice quantity different from the GRN's (a partial invoice of a delivery).
+  - **Review page:** the panel is "GRN and purchase order". Each invoice line sits beside its GRN (number, date, order, quantity received) and its PO line, each with a picker. Picking another GRN moves the line to that GRN's order. **Link GRN** pulls a receipt by number with its order's lines; another vendor's GRN is refused. **Link PO** and "Search all again" stay.
+  - **Exports:** the queue, the Excel (D-91) and the CSV show the line's own GRN.
+- **What it doesn't do:** Business Central's API can't tie an invoice to a particular receipt when posting. Posting from the order invoices the received, not-yet-invoiced quantity. The GRN link is the three-way check and the audit trail; the page says so.
+- **Consequences:** one more read per match (receipts with lines, 180 days). A supplier's delivery note number usually isn't Business Central's receipt number, so printed GRN numbers aren't read from invoices; the user links one when Sawwi's suggestion isn't right.

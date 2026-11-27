@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { ConnectorError, type ErpOpenOrderLine } from "@/lib/connectors/types";
+import { ConnectorError, type ErpOpenOrderLine, type ErpReceipt } from "@/lib/connectors/types";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { getProfile } from "@/lib/profile/session";
 import { canRun, getCurrentSession, runBlocker } from "@/lib/saas/session";
@@ -131,15 +131,22 @@ export async function rereadWithAiAction(id: string): Promise<Partial<Fail>> {
   }
 }
 
-/** Purchase order lines for the review page's side-by-side match (D-88): the vendor's open ones, or one PO by number. */
-export async function orderLinesAction(id: string, orderNumber?: string): Promise<{ lines?: ErpOpenOrderLine[] } & Partial<Fail>> {
+/**
+ * What the review page's side-by-side match shows (D-88, D-92): the vendor's open PO lines and
+ * recent GRNs, or one PO or one GRN pulled by number.
+ */
+export async function orderLinesAction(
+  id: string,
+  pull?: { orderNumber?: string; receiptNumber?: string },
+): Promise<{ lines?: ErpOpenOrderLine[]; receipts?: ErpReceipt[] } & Partial<Fail>> {
   const session = await getCurrentSession();
   if (!session) return { error: "Log in again." };
   try {
-    if (orderNumber !== undefined) return { lines: await service.pullOrder(session.org.key, id, String(orderNumber)) };
+    if (pull?.receiptNumber !== undefined) return await service.pullReceipt(session.org.key, id, String(pull.receiptNumber));
+    if (pull?.orderNumber !== undefined) return { lines: await service.pullOrder(session.org.key, id, String(pull.orderNumber)), receipts: [] };
     const view = await service.getView(session.org.key, id);
     if (!view) return { error: "That invoice no longer exists." };
-    return { lines: await service.orderLinesFor(session.org.key, view.draft) };
+    return await service.matchDataFor(session.org.key, view.draft);
   } catch (error) {
     return { error: message(error) };
   }

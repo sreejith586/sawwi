@@ -100,6 +100,18 @@ export type PurchaseInvoiceWriter<C> = {
    * puts back what it changed (D-88).
    */
   prepareOrderInvoice?(credentials: C, plan: ErpOrderInvoicePlan, deps: ConnectorDeps): Promise<{ company: string; orders: string[] }>;
+  /** Posted purchase receipts (GRNs) with their item lines: a vendor's since a date, or one by number (D-92). */
+  receipts?(credentials: C, by: { vendorNumber: string; since: string } | { receiptNumber: string }, deps: ConnectorDeps): Promise<ErpReceipt[]>;
+};
+
+/** A posted purchase receipt (GRN) and its item lines (D-92). */
+export type ErpReceipt = {
+  id: string;
+  number: string;
+  orderNumber: string;
+  vendorNumber: string;
+  postingDate: string;
+  lines: { itemNumber: string; description: string; quantity: number; unitCost: number }[];
 };
 
 export type ErpOpenOrderLine = {
