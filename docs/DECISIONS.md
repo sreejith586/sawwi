@@ -1007,3 +1007,12 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **For an import with no fixes,** every invoice needs Business Central's numbers, not the supplier's: the vendor no., and per line the item no. (from the barcode via the item's GTIN, D-62) or an Item Reference No. if the client keeps barcodes as item references. Only invoices with nothing blocking can be in it.
 - **User decision (27 Nov 2026):** Business Central gets invoices through the API push only. No BC import from Excel will be built; the template route above is dropped.
 - **Consequences:** the bulk Excel is for review, archive or another system, not for importing into BC.
+
+### D-91: A standard Excel export for selected invoices
+- **Context:** the user asked (27 Nov 2026) for a standard bulk Excel export, with every selected invoice in one file.
+- **Decision:**
+  - **Button:** selecting invoices in the queue shows "Export N to Excel" (and CSV): one workbook for all of them. A whole tab still downloads with "Download all" (D-90).
+  - **Lines sheet:** standard invoice columns first, so it reads and imports anywhere: supplier, supplier VAT no., invoice no., dates, currency, printed PO no., line, item code / barcode, description, quantity, unit price, amount excl. VAT, VAT %, VAT amount, amount incl. VAT, invoice totals and status. The ERP coding, PO and GRN columns come after, then the file name.
+  - **VAT per line:** where an invoice prints VAT only in its totals, the line's VAT is worked out from the invoice's own rate (VAT ÷ net, when it's a standard rate) and labelled "Worked out from invoice rate"; printed figures are labelled "Printed". The draft itself is unchanged.
+  - **Formats:** item codes and invoice numbers are text cells (leading zeros kept); amounts are numbers; dates are dates.
+- **Consequences:** the CSV (D-65) keeps its column order for anyone already importing it.

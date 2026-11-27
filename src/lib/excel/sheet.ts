@@ -39,7 +39,7 @@ function addSheet(wb: ExcelJS.Workbook, opts: SheetSpec) {
       header: c.header,
       key: c.key,
       width: c.width ?? Math.min(60, Math.max(10, longest + 2)),
-      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : {},
+      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : c.type === "text" ? { numFmt: "@" } : {},
     };
   });
 

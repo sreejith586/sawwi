@@ -386,7 +386,7 @@ export function Queue(props: Props) {
               </button>
             )}
             <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}&format=xlsx`} className={buttonClass("secondary")}>
-              Download Excel
+              Export {picked.length} to Excel
             </a>
             <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}`} className={buttonClass("secondary")}>
               CSV

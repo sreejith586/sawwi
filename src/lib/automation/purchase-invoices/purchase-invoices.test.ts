@@ -453,6 +453,27 @@ describe("Excel download (D-87)", () => {
     expect(gls.getCell(header.indexOf("Amount incl. VAT") + 1).value).toBe(6930);
     const lines = wb.getWorksheet("Lines")!;
     expect(lines.rowCount).toBe(views.reduce((n, v) => n + v.draft.lines.length, 0) + 1);
+    // Standard columns first; line VAT worked out from the invoice's rate where the line prints none (D-91).
+    const lh = (lines.getRow(1).values as unknown[]).slice(1);
+    expect(lh.slice(0, 16)).toEqual([
+      "Supplier", "Supplier VAT no.", "Invoice no.", "Invoice date", "Due date", "Currency", "PO no. (printed)", "Line",
+      "Item code / barcode", "Description", "Quantity", "Unit price", "Amount excl. VAT", "VAT %", "VAT amount", "Amount incl. VAT",
+    ]);
+    const row = lines.getRows(2, lines.rowCount - 1)!.find((r) => r.getCell(lh.indexOf("Invoice no.") + 1).value === "GLS-2360")!;
+    expect([row.getCell(lh.indexOf("Amount excl. VAT") + 1).value, row.getCell(lh.indexOf("VAT amount") + 1).value, row.getCell(lh.indexOf("Amount incl. VAT") + 1).value]).toEqual([6600, 330, 6930]);
+  });
+
+  it("works out line VAT from the invoice's rate only when the line prints none, and says so", async () => {
+    const base = (await service.listViews(ORG))[0];
+    const line = (vat: number | null) => ({ description: "x", sku: "A1", qty: 2, unitPrice: 50, net: 100, vatRate: null, vat, erpType: null, erpNo: "" });
+    const c = { ...base, draft: { ...base.draft, subtotal: 200, vat: 30, total: 230, lines: [line(null), line(15)] } };
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await capturesWorkbook([c], { erp: false }));
+    const ws = wb.getWorksheet("Lines")!;
+    const h = (ws.getRow(1).values as unknown[]).slice(1);
+    const at = (r: number, name: string) => ws.getRow(r).getCell(h.indexOf(name) + 1).value;
+    expect([at(2, "VAT %"), at(2, "VAT amount"), at(2, "Line VAT")]).toEqual([15, 15, "Worked out from invoice rate"]);
+    expect([at(3, "VAT amount"), at(3, "Line VAT")]).toEqual([15, "Printed"]);
   });
 
   it("downloads a whole tab at once (D-90)", async () => {
