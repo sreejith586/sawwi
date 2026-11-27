@@ -360,7 +360,7 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
-## 10. Automation (Phase 9, D-60–D-93)
+## 10. Automation (Phase 9, D-60–D-94)
 
 Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
 
@@ -382,6 +382,7 @@ Reconciliation checks work after it's done; Automation does the work: a document
      - `pushMany` calls `prepareOrderInvoice`. It checks vendor, item and open quantity, PATCHes `invoiceQuantity`, `receiveQuantity` (0) and `directUnitCost` on the order lines, and restores them if a write fails. It never posts. The ERP record is `{ mode: "order", number: <orders> }`.
      - A second invoice on an order line still set up for an unposted one is refused (`pendingOnSameLines`).
    - **GRNs** (D-92): `receiptsFor` reads the vendor's posted receipts of the last 180 days (and one linked by `grnNumber`) through `Connector.purchaseInvoices.receipts`. `matchOrders(draft, openLines, receipts)` gives each item line a `grn` first (the receipt that agrees best on items and quantities), then the PO line from that GRN's order. `pickGrn` and `grnOptionsFor` back the review page's GRN picker. `pullReceipt` is "Link GRN" (refuses another vendor's receipt). `matchDataFor` returns both PO lines and receipts for the page.
+   - **Mock sandbox** (D-94, development only): with `SAWWI_MOCK_BC_SANDBOX` set to a JSON file (`connectors/mock/sandbox.ts`), `pushTargets` adds `sandbox:business-central` and `openConnection` answers it with the mock tenant serving that file's company (`sandboxBooks`). Off in production and in the demo.
    - **Failed** (D-86): `capturePdf` keeps a PDF it can't read as status `failed` with `failure` (stage, message, attempts; migration 9 adds `failure_json`). `retryRead` / `retryMany` read the kept PDF again; saving a typed-in draft or a successful read clears it. Push failures are recorded with stage `push` on the still-approved invoice. The queue's Failed tab lists both.
    - **AI spend** (D-89): `readInvoice` reuses a PDF's earlier AI reading from `ai_invoice_readings` (per workspace, file hash and model; migration 10) unless forced. `aiGuard` refuses a paid call past `AI_CALLS_PER_FILE` (2), past `AI_MAX_PAGES` (15), or past `SAWWI_AI_INVOICES_PER_DAY` (default 200, counted from `llm_usage`). `rereadMany` is the queue's bulk "Read with AI".
    - **Item codes** (D-89): `cleanSku` keeps one whole code token (alphanumeric allowed; a grouped numeric barcode is joined) and moves other text to the description. It runs on the rules' reading, the AI's and typed edits. `isGtin` backs a warning on codes that aren't valid barcodes when the supplier uses them.

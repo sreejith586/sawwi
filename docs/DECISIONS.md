@@ -1043,3 +1043,20 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Time left** (`estimateRemaining`): the average time of the invoices already read (45 s assumed until the first one finishes), times those waiting, plus what's left of those being read, shared across the three readers. It improves as files finish.
   - **Leaving the page** mid-upload asks first, since files not sent yet would be dropped.
 - **Consequences:** a batch of 12 scans that took about 15 minutes one at a time takes about 5. Three requests at once stays within the AI daily cap (D-89) and the function time limit, since each is still its own request.
+
+### D-94: A local mock Business Central sandbox for the three-way match
+- **Context:** the user asked (27 Nov 2026) to build the three-way match with mocked PO and GRN data, as if from a Business Central sandbox, for the client's real invoices. The demo store's mock company (D-32) is shared and takes no uploads, and the old developer switch that pointed real workspaces at the mock (`SAWWI_CONNECTOR_MOCK`) was removed in D-32.
+- **Decision:**
+  - **`SAWWI_MOCK_BC_SANDBOX`** names a JSON file (`connectors/mock/sandbox.ts`, `SandboxFile`): company, currency, VAT rate, vendors (with VAT numbers), items (with GTINs), G/L accounts, purchase orders with received and invoiced quantities, and posted receipts (GRNs). `sandboxBooks` turns it into API v2.0 documents. The mock tenant (D-29) serves it as one more company, in-process: the real connector code reads master data, open PO lines and GRNs, creates drafts and sets order lines to invoice against it.
+  - **Every local workspace** gets the push target "Business Central: <company> (mock sandbox, local)" (`SANDBOX_CONNECTION_ID`). There are no credentials to enter. Writes stay in memory until the server restarts.
+  - **Development only:** off whenever `NODE_ENV=production`, and off in the demo store. It never reaches the network.
+  - **A customer's data stays out of git:** a sandbox built from a customer's invoices holds their suppliers and barcodes, so the file lives in the ignored `.data` folder. Only the loader is committed; its tests use an invented file.
+  - The mock charges the sandbox's VAT rate on draft invoice lines (15% for a Saudi sandbox); the invented UAE companies keep 5%.
+- **Checked on the client's 15 invoices** (27 Nov 2026), against a sandbox with their 5 suppliers, 284 items by barcode, 13 POs and 15 GRNs, with exceptions planted:
+  - all 15 matched vendor by VAT number, items by GTIN, then GRN and PO;
+  - each planted exception was caught: a line received 1 short (blocked), a 5% price difference (warning), a delivery split over two GRNs (warnings), an item not on its PO, and a PO with no GRN. In the last two, Sawwi found the same item received on another of the supplier's POs and blocked a standalone invoice;
+  - 002946 was confirmed, approved and pushed, setting PO-260101 up to invoice.
+- **Also fixed:**
+  - the push confirmation said "unposted draft" for invoices posted against a PO; it now says the order lines are set up to invoice, and names the PO;
+  - the review page gives the form two thirds of the width on wide screens, so the GRN and PO table fits.
+- **Consequences:** the match can be shown and tested on a customer's real invoices before their sandbox exists. A real sandbox replaces it with no code change.

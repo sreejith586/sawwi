@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { deleteFiles, putFile, readStoredFile } from "@/lib/files/storage";
 import { demoConnectionId } from "@/lib/connectors/mock";
+import { loadSandbox, sandboxPath, SANDBOX_CONNECTION_ID } from "@/lib/connectors/mock/sandbox";
 import { connectorById } from "@/lib/connectors/registry";
 import { liveDeps, openConnection } from "@/lib/connectors/service";
 import { listConnections } from "@/lib/connectors/store";
@@ -38,10 +39,13 @@ export type PushTarget = { connectionId: string; label: string };
 /** Connections whose connector can write purchase invoices. The demo store has its mock Business Central. */
 export async function pushTargets(orgKey: string): Promise<PushTarget[]> {
   if (isDemoOrg(orgKey)) return [{ connectionId: demoConnectionId("business-central"), label: "Business Central: Sawwi Demo Trading LLC (Sandbox, mock)" }];
-  return (await listConnections(orgKey)).flatMap((c) => {
+  const real = (await listConnections(orgKey)).flatMap((c) => {
     const connector = connectorById(c.provider);
     return connector?.purchaseInvoices ? [{ connectionId: c.id, label: `${connector.label}: ${c.accountLabel}` }] : [];
   });
+  // The local mock sandbox (D-94), when a developer has one configured; never in production.
+  const sandbox = sandboxPath() ? await loadSandbox() : undefined;
+  return sandbox ? [...real, { connectionId: SANDBOX_CONNECTION_ID, label: `Business Central: ${sandbox.file.company} (mock sandbox, local)` }] : real;
 }
 
 /** The chosen target if it still exists, else the only one, else none. */

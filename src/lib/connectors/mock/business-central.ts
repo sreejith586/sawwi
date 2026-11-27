@@ -68,7 +68,12 @@ export type MockBusinessCentralOptions = {
   writes?: Map<string, Record<string, unknown>[]>;
   /** Answer writes with 403, like an app with a read-only permission set. */
   readOnly?: boolean;
+  /** Further companies in the same tenant, e.g. a local mock sandbox loaded from a file (D-94). */
+  books?: MockBooks[];
 };
+
+/** One company's books for the mock: its record, companyInformation rows, and documents by API entity. */
+export type MockBooks = { company: { id: string; name: string; displayName: string }; info: unknown[]; data: Record<string, Record<string, unknown>[]> };
 
 type Doc = Record<string, unknown>;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -101,6 +106,8 @@ function totalsOf(lines: Doc[]) {
 
 export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): FetchLike {
   const pageSize = opts.pageSize ?? 3;
+  const companies = [...COMPANIES, ...(opts.books ?? []).map((b) => b.company)];
+  const booksById: Record<string, { info: unknown[]; data: Record<string, Record<string, unknown>[]> }> = { ...BOOKS, ...Object.fromEntries((opts.books ?? []).map((b) => [b.company.id, b])) };
   const demo = DEMO_BC_CREDENTIALS;
   const writes = opts.writes ?? new Map<string, Doc[]>();
 
@@ -127,13 +134,13 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     if (!m) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
     const [, tenant, environment, rest] = m.map(decodeURIComponent);
     if (tenant !== demo.tenantId || environment !== demo.environment) return reply(odataError(404, "BadRequest_NotFound", "Environment not found."));
-    if (rest === "companies") return reply({ status: 200, body: { value: COMPANIES } });
+    if (rest === "companies") return reply({ status: 200, body: { value: companies } });
 
     const cm = rest.match(/^companies\(([^)]+)\)\/(\w+)(?:\(([^)]+)\)(?:\/(\w+)(?:\(([^)]+)\))?)?)?$/);
     if (!cm) return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
     const [, companyId, entity, docId, sub, subId] = cm;
-    if (!COMPANIES.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
-    const books = BOOKS[companyId] ?? EMPTY;
+    if (!companies.some((c) => c.id === companyId)) return reply(odataError(404, "Internal_CompanyNotFound", "Company not found."));
+    const books = booksById[companyId] ?? EMPTY;
     const drafts = writes.get(companyId) ?? [];
     writes.set(companyId, drafts);
 
@@ -259,10 +266,12 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
         if (!record) return reply(odataError(400, "Internal_RecordNotFound", `The ${type === "Account" ? "G/L Account" : type} does not exist. Identification fields and values: No.='${no}'`));
         const qty = Number(body!.quantity ?? 0);
         const cost = Number(body!.directUnitCost ?? 0);
+        // The company's VAT rate: 5% for the invented UAE companies, set per sandbox otherwise (D-94).
+        const vatPct = Number((books.info[0] as Doc | undefined)?.mockVatPercent ?? 5);
         const net = r2(qty * cost);
         const line = {
           id: newId(), sequence: (lines.length + 1) * 10000, lineType: type, lineObjectNumber: no, description: body!.description ?? record.displayName, quantity: qty, directUnitCost: cost,
-          taxPercent: 5, netAmount: net, netTaxAmount: r2(net * 0.05), netAmountIncludingTax: r2(net * 1.05),
+          taxPercent: vatPct, netAmount: net, netTaxAmount: r2((net * vatPct) / 100), netAmountIncludingTax: r2(net + (net * vatPct) / 100),
         };
         lines.push(line);
         Object.assign(found, totalsOf(lines));

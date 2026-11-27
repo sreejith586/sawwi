@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import type { RunContext } from "@/lib/runs/engine";
+import { loadSandbox, sandboxCredentials, SANDBOX_CONNECTION_ID } from "./mock/sandbox";
 import { ingestFiles } from "@/lib/runs/engine";
 import type { Run } from "@/lib/runs/types";
 import { decryptSecret, encryptSecret } from "./crypto";
@@ -46,6 +47,13 @@ export async function openConnection(
     const connector = connectorById(demo.provider);
     if (!connector || !isDemoOrg(orgKey)) throw new ConnectorError("That connection no longer exists.");
     return { connector, credentials: demo.credentials, deps: demoDeps, accountLabel: demo.accountLabel, demo: true };
+  }
+  // A local mock Business Central sandbox (D-94): development only, for any workspace.
+  if (connectionId === SANDBOX_CONNECTION_ID) {
+    const sandbox = await loadSandbox();
+    const connector = connectorById("business-central");
+    if (!sandbox || !connector || isDemoOrg(orgKey)) throw new ConnectorError("That connection no longer exists.");
+    return { connector, credentials: sandboxCredentials(sandbox.file), deps: sandbox.deps, accountLabel: `${sandbox.file.company} (mock sandbox, local)`, demo: false };
   }
   const connection = await store.getConnection(orgKey, connectionId);
   const sealed = connection && await store.getConnectionSecret(orgKey, connectionId);

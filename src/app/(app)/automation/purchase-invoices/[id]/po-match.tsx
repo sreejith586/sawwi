@@ -125,7 +125,7 @@ export function PoMatch(props: {
 
       {(linked > 0 || withGrn > 0) && (
         <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[52rem] text-xs">
+          <table className="w-full min-w-[40rem] text-xs">
             <thead className="bg-surface-muted text-left text-muted">
               <tr>
                 <th className="px-2 py-1.5 font-medium" colSpan={3}>
@@ -134,7 +134,7 @@ export function PoMatch(props: {
                 <th className="border-l border-border px-2 py-1.5 font-medium" colSpan={2}>
                   Goods receipt (GRN)
                 </th>
-                <th className="border-l border-border px-2 py-1.5 font-medium" colSpan={4}>
+                <th className="border-l border-border px-2 py-1.5 font-medium" colSpan={3}>
                   Purchase order
                 </th>
                 <th className="px-2 py-1.5 font-medium" />
@@ -146,7 +146,6 @@ export function PoMatch(props: {
                 <th className="border-l border-border px-2 py-1 font-medium">GRN</th>
                 <th className="px-2 py-1 text-right font-medium">Received</th>
                 <th className="border-l border-border px-2 py-1 font-medium">PO line</th>
-                <th className="px-2 py-1 text-right font-medium">Ordered / rcvd / inv.</th>
                 <th className="px-2 py-1 text-right font-medium">Open</th>
                 <th className="px-2 py-1 text-right font-medium">PO price</th>
                 <th className="px-2 py-1 font-medium">Match</th>
@@ -163,9 +162,9 @@ export function PoMatch(props: {
                 const grnOff = l.grn && l.qty !== null && Math.abs(l.qty - l.grn.quantity) > EPS;
                 const wrongOrder = l.grn && l.po && l.grn.orderNumber && l.grn.orderNumber !== l.po.orderNumber;
                 const priceOff = l.po && l.unitPrice !== null && l.po.poPrice > 0 && Math.abs(l.unitPrice - l.po.poPrice) > l.po.poPrice * PRICE_TOLERANCE;
-                const select = "h-7 max-w-52 rounded-md border border-border bg-surface px-1 text-xs disabled:border-transparent disabled:bg-transparent";
+                const select = "h-7 w-full min-w-28 max-w-40 rounded-md border border-border bg-surface px-1 text-xs disabled:border-transparent disabled:bg-transparent";
                 return (
-                  <tr key={i} className="border-t border-border align-top">
+                  <tr key={i} className={`border-t border-border align-top ${!l.po || wrongOrder || over ? "bg-danger-soft/40" : priceOff || grnOff ? "bg-warn-soft/40" : ""}`}>
                     <td className="px-2 py-1.5">
                       <span className="font-medium">{l.erpNo || "—"}</span>
                       <span className="block max-w-44 truncate text-muted" title={l.description}>
@@ -195,6 +194,7 @@ export function PoMatch(props: {
                       <select
                         aria-label={`Line ${i + 1} purchase order line`}
                         className={select}
+                        title={o ? `${o.orderNumber}: ordered ${o.quantity}, received ${o.received}, invoiced ${o.invoiced}` : undefined}
                         value={l.po?.lineId ?? ""}
                         disabled={props.locked || poOptions.length === 0}
                         onChange={(e) => props.onChange(pickOrderLine(draft, i, orderLines.find((x) => x.lineId === e.target.value) ?? null))}
@@ -207,7 +207,6 @@ export function PoMatch(props: {
                         ))}
                       </select>
                     </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{o ? `${o.quantity} / ${o.received} / ${o.invoiced}` : "—"}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{l.po ? l.po.open : "—"}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{l.po ? money(l.po.poPrice) : "—"}</td>
                     <td className="px-2 py-1.5">

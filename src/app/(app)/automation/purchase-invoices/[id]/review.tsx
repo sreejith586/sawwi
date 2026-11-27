@@ -274,7 +274,7 @@ export function Review({
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         {/* The supplier's document, scan or text, as uploaded. */}
         <section aria-label="Invoice PDF" className="lg:sticky lg:top-4 lg:self-start">
           <object data={`/api/automation/purchase-invoices/${view.id}/pdf#view=FitH`} type="application/pdf" className="h-[70vh] w-full rounded-xl border border-border bg-surface-muted lg:h-[calc(100dvh-8rem)]">

@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
       "./node_modules/@tesseract.js-data/{eng,ara}/4.0.0_best_int/*.traineddata.gz",
     ],
   },
+  // Local data never ships: the dev database, uploads and any mock sandbox built from a customer's
+  // invoices (D-94) live in .data, which must not reach a deployed function even if a trace finds it.
+  outputFileTracingExcludes: {
+    "/**": ["./.data/**", "./.data-*/**"],
+  },
   partialPrefetching: true,
   // Bottom-left would cover the account menu in the sidebar.
   devIndicators: { position: "bottom-right" },
