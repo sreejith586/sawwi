@@ -393,6 +393,21 @@ CREATE TABLE IF NOT EXISTS cod_settings (
     name: "purchase invoices: failed reads and pushes kept for a retry (D-86)",
     sql: `ALTER TABLE purchase_invoices ADD COLUMN IF NOT EXISTS failure_json TEXT;`,
   },
+  {
+    id: 10,
+    name: "AI invoice readings cached per PDF (D-89)",
+    sql: `
+CREATE TABLE IF NOT EXISTS ai_invoice_readings (
+  org_key TEXT NOT NULL,
+  file_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  extraction_json TEXT NOT NULL,
+  calls INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_key, file_hash, model)
+);`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

@@ -95,14 +95,53 @@ export function isoDate(raw: string | undefined): string {
 export const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 export const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
+// ─── Item codes (D-89) ─────────────────────────────────────────────────────
+// The supplier's item code, usually the barcode, is often the only link to the ERP item (GTIN, D-62),
+// so the field holds the code alone, exactly as printed: letters and digits (codes can be
+// alphanumeric), Western digits, never mixed with description text or Arabic words.
+
+const ARABIC_DIGITS = /[٠-٩۰-۹]/g;
+const toAsciiDigits = (s: string) => s.replace(ARABIC_DIGITS, (d) => String((d.charCodeAt(0) - (d >= "۰" ? 0x6f0 : 0x660)) % 10));
+
+/** A GTIN (EAN-8, UPC-A, EAN-13, GTIN-14) whose check digit is right. */
+export function isGtin(code: string): boolean {
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(code)) return false;
+  const digits = [...code].map(Number);
+  const check = digits.pop()!;
+  const sum = digits.reverse().reduce((a, d, i) => a + d * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+/**
+ * Splits what was read as an item code into the code and any other text. Codes are whole tokens,
+ * never cut out of a longer one. A numeric barcode (8 to 14 digits, which scans often print in
+ * groups: "3614 2737 60652") wins; otherwise the first Latin letters-and-digits token.
+ */
+export function cleanSku(raw: string): { code: string; rest: string } {
+  const s = toAsciiDigits(raw ?? "").trim();
+  if (!s) return { code: "", rest: "" };
+  const digitRun = s.match(/(?<![\p{L}\d\-_./])\d(?:[ -]?\d){7,13}(?![\p{L}\d\-_./])/u);
+  if (digitRun) {
+    const code = digitRun[0].replace(/[ -]/g, "");
+    if (code.length >= 8 && code.length <= 14) return { code, rest: (s.slice(0, digitRun.index) + " " + s.slice(digitRun.index! + digitRun[0].length)).replace(/\s+/g, " ").trim() };
+  }
+  const tokens = s.split(/\s+/);
+  const i = tokens.findIndex((t) => /^[A-Za-z0-9][A-Za-z0-9\-_./]*$/.test(t) && /\d/.test(t));
+  const j = i >= 0 ? i : tokens.findIndex((t) => /^[A-Za-z0-9][A-Za-z0-9\-_./]*$/.test(t));
+  if (j < 0) return { code: "", rest: s };
+  return { code: tokens[j].slice(0, 50), rest: tokens.filter((_, k) => k !== j).join(" ") };
+}
+
 /** The reader's invoice → a draft. Credit notes keep positive amounts; they aren't purchase invoices (D-60 backlog). */
 export function draftFromInvoice(doc: InvoiceDoc): Draft {
   const lines: DraftLine[] = doc.lines.map((l) => {
     const net = l.net ?? (l.qty !== undefined && l.unitPrice !== undefined ? r2(l.qty * l.unitPrice) : undefined);
     const vatRate = l.vatRate ?? doc.vatRate;
+    // Text read into the code column moves to the description, so the code stays clean (D-89).
+    const sku = cleanSku(l.sku ?? "");
     return {
-      description: l.description ?? "",
-      sku: l.sku ?? "",
+      description: [sku.rest, l.description ?? ""].filter(Boolean).join(" ").trim(),
+      sku: sku.code,
       qty: l.qty ?? (net !== undefined ? 1 : null),
       unitPrice: l.unitPrice ?? (l.qty === undefined && net !== undefined ? net : null),
       net: net ?? null,
@@ -191,6 +230,13 @@ export function reviewDraft(d: Draft, opts: { erp: boolean }): Review {
   if (d.dueDate && d.invoiceDate && d.dueDate < d.invoiceDate) warnings.push("The due date is before the invoice date.");
   if (!d.dueDate) warnings.push("No due date: Business Central will use the vendor's payment terms.");
   if (!d.supplierTrn) warnings.push("No supplier TRN on the invoice. A tax invoice from a VAT-registered supplier should show one.");
+  // Where the supplier uses barcodes, a line whose code isn't a valid barcode was likely misread (D-89).
+  const barcodes = d.lines.filter((l) => isGtin(l.sku)).length;
+  if (barcodes > 0 && barcodes * 2 >= d.lines.length) {
+    d.lines.forEach((l, i) => {
+      if (!isGtin(l.sku)) warnings.push(`Line ${i + 1}: ${l.sku ? `item code ${l.sku} isn't a valid barcode` : "no barcode"}. Check it against the PDF; it's what finds the ERP item.`);
+    });
+  }
 
   if (opts.erp) {
     if (!d.vendorNo) blockers.push("Pick the Business Central vendor for this supplier.");
@@ -273,7 +319,7 @@ export function sanitizeDraft(input: unknown): Draft | undefined {
       const erpType = l.erpType === "item" || l.erpType === "account" ? l.erpType : null;
       return {
         description: str(l.description, 100),
-        sku: str(l.sku, 50),
+        sku: cleanSku(str(l.sku, 50)).code,
         qty: num(l.qty),
         unitPrice: num(l.unitPrice),
         net: num(l.net),

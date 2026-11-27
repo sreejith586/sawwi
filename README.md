@@ -79,7 +79,8 @@ pnpm build
     editable form. Approved drafts download as Excel or CSV (D-87), or push to Business Central after a
     confirmation: against the purchase order and its goods receipts (GRNs) where Sawwi found or the user linked
     the PO and the user confirmed the match, otherwise as unposted purchase invoices (D-88). Invoices Sawwi
-    can't read, or couldn't push, wait under Failed for a retry or to be typed in (D-86). Vendors and items are matched to Business Central's, and choices are
+    can't read, or couldn't push, wait under Failed for a retry or to be typed in (D-86). Each PDF is read by AI at most once (plus one
+    re-read on request), and AI readings are capped per workspace per day (`SAWWI_AI_INVOICES_PER_DAY`, D-89). Vendors and items are matched to Business Central's, and choices are
     remembered per supplier. In the demo store, try the five sample invoices against the mock Business
     Central (GLS-2360 is invoiced against PO-7002). To push to a real tenant, the connection's Entra app needs a permission set that can create
     purchase documents (e.g. D365 PURCH DOC, EDIT). Re-make the sample PDFs with

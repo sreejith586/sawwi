@@ -10,7 +10,7 @@ import { extractPdf, PdfInputError } from "@/lib/pdf";
 import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
 import { addDays, daysBetween, draftFromInvoice, normInvoiceNo, reviewDraft, type Draft, type Review } from "./draft";
-import { AiReadError, compareReadings, draftFromExtraction, EXTRACTION_MODEL, readInvoiceWithAi, type AiReader, type AiReading } from "./ai";
+import { AiReadError, compareReadings, draftFromExtraction, EXTRACTION_MODEL, readInvoiceWithAi, type AiReader, type AiReading, type Extraction } from "./ai";
 import { applyMatches, learnFromDraft, type MasterData } from "./matching";
 import { matchOrders, orderPlan } from "./orders";
 import { samplePdfBytes, sampleSpec } from "./samples";
@@ -212,7 +212,7 @@ type Reading = { draft: Draft; source: CaptureSource; issuerKey: string };
  * reading is kept unless it checks worse than the rules', blanks are filled from the other, and
  * every field the two read differently is listed for the reviewer (D-69).
  */
-async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Array }, opts: { countries?: string[]; ai?: AiReader | null; force?: boolean }): Promise<Reading> {
+async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Array }, opts: { countries?: string[]; ai?: AiReader | null; force?: boolean; wantAi?: boolean }): Promise<Reading> {
   let table: Awaited<ReturnType<typeof extractPdf>> | undefined;
   let ruleError: CaptureError | undefined;
   try {
@@ -238,24 +238,46 @@ async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Arr
     : { method: "ocr", pages: 0, checks: [] };
   const issuerOf = (d: Draft) => table?.issuer ?? (d.supplierTrn ? `trn:${d.supplierTrn}` : `name:${d.supplierName.toLowerCase()}`);
 
-  const reasons = opts.force ? ["Read again with AI on request."] : aiReasons(rules, rules ? source : undefined);
+  let reasons = opts.force ? ["Read again with AI on request."] : aiReasons(rules, rules ? source : undefined);
+  if (opts.wantAi && reasons.length === 0) reasons = ["Read with AI on request."];
   const ai = opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai;
   if (reasons.length === 0 || !ai) {
     if (!rules) throw ruleError!;
     return { draft: rules, source, issuerKey: issuerOf(rules) };
   }
 
+  // This PDF was read by AI before (same bytes, same workspace, same model): reuse that reading and
+  // pay nothing. Only "Read again with AI" calls again, and only up to the per-file cap (D-89).
+  const fileHash = createHash("sha256").update(file.bytes).digest("hex");
+  const cached = await store.getAiReading(orgKey, fileHash, EXTRACTION_MODEL);
   let reading: AiReading;
-  try {
-    reading = await ai(file.bytes);
-  } catch (error) {
-    const usage = (error as { usage?: LlmUsage }).usage;
-    if (usage) await runStore.logUsage(null, "invoice_extraction", usage, orgKey);
-    if (!(error instanceof AiReadError)) console.error("AI invoice reading failed", error);
-    if (!rules) throw ruleError!;
-    return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: "The AI couldn't read it; this is the text reader's reading.", at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
+  let reusedFrom: string | undefined;
+  if (cached?.extraction && !opts.force) {
+    reading = { extraction: cached.extraction as Extraction, model: EXTRACTION_MODEL, usage: { model: EXTRACTION_MODEL, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } };
+    reusedFrom = cached.updatedAt;
+  } else {
+    // A forced re-read, or a retry after a paid call that gave no usable reading, counts toward the per-file cap.
+    const refused = await aiGuard(orgKey, file.bytes, cached?.calls ?? 0, Boolean(opts.force || cached));
+    if (refused) {
+      if (opts.force) throw new CaptureError(refused);
+      if (!rules) throw new CaptureError(`${ruleError!.message} ${refused}`);
+      return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: refused, at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
+    }
+    try {
+      reading = await ai(file.bytes);
+    } catch (error) {
+      const usage = (error as { usage?: LlmUsage }).usage;
+      if (usage) {
+        await runStore.logUsage(null, "invoice_extraction", usage, orgKey);
+        await store.saveAiReading(orgKey, fileHash, EXTRACTION_MODEL, null);
+      }
+      if (!(error instanceof AiReadError)) console.error("AI invoice reading failed", error);
+      if (!rules) throw ruleError!;
+      return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: "The AI couldn't read it; this is the text reader's reading.", at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
+    }
+    await runStore.logUsage(null, "invoice_extraction", reading.usage, orgKey);
+    await store.saveAiReading(orgKey, fileHash, reading.model, reading.extraction);
   }
-  await runStore.logUsage(null, "invoice_extraction", reading.usage, orgKey);
   if (!reading.extraction.is_invoice) {
     if (!rules) throw new CaptureError(`${file.name} doesn't look like an invoice${reading.extraction.notes ? `: ${reading.extraction.notes}` : "."} Upload the supplier's tax invoice PDF.`);
   }
@@ -270,9 +292,35 @@ async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Arr
     conflicts: rules ? compareReadings(rules, aiDraft) : [],
     notes: reading.extraction.notes ?? "",
     at: new Date().toISOString(),
+    reusedFrom,
   };
   if (!table) source.pages = 0;
   return { draft, source: { ...source, ai: info }, issuerKey: issuerOf(draft) };
+}
+
+// ─── AI spend guards (D-89) ────────────────────────────────────────────────
+
+/** Paid AI readings of one PDF: the first, plus one "Read again with AI". */
+export const AI_CALLS_PER_FILE = 2;
+/** Longer PDFs aren't one supplier invoice; they go to a person instead of the AI. */
+export const AI_MAX_PAGES = 15;
+/** Paid AI invoice readings per workspace in any 24 hours; SAWWI_AI_INVOICES_PER_DAY overrides. */
+export const aiDailyLimit = () => {
+  const n = Number(process.env.SAWWI_AI_INVOICES_PER_DAY);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 200;
+};
+
+/** Page objects in a PDF, without parsing it. Close enough for a size guard. */
+const pdfPageCount = (bytes: Uint8Array) => (Buffer.from(bytes).toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+
+/** Why the AI may not read this PDF now, or undefined if it may. */
+async function aiGuard(orgKey: string, bytes: Uint8Array, callsSoFar: number, capped: boolean): Promise<string | undefined> {
+  if (capped && callsSoFar >= AI_CALLS_PER_FILE) return `This PDF was already read by AI ${callsSoFar} times. Correct it by hand against the PDF.`;
+  const pages = pdfPageCount(bytes);
+  if (pages > AI_MAX_PAGES) return `It has ${pages} pages, more than the ${AI_MAX_PAGES} AI reading takes. Upload one invoice per PDF, or type it in.`;
+  const used = await store.aiReadingsSince(orgKey, new Date(Date.now() - 24 * 3600_000).toISOString());
+  if (used >= aiDailyLimit()) return `This workspace used its ${aiDailyLimit()} AI invoice readings for the last 24 hours. Try again later, or type it in.`;
+  return undefined;
 }
 
 /** One PDF → one draft. The same file again opens the draft it already made (D-63). */
@@ -339,7 +387,7 @@ export async function capturePdf(
 }
 
 /** "Read again with AI" on a draft not pushed yet: the AI reads the kept PDF; ERP matches are redone. */
-export async function rereadWithAi(orgKey: string, id: string, opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<CaptureView> {
+export async function rereadWithAi(orgKey: string, id: string, opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[]; force?: boolean } = {}): Promise<CaptureView> {
   const c = await store.getCapture(orgKey, id);
   if (!c) throw new CaptureError("That invoice no longer exists.");
   if (c.status === "pushed" || c.status === "pushing") throw new CaptureError("This invoice was sent to the ERP and can't be read again.");
@@ -347,7 +395,8 @@ export async function rereadWithAi(orgKey: string, id: string, opts: { ai?: AiRe
   if (!ai) throw new CaptureError("AI reading isn't available here.");
   const bytes = c.storedPath ? await readStoredFile(c.storedPath) : undefined;
   if (!bytes) throw new CaptureError("The invoice's PDF is no longer stored. Upload it again.");
-  const { draft: base, source, issuerKey } = await readInvoice(orgKey, { name: c.fileName, bytes }, { ...opts, ai, force: true });
+  // On request it's a new paid reading (capped per PDF); in bulk an earlier reading of this PDF is reused (D-89).
+  const { draft: base, source, issuerKey } = await readInvoice(orgKey, { name: c.fileName, bytes }, { ...opts, ai, force: opts.force ?? true, wantAi: true });
   const target = await currentTarget(orgKey);
   const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
   const draft = await linkOrders(orgKey, applyMatches(base, md, await store.getProfile(orgKey, issuerKey, base.supplierTrn), addDays), target, opts.deps);
@@ -380,6 +429,44 @@ export async function retryRead(orgKey: string, id: string, opts: { ai?: AiReade
   return (await getView(orgKey, id))!;
 }
 
+/**
+ * "Read with AI" for several drafts (D-89), e.g. ones read before AI reading was switched on. A
+ * draft whose PDF already has an AI reading reuses it at no cost; the others are one paid call each,
+ * within the per-file and daily caps. Failed ones are retried as such.
+ */
+export async function rereadMany(orgKey: string, ids: string[], opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<BulkResult[]> {
+  const out: BulkResult[] = [];
+  for (const id of [...new Set(ids)].slice(0, 50)) {
+    const c = await store.getCapture(orgKey, id);
+    if (!c) {
+      out.push({ id, ok: false, message: "Not found." });
+      continue;
+    }
+    if (c.status === "pushed" || c.status === "pushing") {
+      out.push({ id, ok: false, message: `${c.draft.invoiceNumber || c.fileName} was sent to the ERP; it isn't read again.` });
+      continue;
+    }
+    try {
+      if (c.status === "failed") {
+        const v = await retryRead(orgKey, id, opts);
+        out.push(v.status === "failed" ? { id, ok: false, message: v.failure?.message } : { id, ok: true, message: `${v.fileName} read.` });
+        continue;
+      }
+      // Already read by AI from this very PDF: nothing to gain from paying again here.
+      if (c.source.ai?.used === "ai") {
+        out.push({ id, ok: true, message: `${c.draft.invoiceNumber || c.fileName} was already read by AI; open it to read again on purpose.` });
+        continue;
+      }
+      const v = await rereadWithAi(orgKey, id, { ...opts, force: false });
+      out.push({ id, ok: true, message: `${v.draft.invoiceNumber || v.fileName} read by AI${v.source.ai?.reusedFrom ? " (earlier reading reused, no new cost)" : ""}.` });
+    } catch (error) {
+      if (!(error instanceof CaptureError)) console.error("reading again with AI failed", error);
+      out.push({ id, ok: false, message: `${c.draft.invoiceNumber || c.fileName}: ${error instanceof CaptureError ? error.message : "couldn't be read again. Try later."}` });
+    }
+  }
+  return out;
+}
+
 /** Retries several failed reads, one at a time. */
 export async function retryMany(orgKey: string, ids: string[], opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<BulkResult[]> {
   const out: BulkResult[] = [];
@@ -388,6 +475,7 @@ export async function retryMany(orgKey: string, ids: string[], opts: { ai?: AiRe
       const v = await retryRead(orgKey, id, opts);
       out.push(v.status === "failed" ? { id, ok: false, message: v.failure?.message ?? `${v.fileName} still can't be read.` } : { id, ok: true, message: `${v.fileName} read.` });
     } catch (error) {
+      if (!(error instanceof CaptureError)) console.error("retrying a failed read failed", error);
       out.push({ id, ok: false, message: error instanceof CaptureError ? error.message : "Couldn't read it again. Try later." });
     }
   }
@@ -437,6 +525,7 @@ export function viewOf(c: Capture, all: Capture[], target: string | undefined): 
       ...ai.conflicts.map((x) => `Check against the PDF. ${x}`),
       ...(ai.notes ? [`AI note: ${ai.notes}`] : []),
       ai.used === "ai" ? "Read by AI because the text reader fell short. Check the figures against the PDF before approving." : "The AI also read this invoice but checked worse, so the text reader's reading is shown.",
+      ...(ai.reusedFrom ? [`This PDF's AI reading from ${ai.reusedFrom.slice(0, 16).replace("T", " ")} UTC was reused: no new AI cost.`] : []),
     );
   }
   return { ...c, review, duplicates, hash: draftHash(c.draft, target ?? "") };

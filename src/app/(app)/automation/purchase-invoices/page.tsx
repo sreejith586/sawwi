@@ -8,6 +8,7 @@ import { incomingFolder } from "@/lib/automation/purchase-invoices/incoming";
 import { SAMPLE_SPECS } from "@/lib/automation/purchase-invoices/samples";
 import { currentTarget, listViews, pushTargets } from "@/lib/automation/purchase-invoices/service";
 import { getMasterData } from "@/lib/automation/purchase-invoices/store";
+import { llmAvailable } from "@/lib/mapping/llm";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
 import { Queue, type QueueRow } from "./queue";
 
@@ -51,6 +52,7 @@ async function Workspace() {
       samples={demo ? SAMPLE_SPECS.map(({ id, title, shows }) => ({ id, title, shows })) : []}
       directUploads={blobEnabled()}
       incomingFolder={incomingFolder(orgKey)}
+      aiAvailable={llmAvailable(orgKey)}
     />
   );
 }

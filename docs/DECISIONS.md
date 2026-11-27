@@ -977,3 +977,22 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Posting still needs one step in Business Central: the Vendor Invoice No. and Post.
   - A small AL extension (an API page exposing Vendor Invoice No. on the order, or "Get Receipt Lines" onto a purchase invoice) would remove that step; it's an open question for the client's BC partner.
   - The app's permission set needs D365 PURCH DOC, EDIT, as for D-64.
+
+### D-89: AI invoice reading: each PDF read once, spend capped, item codes kept clean
+- **Context:** the first live run of AI reading (27 Nov 2026, with the key the user added) found that the D-69 schema was refused by the API: 18 nullable fields against a limit of 16. On the client's scans, the text reader's OCR mixed barcodes with Arabic description text in the item code field. The user asked that PDFs already read by AI aren't read again, to avoid unnecessary spend or misuse. They also asked that the item code field be strict: it's the only reference to the ERP item, and codes can be alphanumeric.
+- **Decision:**
+  - **Schema:** text fields are plain strings (`""` = not printed); only figures are nullable (8 in all). A test keeps it within the API's limit.
+  - **One reading per PDF:** each AI reading is kept per workspace, PDF (SHA-256) and model (`ai_invoice_readings`, migration 10). Any later need for it reuses the reading at no cost and says so on the draft: a retry, a re-upload after deleting the draft, or "Read with AI" in bulk. Readings aren't shared between workspaces.
+  - **Caps:**
+    - two paid AI calls per PDF: the first reading plus one "Read again with AI". A paid call that gave nothing usable counts too;
+    - at most `SAWWI_AI_INVOICES_PER_DAY` (default 200) paid readings per workspace in any 24 hours;
+    - no AI on a PDF over 15 pages.
+    A capped invoice keeps the text reader's reading, or goes to Failed with the reason, for a person to type in.
+  - **Bulk "Read with AI"** in the queue, for drafts read before AI was on. It skips drafts already read by AI.
+  - **Item codes:** the field holds the code alone, exactly as printed: letters and digits, Western digits, no spaces, never description text or Arabic words.
+    - From the text reader, other text read into the code column moves to the description. A numeric barcode printed in groups is joined. Alphanumeric codes are kept whole.
+    - The AI is told to put the barcode in this field when one is printed, and the supplier's own code otherwise.
+    - Typed-in codes are cleaned the same way.
+    - Where most lines carry valid GTINs, a line whose code isn't one (e.g. "917", or a misread check digit) is flagged for checking.
+- **Checked live:** the client's 002946 (5 lines), 6641 (4) and 4272 (52, three pages) were read by AI and match the hand transcription line for line: codes, quantities, prices and totals.
+- **Consequences:** a repeat upload or retry of the same PDF costs nothing. The daily cap is per workspace and can be raised per deployment.

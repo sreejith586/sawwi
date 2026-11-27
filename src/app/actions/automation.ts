@@ -145,6 +145,16 @@ export async function orderLinesAction(id: string, orderNumber?: string): Promis
   }
 }
 
+/** "Read with AI" for selected drafts (D-89): earlier readings of the same PDF are reused, within the caps. */
+export async function rereadManyAction(ids: string[]): Promise<{ results?: service.BulkResult[] } & Partial<Fail>> {
+  const who = await editor();
+  if ("error" in who) return who;
+  if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) return { error: "Pick invoices to read." };
+  const results = await service.rereadMany(who.orgKey, ids, { countries: (await getProfile())?.countries });
+  refresh();
+  return { results };
+}
+
 /** Reads failed invoices again (D-86): new work, so it goes through runBlocker() like a capture. */
 export async function retryReadAction(ids: string[]): Promise<{ results?: service.BulkResult[] } & Partial<Fail>> {
   const who = await editor();

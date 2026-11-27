@@ -7,7 +7,7 @@ import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { PhotoPages } from "@/components/automation/photo-pages";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
-import { approveAction, captureSampleAction, pushAction, refreshErpAction, retryReadAction, setTargetAction } from "@/app/actions/automation";
+import { approveAction, captureSampleAction, pushAction, refreshErpAction, rereadManyAction, retryReadAction, setTargetAction } from "@/app/actions/automation";
 import type { Draft } from "@/lib/automation/purchase-invoices/draft";
 
 // The review queue (D-66): every captured invoice with what Sawwi read, its checks and what
@@ -43,6 +43,8 @@ type Props = {
   samples: { id: string; title: string; shows: string }[];
   directUploads: boolean;
   incomingFolder: string;
+  /** AI reading is on for this workspace (D-69). */
+  aiAvailable: boolean;
 };
 
 const FILTERS: { id: "all" | Status | "open"; label: string }[] = [
@@ -100,6 +102,20 @@ export function Queue(props: Props) {
   const approvable = picked.filter((r) => (r.status === "ready" || r.status === "needs_review") && r.blockers.length === 0);
   const pushable = picked.filter((r) => r.status === "approved");
   const retryable = picked.filter((r) => r.status === "failed");
+  // Drafts not read by AI yet, e.g. from before AI reading was on (D-89).
+  const aiReadable = picked.filter((r) => !r.ai && r.status !== "pushed" && r.status !== "pushing" && r.status !== "failed");
+
+  const readWithAi = (ids: string[]) =>
+    startBusy(async () => {
+      setError(null);
+      setUploading(`Reading ${ids.length === 1 ? "the invoice" : `${ids.length} invoices`} with AI…`);
+      const res = await rereadManyAction(ids);
+      setUploading(null);
+      if (res.error) return setError(res.error);
+      setNotice({ title: `${res.results!.filter((r) => r.ok).length} of ${ids.length} read with AI. Check them before approving.`, results: res.results! });
+      setSelected(new Set());
+      router.refresh();
+    });
   const idsParam = picked.map((r) => r.id).join(",");
 
   const retry = (ids: string[]) =>
@@ -358,6 +374,11 @@ export function Queue(props: Props) {
             <button type="button" className={buttonClass("primary")} disabled={busy || approvable.length === 0} onClick={() => approve(approvable.map((r) => r.id))}>
               Approve {approvable.length || ""}
             </button>
+            {props.aiAvailable && aiReadable.length > 0 && (
+              <button type="button" className={buttonClass("secondary")} disabled={busy} onClick={() => readWithAi(aiReadable.map((r) => r.id))} title="Each PDF is read by AI once; an earlier reading is reused at no cost.">
+                Read {aiReadable.length} with AI
+              </button>
+            )}
             {retryable.length > 0 && (
               <button type="button" className={buttonClass("secondary")} disabled={busy} onClick={() => retry(retryable.map((r) => r.id))}>
                 Retry {retryable.length} failed

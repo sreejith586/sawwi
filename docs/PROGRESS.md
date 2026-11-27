@@ -16,7 +16,7 @@ _Updated in every commit. Newest first within each section._
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
-| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40); AI-assisted reading (D-68, D-69, #41); marketplace settlements → journal entries (D-70–D-73, #42). Merged: COD remittances → customer payments (D-74–D-77, #43). In review: failed-invoice queue, Excel download, three-way match against Business Central POs and GRNs (D-86–D-88) |
+| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40); AI-assisted reading (D-68, D-69, #41); marketplace settlements → journal entries (D-70–D-73, #42). Merged: COD remittances → customer payments (D-74–D-77, #43). In review: failed-invoice queue, Excel download, three-way match against Business Central POs and GRNs, AI reading once per PDF (D-86–D-89) |
 
 ## In flight
 
@@ -25,13 +25,13 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
-| Purchase invoices: Failed queue, Excel, PO/GRN three-way match (D-86–D-88) | `feature/purchase-invoice-po-match` | this PR | Invoice extraction session |
+| Purchase invoices: Failed queue, Excel, PO/GRN three-way match, AI spend guards (D-86–D-89) | `feature/purchase-invoice-po-match` | this PR | Invoice extraction session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
 
-- **Purchase invoices: Failed queue, Excel download, three-way match against POs and GRNs** (D-86–D-88, `feature/purchase-invoice-po-match`). For a client whose Saudi suppliers send scanned Arabic tax invoices with barcodes as item codes and no PO numbers.
+- **Purchase invoices: Failed queue, Excel download, three-way match against POs and GRNs, AI reading once per PDF** (D-86–D-89, `feature/purchase-invoice-po-match`). For a client whose Saudi suppliers send scanned Arabic tax invoices with barcodes as item codes and no PO numbers.
   - **Failed (D-86):** an invoice Sawwi can't read is kept with its PDF and the reason, under a new Failed tab, with Retry (one or many) and Type in. A failed push is recorded on the invoice too, with Retry push. Migration 9.
   - **Excel (D-87):** Invoices and Lines sheets, for selected, approved or one invoice. The CSV gains five PO columns at the end.
   - **Three-way match (D-88):**
@@ -46,7 +46,13 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
     - demo: the suggested PO-7002 match with Confirm; Link PO refusing another vendor's PO-7004 and then pulling PO-7002;
     - a local test workspace: three of the client's scans uploaded with no AI key. One was read by OCR with its supplier name garbled; two went to Failed. Retry counted tries; Type in showed the scan beside an empty form; the Excel downloaded.
     - No server errors.
-  - **Not checked:** a live push against a Business Central sandbox; AI reading of these Arabic scans (no API key locally).
+  - **AI reading, first live run (D-89):**
+    - fixed the D-69 schema the API refused (18 nullable fields, limit 16);
+    - each PDF is read by AI once and the reading reused; paid calls are capped per PDF and per workspace per day;
+    - item codes are kept clean (code only, alphanumeric allowed), with a barcode check-digit warning;
+    - added bulk "Read with AI".
+    - The client's 002946, 6641 and 4272 read by AI match the hand transcription line for line.
+  - **Not checked:** a live push against a Business Central sandbox.
   - 10 new tests (329 in all).
 
 - **Fix: scanned PDFs failed in production** (D-79, `fix/ocr-vercel-trace`). After #44, the demo's scanned sample ANP-0419 still showed "Something went wrong. Try again." The OCR worker's core, its dependencies and the `4.0.0_best_int` language data weren't in the deployed functions. `next.config.ts` now adds them to every route's trace with `outputFileTracingIncludes`. A route's traced files alone, copied to an empty folder, now OCR a scanned invoice. Still to check: the scanned sample on production after the deploy.
@@ -358,7 +364,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
   - API v2.0 can't set the Vendor Invoice No. on an order or link an invoice to receipt lines. Should Sawwi ship a small AL extension (an API page) so the push leaves nothing to type in BC?
   - Do the client's items carry the suppliers' barcodes as GTIN (or item references)? Matching depends on it.
   - A live check needs a sandbox with these vendors, items and some released POs with posted receipts, and an app with D365 READ and D365 PURCH DOC, EDIT.
-- **AI reading of Arabic scans:** without `ANTHROPIC_API_KEY` the text reader read 1 of 3 of the client's scans, with a garbled supplier name. Check the AI reading (D-69) on them once the key is set.
+- **AI reading in production:** checked locally on three of the client's scans (D-89). Set `ANTHROPIC_API_KEY` (and `ANTHROPIC_WORKSPACE_ID` if the key isn't workspace-scoped) in Vercel to switch it on there. Is 200 AI invoice readings per workspace per day the right cap (`SAWWI_AI_INVOICES_PER_DAY`)?
 
 - **Multi-currency with the design partner (live check):** do their web invoices carry the Magento store view code in Global Dimension 1, and do they ever change the currency factor on a document? Sawwi works out local currency from BC's exchange rates table, because API v2.0 documents don't carry it (D-58).
 

@@ -12,7 +12,7 @@ import { candidatesFor, matchOrders, orderPlan, pickOrderLine } from "./orders";
 import ExcelJS from "exceljs";
 import { DEMO_ORG_KEY } from "@/lib/demo/demo";
 import { readStoredFile } from "@/lib/files/storage";
-import { CSV_HEADERS, csvRows, isoDate, normInvoiceNo, reviewDraft, sanitizeDraft, type Draft } from "./draft";
+import { cleanSku, CSV_HEADERS, csvRows, draftFromInvoice, isGtin, isoDate, normInvoiceNo, reviewDraft, sanitizeDraft, type Draft } from "./draft";
 import { SAMPLE_SPECS, sampleJpeg, samplePdf } from "./fixtures/samples";
 import { jpegsToPdf, jpegToPdf } from "./photo-pdf";
 import { extractPdf } from "@/lib/pdf";
@@ -33,6 +33,33 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const ORG = DEMO_ORG_KEY;
 const USER = "user-1";
+
+describe("item codes stay clean: the barcode is the ERP reference (D-89)", () => {
+  it("keeps only the code, moves other text to the description, and checks barcodes", () => {
+    expect(cleanSku("3607342306134 بيوتي")).toEqual({ code: "3607342306134", rest: "بيوتي" });
+    expect(cleanSku("بردايس MS sigs 3614220940991")).toEqual({ code: "3614220940991", rest: "بردايس MS sigs" });
+    expect(cleanSku("٣٦١٤٢٧٢٠٥٠٣٥٨")).toEqual({ code: "3614272050358", rest: "" });
+    expect(cleanSku("3614 2737 60652")).toMatchObject({ code: "3614273760652" });
+    expect(cleanSku("GL-LED40")).toEqual({ code: "GL-LED40", rest: "" });
+    // Alphanumeric codes stay whole: a digit run inside one is never cut out of it.
+    expect(cleanSku("AB12345678 عطر")).toEqual({ code: "AB12345678", rest: "عطر" });
+    expect(cleanSku("PRF-3614272050358")).toEqual({ code: "PRF-3614272050358", rest: "" });
+    expect(cleanSku("بيوتي")).toEqual({ code: "", rest: "بيوتي" });
+    expect(isGtin("3607342306134")).toBe(true);
+    expect(isGtin("3607342306135")).toBe(false);
+    expect(isGtin("088300049479")).toBe(true);
+    expect(isGtin("917")).toBe(false);
+    const d = draftFromInvoice({ lines: [{ sku: "3607342306134 بيوتي", description: "1480 Ti", qty: 8, unitPrice: 76 }] } as never);
+    expect(d.lines[0]).toMatchObject({ sku: "3607342306134", description: "بيوتي 1480 Ti" });
+    expect(sanitizeDraft({ ...d, lines: [{ ...d.lines[0], sku: "3607342306134 بيوتي" }] })!.lines[0].sku).toBe("3607342306134");
+  });
+
+  it("warns on a line whose code isn't a valid barcode when the supplier uses barcodes", () => {
+    const line = (sku: string) => ({ description: "x", sku, qty: 1, unitPrice: 1, net: 1, vatRate: null, vat: null, erpType: null, erpNo: "" });
+    const d = { supplierName: "S", supplierTrn: "3", invoiceNumber: "1", invoiceDate: "2026-11-17", dueDate: "", currency: "SAR", poNumber: "", subtotal: 3, vat: null, total: 3, vendorNo: "", vendorName: "", lines: [line("3607342306134"), line("3607342306135"), line("088300049479")] };
+    expect(reviewDraft(d, { erp: false }).warnings).toEqual(expect.arrayContaining([expect.stringContaining("Line 2: item code 3607342306135 isn't a valid barcode")]));
+  });
+});
 
 describe("draft model", () => {
   it("reads printed dates day first, as ISO", () => {

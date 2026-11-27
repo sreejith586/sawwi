@@ -3,7 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { anthropicClient } from "@/lib/anthropic";
 import type { LlmUsage } from "@/lib/mapping/llm";
-import { isoDate, type Draft } from "./draft";
+import { cleanSku, isoDate, type Draft } from "./draft";
 
 // AI-assisted reading of a supplier invoice (D-69), used only when the rules can't read it
 // completely or its figures don't check. Accuracy first: the most capable default model at high
@@ -20,20 +20,23 @@ const CACHE = { type: "ephemeral", ttl: "1h" } as const;
 export const EXTRACTION_INSTRUCTIONS = `You read supplier tax invoices for e-commerce sellers in the GCC (UAE, Saudi Arabia, Kuwait, Qatar, Bahrain, Oman) and copy their contents into a structured record for review by an accountant.
 
 Rules:
-- Copy values exactly as printed. Never compute, estimate or infer a figure that isn't printed: if the invoice shows no VAT amount for a line, that line's vat is null. If a field isn't on the invoice, it is null.
+- Copy values exactly as printed. Never compute, estimate or infer a figure that isn't printed: if the invoice shows no VAT amount for a line, that line's vat is null. A figure that isn't on the invoice is null; a text field that isn't on the invoice is an empty string.
 - The supplier (seller) is the party issuing the invoice, not the "Bill to" / buyer. supplier_trn is the supplier's VAT registration number (TRN, 15 digits in the UAE and Saudi Arabia), not the buyer's.
 - invoice_number is the supplier's own invoice number, not a PO, delivery note or customer reference.
 - Dates as YYYY-MM-DD. GCC invoices write numeric dates day first (03/11/2026 is 3 November 2026) unless the layout clearly says otherwise.
 - Amounts as plain numbers in the invoice currency, without thousands separators or currency symbols. Use a negative number only if the invoice prints one.
 - currency is the ISO code (AED, SAR, OMR, BHD, KWD, QAR, USD, EUR…). Arabic د.إ is AED, ر.س is SAR.
+- sku is the line's item code: the product barcode (EAN/UPC/GTIN) when one is printed, otherwise the supplier's own item code. Copy the code alone, exactly as printed (it may contain letters as well as digits), with Western digits (0-9), no spaces, and never any description text. If both a barcode and a supplier item ID are printed, sku is the barcode.
 - One entry in lines per printed line item, in order. Include charges printed as lines (delivery, installation). Leave out subtotal, VAT and total rows. net is the line amount before VAT.
 - Read Arabic and English. Where both appear, prefer the English text for descriptions.
 - document_type is "credit_note" for a credit note, "debit_note" for a debit note, otherwise "invoice". If the document isn't an invoice at all (a statement, a quotation, a delivery note), set is_invoice to false.
 - In notes, mention anything an accountant should check: unreadable figures, handwritten changes, a total that doesn't match the lines, more than one invoice in the document.`;
 
+// Text fields are plain strings ("" = not printed) and only figures are nullable: the API allows
+// at most 16 union-typed (nullable) parameters in a structured-output schema.
 const Line = z.object({
-  description: z.string().nullable(),
-  sku: z.string().nullable(),
+  description: z.string(),
+  sku: z.string(),
   quantity: z.number().nullable(),
   unit_price: z.number().nullable(),
   net: z.number().nullable(),
@@ -44,18 +47,18 @@ const Line = z.object({
 export const ExtractionSchema = z.object({
   is_invoice: z.boolean(),
   document_type: z.enum(["invoice", "credit_note", "debit_note"]),
-  supplier_name: z.string().nullable(),
-  supplier_trn: z.string().nullable(),
-  invoice_number: z.string().nullable(),
-  invoice_date: z.string().nullable(),
-  due_date: z.string().nullable(),
-  currency: z.string().nullable(),
-  po_number: z.string().nullable(),
+  supplier_name: z.string(),
+  supplier_trn: z.string(),
+  invoice_number: z.string(),
+  invoice_date: z.string(),
+  due_date: z.string(),
+  currency: z.string(),
+  po_number: z.string(),
   subtotal: z.number().nullable(),
   vat: z.number().nullable(),
   total: z.number().nullable(),
   lines: z.array(Line),
-  notes: z.string().nullable(),
+  notes: z.string(),
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
 
@@ -121,7 +124,7 @@ export function draftFromExtraction(e: Extraction): Draft {
     vendorName: "",
     lines: e.lines.map((l) => ({
       description: l.description?.trim() ?? "",
-      sku: l.sku?.trim() ?? "",
+      sku: cleanSku(l.sku ?? "").code,
       qty: l.quantity,
       unitPrice: l.unit_price,
       net: l.net ?? (l.quantity !== null && l.unit_price !== null ? r2(l.quantity * l.unit_price) : null),

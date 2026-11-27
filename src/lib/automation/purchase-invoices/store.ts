@@ -37,6 +37,8 @@ export type AiSource = {
   used: "ai" | "rules";
   /** Fields where the rules and the AI read different values. */
   conflicts: string[];
+  /** Set when this PDF's earlier AI reading was reused instead of a new call (D-89): when it was made. */
+  reusedFrom?: string;
   notes: string;
   at: string;
 };
@@ -242,4 +244,34 @@ export async function setTarget(orgKey: string, connectionId: string | null) {
     "INSERT INTO automation_prefs (org_key, target_connection, updated_at) VALUES (?, ?, ?) ON CONFLICT (org_key) DO UPDATE SET target_connection = excluded.target_connection, updated_at = excluded.updated_at",
     orgKey, connectionId, now(),
   );
+}
+
+// ─── AI readings, one per PDF and model (D-89) ─────────────────────────────
+
+export type CachedAiReading = { extraction: unknown; calls: number; createdAt: string; updatedAt: string };
+
+export async function getAiReading(orgKey: string, fileHash: string, model: string): Promise<CachedAiReading | undefined> {
+  const r = await getDb().get<Row>("SELECT extraction_json, calls, created_at, updated_at FROM ai_invoice_readings WHERE org_key = ? AND file_hash = ? AND model = ?", orgKey, fileHash, model);
+  return r ? { extraction: json(r.extraction_json), calls: Number(r.calls), createdAt: String(r.created_at), updatedAt: String(r.updated_at) } : undefined;
+}
+
+/**
+ * Keeps the latest usable reading of this PDF and counts every paid call made for it. `null`: a
+ * paid call that gave no usable reading; it counts, and an earlier reading is kept.
+ */
+export async function saveAiReading(orgKey: string, fileHash: string, model: string, extraction: unknown) {
+  const t = now();
+  await getDb().run(
+    `INSERT INTO ai_invoice_readings (org_key, file_hash, model, extraction_json, calls, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)
+     ON CONFLICT (org_key, file_hash, model) DO UPDATE SET
+       extraction_json = CASE WHEN excluded.extraction_json = 'null' THEN ai_invoice_readings.extraction_json ELSE excluded.extraction_json END,
+       calls = ai_invoice_readings.calls + 1, updated_at = excluded.updated_at`,
+    orgKey, fileHash, model, JSON.stringify(extraction), t, t,
+  );
+}
+
+/** Paid AI invoice readings by this workspace since a time (the daily cap, D-89). */
+export async function aiReadingsSince(orgKey: string, since: string): Promise<number> {
+  const r = await getDb().get<Row>("SELECT COUNT(*) AS n FROM llm_usage WHERE org_key = ? AND purpose = 'invoice_extraction' AND created_at >= ?", orgKey, since);
+  return Number(r?.n ?? 0);
 }
