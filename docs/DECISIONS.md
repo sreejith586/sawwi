@@ -1034,3 +1034,12 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **Exports:** the queue, the Excel (D-91) and the CSV show the line's own GRN.
 - **What it doesn't do:** Business Central's API can't tie an invoice to a particular receipt when posting. Posting from the order invoices the received, not-yet-invoiced quantity. The GRN link is the three-way check and the audit trail; the page says so.
 - **Consequences:** one more read per match (receipts with lines, 180 days). A supplier's delivery note number usually isn't Business Central's receipt number, so printed GRN numbers aren't read from invoices; the user links one when Sawwi's suggestion isn't right.
+
+### D-93: Bulk uploads show progress and read three invoices at a time
+- **Context:** the user asked (27 Nov 2026) for a visual progress indicator during bulk uploads, so a user knows how long to wait. Scanned invoices read by OCR and AI take 20 seconds to 3 minutes each (measured on the client's 15: one-page invoices 20–45 s, 74–80-line four-page ones 2.5–3 min). The page showed only "Reading 3 of 12: file.pdf" and read one file at a time.
+- **Decision:**
+  - **Three at a time:** a bulk upload reads three invoices in parallel, each still its own request, so one slow scan doesn't hold up the rest.
+  - **Progress panel** (`components/automation/upload-progress.tsx`): "N of M invoices read" with a bar, the time so far and the time left, and each file's state: waiting, reading (with its own timer), read in how long, or couldn't read. It's announced to screen readers.
+  - **Time left** (`estimateRemaining`): the average time of the invoices already read (45 s assumed until the first one finishes), times those waiting, plus what's left of those being read, shared across the three readers. It improves as files finish.
+  - **Leaving the page** mid-upload asks first, since files not sent yet would be dropped.
+- **Consequences:** a batch of 12 scans that took about 15 minutes one at a time takes about 5. Three requests at once stays within the AI daily cap (D-89) and the function time limit, since each is still its own request.

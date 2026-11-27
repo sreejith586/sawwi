@@ -3,8 +3,9 @@
 import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { PhotoPages } from "@/components/automation/photo-pages";
+import { UploadProgress, type UploadItem } from "@/components/automation/upload-progress";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
 import { approveAction, captureSampleAction, pushAction, refreshErpAction, rereadManyAction, retryReadAction, setTargetAction } from "@/app/actions/automation";
@@ -58,6 +59,9 @@ const FILTERS: { id: "all" | Status | "open"; label: string }[] = [
 /** Couldn't be read, or the last push failed and it's still waiting to go (D-86). */
 const isFailed = (r: QueueRow) => r.status === "failed" || (r.failure?.stage === "push" && r.status === "approved");
 
+/** Invoices read at once in a bulk upload (D-93). Each is its own request; three keeps a scan batch moving without crowding the server. */
+const UPLOAD_PARALLEL = 3;
+
 const METHOD: Record<string, string> = { text: "Text PDF", ocr: "Scan (OCR)", zatca_xml: "ZATCA e-invoice", zatca_qr: "ZATCA QR only" };
 
 export function Queue(props: Props) {
@@ -68,6 +72,14 @@ export function Queue(props: Props) {
   const [notice, setNotice] = useState<{ title: string; results: { ok: boolean; message?: string }[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ items: UploadItem[]; startedAt: number } | null>(null);
+  // Leaving the page mid-upload stops the files not sent yet: the browser asks first.
+  useEffect(() => {
+    if (!progress) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [progress]);
   const [pushing, setPushing] = useState<string[] | null>(null);
   const [busy, startBusy] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -155,6 +167,7 @@ export function Queue(props: Props) {
     });
 
   /** True when at least one file was read. */
+  /** True when at least one file was read. Files are read a few at a time, with progress for each (D-93). */
   async function upload(files: File[]): Promise<boolean> {
     const pdfs = files.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
     if (pdfs.length === 0) return (setError("Upload supplier invoices as PDF files."), false);
@@ -162,10 +175,20 @@ export function Queue(props: Props) {
     setError(null);
     setNotice(null);
     const results: { ok: boolean; message?: string }[] = [];
-    try {
-      // One request per file: each reads in its own time (scans take a few seconds a page).
-      for (const [i, file] of pdfs.entries()) {
-        setUploading(`Reading ${i + 1} of ${pdfs.length}: ${file.name}`);
+    // Same-named files get a suffix in the list so each has its own row.
+    const names = pdfs.map((f, i) => (pdfs.findIndex((g) => g.name === f.name) === i ? f.name : `${f.name} (${i + 1})`));
+    let items: UploadItem[] = names.map((name) => ({ name, state: "waiting" }));
+    const set = (i: number, patch: Partial<UploadItem>) => {
+      items = items.map((x, j) => (j === i ? { ...x, ...patch } : x));
+      setProgress((p) => (p ? { ...p, items } : p));
+    };
+    setProgress({ items, startedAt: Date.now() });
+
+    const readOne = async (i: number) => {
+      const file = pdfs[i];
+      const started = Date.now();
+      set(i, { state: "reading", startedAt: started });
+      try {
         let res: Response;
         if (props.directUploads) {
           const safe = file.name.replace(/[^\w.\- ]+/g, "_").slice(-80);
@@ -181,8 +204,10 @@ export function Queue(props: Props) {
           res = await fetch("/api/automation/purchase-invoices", { method: "POST", body });
         }
         const json = (await res.json()) as { results?: { name: string; existing?: boolean; failed?: boolean; error?: string }[]; error?: string };
+        let ok = false;
         if (json.error) results.push({ ok: false, message: `${file.name}: ${json.error}` });
-        for (const r of json.results ?? [])
+        for (const r of json.results ?? []) {
+          ok = !r.error && !r.failed;
           results.push(
             r.error
               ? { ok: false, message: r.error }
@@ -190,11 +215,24 @@ export function Queue(props: Props) {
                 ? { ok: false, message: `${r.name} couldn't be read. It's kept under Failed: retry it, or open it and type it in.` }
                 : { ok: true, message: r.existing ? `${r.name} was uploaded before; it's the draft already listed.` : `${r.name} read.` },
           );
+        }
+        set(i, { state: ok ? "done" : "failed", ms: Date.now() - started, note: json.error ?? json.results?.[0]?.error });
+      } catch {
+        results.push({ ok: false, message: `${file.name}: upload failed. Check your connection and try again.` });
+        set(i, { state: "failed", ms: Date.now() - started });
       }
-    } catch {
-      results.push({ ok: false, message: "Upload failed. Check your connection and try again." });
+    };
+
+    try {
+      // A few at a time: each file is its own request and reads in its own time.
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_PARALLEL, pdfs.length) }, async () => {
+          while (next < pdfs.length) await readOne(next++);
+        }),
+      );
     } finally {
-      setUploading(null);
+      setProgress(null);
       if (fileRef.current) fileRef.current.value = "";
     }
     setFilter(results.some((r) => r.ok) || !results.some((r) => /under Failed/.test(r.message ?? "")) ? "open" : "failed");
@@ -298,7 +336,7 @@ export function Queue(props: Props) {
             <>
             {/* Phones and tablets: photograph the invoice, one photo per page (D-67). */}
             <div className="mb-3 md:hidden">
-              <PhotoPages disabled={Boolean(uploading)} onReady={(pdf) => upload([pdf])} />
+              <PhotoPages disabled={Boolean(uploading || progress)} onReady={(pdf) => upload([pdf])} />
             </div>
             <label
               onDragOver={(e) => e.preventDefault()}
@@ -308,13 +346,14 @@ export function Queue(props: Props) {
               }}
               className="flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-border p-8 text-center hover:bg-surface-muted/50"
             >
-              <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple className="sr-only" disabled={Boolean(uploading)} onChange={(e) => void upload([...(e.target.files ?? [])])} />
+              <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple className="sr-only" disabled={Boolean(uploading || progress)} onChange={(e) => void upload([...(e.target.files ?? [])])} />
               <span className="font-medium">Drop supplier invoice PDFs here, or click to choose</span>
               <span className="mt-1 text-sm text-muted">One invoice per PDF, up to 50 at a time. Text PDFs, scans and ZATCA e-invoices.</span>
             </label>
             </>
           )}
-          {uploading && (
+          {progress && <UploadProgress items={progress.items} startedAt={progress.startedAt} parallel={UPLOAD_PARALLEL} />}
+          {uploading && !progress && (
             <p className="mt-3 text-sm text-muted" role="status">
               {uploading}
             </p>
