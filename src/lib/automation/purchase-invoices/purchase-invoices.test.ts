@@ -454,4 +454,11 @@ describe("Excel download (D-87)", () => {
     const lines = wb.getWorksheet("Lines")!;
     expect(lines.rowCount).toBe(views.reduce((n, v) => n + v.draft.lines.length, 0) + 1);
   });
+
+  it("downloads a whole tab at once (D-90)", async () => {
+    const all = await service.listViews(ORG);
+    expect((await service.draftsForExport(ORG, "all")).length).toBe(all.length);
+    expect((await service.draftsForExport(ORG, "pushed")).map((c) => c.id).sort()).toEqual(all.filter((v) => v.status === "pushed").map((v) => v.id).sort());
+    expect((await service.draftsForExport(ORG, "failed")).every((c) => c.status === "failed" || c.failure?.stage === "push")).toBe(true);
+  });
 });

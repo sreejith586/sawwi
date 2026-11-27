@@ -754,9 +754,21 @@ async function learn(orgKey: string, c: Capture) {
 }
 
 /** Drafts for a CSV (D-65). Exporting approved drafts teaches the supplier memory too. */
-export async function draftsForExport(orgKey: string, ids: string[] | "approved"): Promise<Capture[]> {
+/** Which invoices a bulk download covers: the queue's tabs (D-90). */
+export type ExportScope = "all" | "open" | "failed" | "approved" | "pushed";
+
+const inScope = (c: Capture, scope: ExportScope) =>
+  scope === "all"
+    ? true
+    : scope === "open"
+      ? c.status === "needs_review" || c.status === "ready" || c.status === "pushing"
+      : scope === "failed"
+        ? c.status === "failed" || (c.status === "approved" && c.failure?.stage === "push")
+        : c.status === scope;
+
+export async function draftsForExport(orgKey: string, ids: string[] | ExportScope): Promise<Capture[]> {
   const all = await store.listCaptures(orgKey);
-  const picked = ids === "approved" ? all.filter((c) => c.status === "approved") : all.filter((c) => ids.includes(c.id));
+  const picked = typeof ids === "string" ? all.filter((c) => inScope(c, ids)) : all.filter((c) => ids.includes(c.id));
   for (const c of picked) if (c.status === "approved" || c.status === "pushed") await learn(orgKey, c);
   return picked.reverse();
 }

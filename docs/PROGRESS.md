@@ -16,7 +16,7 @@ _Updated in every commit. Newest first within each section._
 | 6 | Usage/cost dashboard, scheduled runs, connectors (marketplace APIs, ERP, bank feeds) | Done (#5–#15): usage dashboard (D-25), scheduled runs (D-26), connector framework + Shopify, Business Central and Magento 2 (D-27–D-30), demo store with demo data for all 23 templates (D-31, D-32, D-36), chat sidebar (D-33, D-34, D-35). Live checks and open decisions below |
 | 8 | Email through Resend (reminders, "ready to review" notices, password reset) and public SEO pages (D-44) | In review: email foundation, reminders and notices (D-45, #25); password reset (D-46, #26, based on #25); SEO pages (D-47, this PR, based on #26) |
 | 7 | Go live on Vercel + Neon (D-37): Postgres everywhere (PGlite in dev/tests), private Blob uploads, connector keyring, Vercel deploy, jobs table + Vercel Cron | Done: live at sawwiapp.ai (D-43). Merged: scope (D-37, #16), Postgres everywhere (D-38, #17), files in private Blob (D-39, #18), connector key ring (D-40, #19), Vercel deploy (D-41, #20), docs (#21), jobs table + Vercel Cron (D-42, #22 → #24) |
-| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40); AI-assisted reading (D-68, D-69, #41); marketplace settlements → journal entries (D-70–D-73, #42). Merged: COD remittances → customer payments (D-74–D-77, #43). In review: failed-invoice queue, Excel download, three-way match against Business Central POs and GRNs, AI reading once per PDF (D-86–D-89) |
+| 9 | Automation, a peer of Reconciliation (D-60): purchase invoice capture → reviewable draft → CSV or Business Central draft; ranked backlog of other automations | In progress. Merged: purchase invoice capture, review queue, CSV and BC push, phone camera (D-60–D-67, #40); AI-assisted reading (D-68, D-69, #41); marketplace settlements → journal entries (D-70–D-73, #42). Merged: COD remittances → customer payments (D-74–D-77, #43). In review: failed-invoice queue, Excel download, three-way match against Business Central POs and GRNs, AI reading once per PDF (D-86–D-90) |
 
 ## In flight
 
@@ -25,7 +25,7 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
-| Purchase invoices: Failed queue, Excel, PO/GRN three-way match, AI spend guards (D-86–D-89) | `feature/purchase-invoice-po-match` | this PR | Invoice extraction session |
+| Purchase invoices: Failed queue, Excel, PO/GRN three-way match, AI spend guards (D-86–D-90) | `feature/purchase-invoice-po-match` | this PR | Invoice extraction session |
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
@@ -52,6 +52,8 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
     - item codes are kept clean (code only, alphanumeric allowed), with a barcode check-digit warning;
     - added bulk "Read with AI".
     - The client's 002946, 6641 and 4272 read by AI match the hand transcription line for line.
+  - **Bulk download (D-90):** each tab downloads as one Excel or CSV. A BC-importable Excel needs the client's configuration package template (tables 38/39) exported from their BC; not built yet.
+  - **AI cost, measured:** about USD 0.05 for a one-page invoice with 5 lines and USD 0.17 for a three-page one with 52 lines (Opus 5.5). Mostly output tokens; a repeat read of the same PDF costs nothing (D-89).
   - **Not checked:** a live push against a Business Central sandbox.
   - 10 new tests (329 in all).
 
@@ -359,6 +361,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Open questions
 
+- **BC import from Excel (D-90):** ask the client's BC partner for a configuration package with Purchase Header (38) and Purchase Line (39), exported to Excel. Sawwi would fill it. Do they keep barcodes as Item References or in the item's GTIN?
 - **Purchase invoices against POs (D-88), for the client's BC partner:**
   - Is the client on Business Central or Dynamics 365 Finance & Operations? Sawwi's connector is Business Central only.
   - API v2.0 can't set the Vendor Invoice No. on an order or link an invoice to receipt lines. Should Sawwi ship a small AL extension (an API page) so the push leaves nothing to type in BC?

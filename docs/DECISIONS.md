@@ -996,3 +996,13 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
     - Where most lines carry valid GTINs, a line whose code isn't one (e.g. "917", or a misread check digit) is flagged for checking.
 - **Checked live:** the client's 002946 (5 lines), 6641 (4) and 4272 (52, three pages) were read by AI and match the hand transcription line for line: codes, quantities, prices and totals.
 - **Consequences:** a repeat upload or retry of the same PDF costs nothing. The daily cap is per workspace and can be raised per deployment.
+
+### D-90: Bulk Excel download of a whole tab; a BC-importable Excel waits for the client's own template
+- **Context:** the user asked (27 Nov 2026) for one Excel download covering all invoices at once, importable into Business Central with no manual fixes on the sheet.
+- **Decision:**
+  - **Bulk download:** each queue tab (To review, Failed, Approved, In ERP, All) has "Download … as Excel" and CSV for everything in it (`?scope=`), not only the selected rows. It's the D-87 workbook: an Invoices sheet with status and what's open, and a Lines sheet.
+  - **BC import from Excel isn't built yet.** Business Central imports an Excel only through a configuration package, and only a workbook exported from that package in BC (it carries the table and field definitions BC checks; Microsoft documents no layout to build one from scratch). A file generated without one isn't guaranteed to import. Two routes:
+    - **Sawwi fills the client's template:** their BC partner sets up a configuration package with Purchase Header (38) and Purchase Line (39) and the fields to fill, exports it to Excel once, and gives Sawwi the file. Sawwi then writes rows into that workbook unchanged.
+    - **The API push** (D-64, D-88), which needs no file.
+  - **For an import with no fixes,** every invoice needs Business Central's numbers, not the supplier's: the vendor no., and per line the item no. (from the barcode via the item's GTIN, D-62) or an Item Reference No. if the client keeps barcodes as item references. Only invoices with nothing blocking can be in it.
+- **Consequences:** the bulk Excel is for review, archive or another system. BC import waits for the template and a sandbox to test it on.

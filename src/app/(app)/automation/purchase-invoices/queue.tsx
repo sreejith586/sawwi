@@ -356,12 +356,13 @@ export function Queue(props: Props) {
               </button>
             ))}
           </div>
-          {counts.approved > 0 && (
+          {shown.length > 0 && (
+            // Everything in the tab in one file (D-90): the Invoices sheet lists each one with its status and what's open.
             <span className="ml-auto flex gap-2">
-              <a href="/api/automation/purchase-invoices/export?approved=1&format=xlsx" className={buttonClass("secondary")}>
-                Download approved as Excel
+              <a href={`/api/automation/purchase-invoices/export?scope=${filter}&format=xlsx`} className={buttonClass("secondary")}>
+                Download {filter === "all" ? "all" : `these`} {shown.length} as Excel
               </a>
-              <a href="/api/automation/purchase-invoices/export?approved=1" className={buttonClass("secondary")}>
+              <a href={`/api/automation/purchase-invoices/export?scope=${filter}`} className={buttonClass("secondary")}>
                 CSV
               </a>
             </span>
