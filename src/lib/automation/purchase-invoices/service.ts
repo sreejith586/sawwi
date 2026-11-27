@@ -5,13 +5,14 @@ import { demoConnectionId } from "@/lib/connectors/mock";
 import { connectorById } from "@/lib/connectors/registry";
 import { liveDeps, openConnection } from "@/lib/connectors/service";
 import { listConnections } from "@/lib/connectors/store";
-import { ConnectorError, type ConnectorDeps } from "@/lib/connectors/types";
+import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine } from "@/lib/connectors/types";
 import { extractPdf, PdfInputError } from "@/lib/pdf";
 import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
 import { addDays, daysBetween, draftFromInvoice, normInvoiceNo, reviewDraft, type Draft, type Review } from "./draft";
 import { AiReadError, compareReadings, draftFromExtraction, EXTRACTION_MODEL, readInvoiceWithAi, type AiReader, type AiReading } from "./ai";
 import { applyMatches, learnFromDraft, type MasterData } from "./matching";
+import { matchOrders, orderPlan } from "./orders";
 import { samplePdfBytes, sampleSpec } from "./samples";
 import * as store from "./store";
 import type { Capture, CaptureSource, CaptureStatus } from "./store";
@@ -83,11 +84,90 @@ async function masterDataOrCached(orgKey: string, connectionId: string | undefin
   }
 }
 
+/**
+ * Links item lines to the vendor's open purchase order lines with goods received (D-88). Read live:
+ * receipts change through the day. Unchanged if there's no vendor, no target that reads orders,
+ * or the ERP doesn't answer (the review screen can match again).
+ */
+async function linkOrders(orgKey: string, d: Draft, target: PushTarget | undefined, deps?: ConnectorDeps): Promise<Draft> {
+  // A match the user confirmed stays as they confirmed it.
+  if (!target || !d.vendorNo || d.poConfirmed) return d;
+  try {
+    return matchOrders(d, await orderLinesFor(orgKey, d, deps));
+  } catch (error) {
+    if (!(error instanceof ConnectorError)) console.error("purchase order matching failed", error);
+    return d;
+  }
+}
+
+/**
+ * The order lines a draft can be matched against (D-88): all the vendor's open lines with goods
+ * received and not invoiced, plus every line of the PO printed on (or linked to) the invoice, so it
+ * can be shown side by side. Empty without a target that reads orders.
+ */
+export async function orderLinesFor(orgKey: string, d: Pick<Draft, "vendorNo" | "poNumber">, deps?: ConnectorDeps): Promise<ErpOpenOrderLine[]> {
+  const target = await currentTarget(orgKey);
+  if (!target || (!d.vendorNo && !d.poNumber)) return [];
+  const { w, credentials, deps: use } = await writer(orgKey, target.connectionId, deps ?? liveDeps);
+  if (!w.openOrderLines) return [];
+  const [byVendor, byOrder] = await Promise.all([
+    d.vendorNo ? w.openOrderLines(credentials, { vendorNumber: d.vendorNo }, use) : [],
+    d.poNumber.trim() ? w.openOrderLines(credentials, { orderNumber: d.poNumber }, use) : [],
+  ]);
+  const seen = new Set(byVendor.map((l) => l.lineId));
+  return [...byVendor, ...byOrder.filter((l) => !seen.has(l.lineId))];
+}
+
+/** One PO by number, for "Link PO" on the review page (D-88). Refuses another vendor's order. */
+export async function pullOrder(orgKey: string, id: string, orderNumber: string, deps?: ConnectorDeps): Promise<ErpOpenOrderLine[]> {
+  const c = await store.getCapture(orgKey, id);
+  if (!c) throw new CaptureError("That invoice no longer exists.");
+  const no = orderNumber.trim().slice(0, 20);
+  if (!no) throw new CaptureError("Type the purchase order number from Business Central.");
+  const target = await currentTarget(orgKey);
+  if (!target) throw new CaptureError("Choose the Business Central connection first.");
+  const { w, credentials, deps: use } = await writer(orgKey, target.connectionId, deps ?? liveDeps);
+  if (!w.openOrderLines) throw new CaptureError("This connection can't read purchase orders.");
+  const lines = await w.openOrderLines(credentials, { orderNumber: no }, use);
+  if (!lines.length) throw new CaptureError(`No purchase order ${no} with item lines in Business Central.`);
+  if (c.draft.vendorNo && lines[0].vendorNumber !== c.draft.vendorNo) throw new CaptureError(`Purchase order ${no} is for vendor ${lines[0].vendorNumber}, not ${c.draft.vendorNo}.`);
+  return lines;
+}
+
 // ─── Capture ───────────────────────────────────────────────────────────────
 
 export const statusFor = (d: Draft, erp: boolean): CaptureStatus => (reviewDraft(d, { erp }).blockers.length ? "needs_review" : "ready");
 
-export type CaptureResult = { capture: Capture; existing: boolean };
+export type CaptureResult = { capture: Capture; existing: boolean; failed?: boolean };
+
+/** A draft with nothing read yet: what a failed read shows, ready to be typed in (D-86). */
+export const emptyDraft = (fileName = ""): Draft => ({
+  supplierName: "",
+  supplierTrn: "",
+  invoiceNumber: fileName.replace(/\.pdf$/i, "").slice(0, 35),
+  invoiceDate: "",
+  dueDate: "",
+  currency: "",
+  poNumber: "",
+  subtotal: null,
+  vat: null,
+  total: null,
+  vendorNo: "",
+  vendorName: "",
+  lines: [],
+});
+
+/** Why a read failed, in words a reviewer can act on. Unexpected errors are logged and given a generic message. */
+function readFailure(error: unknown, fileName: string, aiTried: boolean): string {
+  let message: string;
+  if (error instanceof CaptureError) message = error.message;
+  else {
+    console.error("purchase invoice capture failed", error);
+    message = `${fileName}: Sawwi couldn't read this PDF.`;
+  }
+  // Scans in Arabic, or with unusual layouts, usually need the AI reader (D-69).
+  return aiTried ? message : `${message} Only the text reader tried: AI reading isn't on for this workspace.`;
+}
 
 /** One PDF → one draft. The same file again opens the draft it already made (D-63). */
 /** Which reader to use when the rules fall short: the AI where it's on for this workspace (D-69), else none. */
@@ -206,16 +286,42 @@ export async function capturePdf(
   if (file.bytes.length > MAX_PDF_BYTES) throw new CaptureError(`${file.name} is over 10 MB. Upload one invoice per PDF.`);
   const fileHash = createHash("sha256").update(file.bytes).digest("hex");
   const seen = await store.findByHash(orgKey, fileHash);
+  // The same file again: a failed one is read again (D-86), anything else opens as it is.
+  if (seen?.status === "failed") {
+    const view = await retryRead(orgKey, seen.id, opts);
+    return { capture: view, existing: true, failed: view.status === "failed" };
+  }
   if (seen) return { capture: seen, existing: true };
-
-  const { draft: base, source, issuerKey } = await readInvoice(orgKey, file, opts);
-  const profile = await store.getProfile(orgKey, issuerKey, base.supplierTrn);
-  const target = await currentTarget(orgKey);
-  const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
-  const draft = applyMatches(base, md, profile, addDays);
 
   const id = randomUUID();
   const storedPath = pdfKey(id);
+  let reading: Reading;
+  try {
+    reading = await readInvoice(orgKey, file, opts);
+  } catch (error) {
+    // Kept with its PDF, so a person can retry it or type it in instead of uploading it again (D-86).
+    await putFile(storedPath, file.bytes, "application/pdf");
+    const capture = await store.insertCapture({
+      id,
+      orgKey,
+      fileName: file.name.slice(0, 200),
+      fileHash,
+      storedPath,
+      issuerKey: `file:${fileHash.slice(0, 16)}`,
+      status: "failed",
+      draft: emptyDraft(file.name),
+      source: { method: "ocr", pages: 0, checks: [], sample: opts.sample || undefined },
+      failure: { stage: "read", message: readFailure(error, file.name, Boolean(opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai)), at: new Date().toISOString(), attempts: 1 },
+      createdBy: userId,
+    });
+    return { capture, existing: false, failed: true };
+  }
+  const { draft: base, source, issuerKey } = reading;
+  const profile = await store.getProfile(orgKey, issuerKey, base.supplierTrn);
+  const target = await currentTarget(orgKey);
+  const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
+  const draft = await linkOrders(orgKey, applyMatches(base, md, profile, addDays), target, opts.deps);
+
   await putFile(storedPath, file.bytes, "application/pdf");
   const capture = await store.insertCapture({
     id,
@@ -244,9 +350,48 @@ export async function rereadWithAi(orgKey: string, id: string, opts: { ai?: AiRe
   const { draft: base, source, issuerKey } = await readInvoice(orgKey, { name: c.fileName, bytes }, { ...opts, ai, force: true });
   const target = await currentTarget(orgKey);
   const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
-  const draft = applyMatches(base, md, await store.getProfile(orgKey, issuerKey, base.supplierTrn), addDays);
-  await store.replaceReading(orgKey, id, draft, { ...source, sample: c.source.sample }, statusFor(draft, Boolean(target)));
+  const draft = await linkOrders(orgKey, applyMatches(base, md, await store.getProfile(orgKey, issuerKey, base.supplierTrn), addDays), target, opts.deps);
+  await store.replaceReading(orgKey, id, draft, { ...source, sample: c.source.sample }, statusFor(draft, Boolean(target)), issuerKey);
   return (await getView(orgKey, id))!;
+}
+
+/**
+ * Reads a failed invoice's kept PDF again (D-86): the rules, then the AI where it's on. On
+ * success it joins the review queue; otherwise the failure is updated with the attempt count.
+ */
+export async function retryRead(orgKey: string, id: string, opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<CaptureView> {
+  const c = await store.getCapture(orgKey, id);
+  if (!c) throw new CaptureError("That invoice no longer exists.");
+  if (c.status !== "failed") return (await getView(orgKey, id))!;
+  const bytes = c.storedPath ? await readStoredFile(c.storedPath) : undefined;
+  if (!bytes) throw new CaptureError("The invoice's PDF is no longer stored. Upload it again.");
+  let reading: Reading;
+  try {
+    reading = await readInvoice(orgKey, { name: c.fileName, bytes }, opts);
+  } catch (error) {
+    await store.recordFailure(orgKey, id, "read", readFailure(error, c.fileName, Boolean(opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai)));
+    return (await getView(orgKey, id))!;
+  }
+  const target = await currentTarget(orgKey);
+  const md = await masterDataOrCached(orgKey, target?.connectionId, opts.deps);
+  const { draft: base, source, issuerKey } = reading;
+  const draft = await linkOrders(orgKey, applyMatches(base, md, await store.getProfile(orgKey, issuerKey, base.supplierTrn), addDays), target, opts.deps);
+  await store.replaceReading(orgKey, id, draft, { ...source, sample: c.source.sample }, statusFor(draft, Boolean(target)), issuerKey);
+  return (await getView(orgKey, id))!;
+}
+
+/** Retries several failed reads, one at a time. */
+export async function retryMany(orgKey: string, ids: string[], opts: { ai?: AiReader | null; deps?: ConnectorDeps; countries?: string[] } = {}): Promise<BulkResult[]> {
+  const out: BulkResult[] = [];
+  for (const id of [...new Set(ids)].slice(0, 50)) {
+    try {
+      const v = await retryRead(orgKey, id, opts);
+      out.push(v.status === "failed" ? { id, ok: false, message: v.failure?.message ?? `${v.fileName} still can't be read.` } : { id, ok: true, message: `${v.fileName} read.` });
+    } catch (error) {
+      out.push({ id, ok: false, message: error instanceof CaptureError ? error.message : "Couldn't read it again. Try later." });
+    }
+  }
+  return out;
 }
 
 /** The demo's built-in sample invoices (D-60), read through the same path as an upload. */
@@ -282,6 +427,9 @@ export function viewOf(c: Capture, all: Capture[], target: string | undefined): 
     if (d.exact && d.id !== pushedTwin?.id) review.warnings.unshift(`Same supplier and invoice number as ${d.fileName}. Check it isn't the same invoice twice.`);
     if (!d.exact) review.warnings.unshift(`Possible duplicate: ${d.fileName} (${d.invoiceNumber}) has the same supplier, date and total.`);
   }
+  // What went wrong last time (D-86).
+  if (c.status === "failed" && c.failure) review.blockers.unshift(`Couldn't read this PDF (attempt ${c.failure.attempts}): ${c.failure.message}`);
+  if (c.status !== "failed" && c.status !== "pushed" && c.failure?.stage === "push") review.warnings.unshift(`The last push failed: ${c.failure.message}`);
   // An AI reading is shown as such, with every field it and the text reader read differently (D-69).
   if (c.source.ai && c.status !== "pushed") {
     const ai = c.source.ai;
@@ -320,6 +468,7 @@ export async function saveEdits(orgKey: string, id: string, draft: Draft): Promi
   const c = await store.getCapture(orgKey, id);
   if (!c) throw new CaptureError("That invoice no longer exists.");
   if (c.status === "pushed" || c.status === "pushing") throw new CaptureError("This invoice was sent to the ERP and can't be changed here.");
+  // PO links are the user's to change on the review page (D-88); the push checks them against Business Central.
   if (!(await store.saveDraft(orgKey, id, draft, statusFor(draft, Boolean(target))))) throw new CaptureError("This invoice can't be changed now.");
   return (await getView(orgKey, id))!;
 }
@@ -332,7 +481,7 @@ export async function rematch(orgKey: string, deps?: ConnectorDeps): Promise<num
   let changed = 0;
   for (const c of await store.listCaptures(orgKey)) {
     if (c.status !== "needs_review" && c.status !== "ready") continue;
-    const next = applyMatches(c.draft, md, await store.getProfile(orgKey, c.issuerKey, c.draft.supplierTrn), addDays);
+    const next = await linkOrders(orgKey, applyMatches(c.draft, md, await store.getProfile(orgKey, c.issuerKey, c.draft.supplierTrn), addDays), target, deps);
     const status = statusFor(next, true);
     if (JSON.stringify(next) !== JSON.stringify(c.draft) || status !== c.status) {
       await store.saveDraft(orgKey, c.id, next, status);
@@ -354,6 +503,7 @@ export async function approveMany(orgKey: string, ids: string[], userId: string)
     const v = views.find((x) => x.id === id);
     if (!v) out.push({ id, ok: false, message: "Not found." });
     else if (v.status === "approved") out.push({ id, ok: true });
+    else if (v.status === "failed") out.push({ id, ok: false, message: `${v.fileName} couldn't be read. Retry it, or open it and type it in.` });
     else if (v.status !== "ready" && v.status !== "needs_review") out.push({ id, ok: false, message: `${v.draft.invoiceNumber || v.fileName} was already sent.` });
     else if (v.review.blockers.length) out.push({ id, ok: false, message: `${v.draft.invoiceNumber || v.fileName}: ${v.review.blockers[0]}` });
     else {
@@ -398,6 +548,10 @@ export async function pushMany(orgKey: string, items: { id: string; hash: string
       out.push({ id, ok: false, message: `${name}: ${v.review.blockers[0]}` });
       continue;
     }
+    if (v.draft.postTo === "order" && !w.prepareOrderInvoice) {
+      out.push({ id, ok: false, message: `${name}: this connection can't invoice against purchase orders. Post it as a standalone invoice.` });
+      continue;
+    }
     if (!(await store.claimForPush(orgKey, id))) {
       out.push({ id, ok: false, message: `${name} is already being sent.` });
       continue;
@@ -407,7 +561,37 @@ export async function pushMany(orgKey: string, items: { id: string; hash: string
       const existing = await w.findExisting(credentials, d.vendorNo, d.invoiceNumber, use);
       if (existing.length) {
         await store.releasePush(orgKey, id);
-        out.push({ id, ok: false, message: `${name} is already in Business Central as ${existing.map((e) => `${e.number} (${e.status})`).join(", ")}. Nothing was sent.` });
+        const message = `${name} is already in Business Central as ${existing.map((e) => `${e.number} (${e.status})`).join(", ")}. Nothing was sent.`;
+        await store.recordFailure(orgKey, id, "push", message);
+        out.push({ id, ok: false, message });
+        continue;
+      }
+      if (d.postTo === "order") {
+        const waiting = await pendingOnSameLines(orgKey, v, w, credentials, use);
+        if (waiting) {
+          await store.releasePush(orgKey, id);
+          const message = `${name}: ${waiting}`;
+          await store.recordFailure(orgKey, id, "push", message);
+          out.push({ id, ok: false, message });
+          continue;
+        }
+        const done = await w.prepareOrderInvoice!(credentials, orderPlan(d), use);
+        await store.markPushed(orgKey, id, {
+          connectionId: target.connectionId,
+          company: done.company,
+          id: "",
+          number: done.orders.join(", "),
+          erpTotal: null,
+          mode: "order",
+          pushedBy: userId,
+          pushedAt: new Date().toISOString(),
+        });
+        await learn(orgKey, v);
+        out.push({
+          id,
+          ok: true,
+          message: `${name}: ${done.orders.join(", ")} ${done.orders.length === 1 ? "is" : "are"} set up to invoice these lines in ${done.company}. In Business Central, open the order, enter Vendor Invoice No. ${d.invoiceNumber} and post Invoice.`,
+        });
         continue;
       }
       const created = await w.createDraft(
@@ -442,11 +626,36 @@ export async function pushMany(orgKey: string, items: { id: string; hash: string
       });
     } catch (error) {
       await store.releasePush(orgKey, id);
-      out.push({ id, ok: false, message: `${name}: ${error instanceof ConnectorError ? error.message : "Business Central didn't answer. Nothing was sent; try again."}` });
+      const message = `${name}: ${error instanceof ConnectorError ? error.message : "Business Central didn't answer. Nothing was sent; try again."}`;
+      await store.recordFailure(orgKey, id, "push", message);
+      out.push({ id, ok: false, message });
       if (!(error instanceof ConnectorError)) console.error("purchase invoice push failed", error);
     }
   }
   return out;
+}
+
+/**
+ * Another invoice from this workspace already set up on the same order lines and not posted yet
+ * (D-88): the order line's open quantity hasn't moved since that push, so a second push would
+ * overwrite its quantity to invoice. Returns why, or undefined.
+ */
+async function pendingOnSameLines(
+  orgKey: string,
+  v: Capture,
+  w: NonNullable<Awaited<ReturnType<typeof writer>>["w"]>,
+  credentials: unknown,
+  deps: ConnectorDeps,
+): Promise<string | undefined> {
+  const mine = new Set(v.draft.lines.flatMap((l) => (l.po ? [l.po.lineId] : [])));
+  const others = (await store.listCaptures(orgKey)).filter((o) => o.id !== v.id && o.status === "pushed" && o.erp?.mode === "order" && o.draft.lines.some((l) => l.po && mine.has(l.po.lineId)));
+  if (!others.length || !w.openOrderLines) return undefined;
+  const open = new Map((await w.openOrderLines(credentials as never, { vendorNumber: v.draft.vendorNo }, deps)).map((o) => [o.lineId, o.received - o.invoiced]));
+  for (const o of others) {
+    const still = o.draft.lines.find((l) => l.po && mine.has(l.po.lineId) && (open.get(l.po.lineId) ?? 0) >= l.po.open - 1e-9);
+    if (still) return `${still.po!.orderNumber} is already set up to invoice ${o.draft.invoiceNumber || o.fileName}, which isn't posted yet. Post that invoice in Business Central first, then push this one.`;
+  }
+  return undefined;
 }
 
 /** Reviewed choices become supplier memory (D-61). */

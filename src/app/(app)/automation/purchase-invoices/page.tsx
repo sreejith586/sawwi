@@ -36,6 +36,7 @@ async function Workspace() {
     ai: v.source.ai?.used === "ai",
     layout: v.source.layout ?? null,
     erpNumber: v.erp?.number ?? null,
+    failure: v.failure ? { stage: v.failure.stage, message: v.failure.message, attempts: v.failure.attempts } : null,
     createdAt: v.createdAt,
   }));
   const demo = isDemoOrg(orgKey);
@@ -62,8 +63,10 @@ export default function PurchaseInvoicesPage() {
       </Link>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">Purchase invoices</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Upload supplier invoices as PDFs, including scans. Sawwi reads each one into a draft. Review the drafts, approve them one at a time or in bulk, then
-        download them as CSV or push them to Business Central as unposted purchase invoices.
+        Upload supplier invoices as PDFs, including scans. Sawwi reads each one into a draft and matches its lines to open purchase orders and their goods
+        receipts (GRNs). Review the drafts, approve them one at a time or in bulk, then download them as Excel or CSV, or push them to Business Central:
+        against the purchase order where the goods were received, otherwise as an unposted purchase invoice. Invoices Sawwi can&apos;t read wait under
+        Failed for a retry or to be typed in.
       </p>
       <Suspense fallback={<p className="mt-6 text-muted">Loading invoices…</p>}>
         <Workspace />

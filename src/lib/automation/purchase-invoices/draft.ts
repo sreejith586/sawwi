@@ -20,7 +20,25 @@ export type DraftLine = {
   erpType: LineType | null;
   erpNo: string;
   matchedBy?: MatchedBy;
+  /** The open purchase order line, with goods received and not yet invoiced, this line invoices (D-88). */
+  po?: PoLink | null;
 };
+
+/** A purchase order line in the ERP and the receipts (GRNs) that brought its goods in (D-88). */
+export type PoLink = {
+  orderNumber: string;
+  orderId: string;
+  lineId: string;
+  /** Posted receipt (GRN) numbers for this order and item. */
+  receipts: string[];
+  /** Received and not yet invoiced, when it was matched. */
+  open: number;
+  /** The order line's direct unit cost. */
+  poPrice: number;
+};
+
+/** "invoice": a standalone unposted purchase invoice (D-64). "order": against the purchase order and its receipts (D-88). */
+export type PostTo = "invoice" | "order";
 
 export type Draft = {
   supplierName: string;
@@ -38,6 +56,13 @@ export type Draft = {
   vendorName: string;
   vendorMatchedBy?: MatchedBy;
   lines: DraftLine[];
+  /** Unset: a standalone invoice, Sawwi's default. "order" is set by PO matching or the user; "invoice" only by the user (D-88). */
+  postTo?: PostTo;
+  /**
+   * The user confirmed the PO lines Sawwi suggested or they picked (D-88). Set by Sawwi only when
+   * the invoice prints the PO number and every line agrees with it; any change to a link clears it.
+   */
+  poConfirmed?: boolean;
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -171,8 +196,51 @@ export function reviewDraft(d: Draft, opts: { erp: boolean }): Review {
     if (!d.vendorNo) blockers.push("Pick the Business Central vendor for this supplier.");
     const uncoded = d.lines.findIndex((l) => !l.erpType || !l.erpNo);
     if (uncoded >= 0) blockers.push(`Line ${uncoded + 1} ("${d.lines[uncoded].description || d.lines[uncoded].sku || "line"}") needs an item or G/L account.`);
+    orderChecks(d, blockers, warnings);
   }
   return { checks, blockers, warnings };
+}
+
+/** Price differences up to this share of the PO price are rounding, not a variance. */
+export const PRICE_TOLERANCE = 0.005;
+
+/** Three-way match (D-88): each line against its PO line and the goods received on it. */
+function orderChecks(d: Draft, blockers: string[], warnings: string[]) {
+  const name = (i: number) => `Line ${i + 1} ("${d.lines[i].description || d.lines[i].sku || "line"}")`;
+  if (d.postTo === "order") {
+    if (!d.poConfirmed && d.lines.some((l) => l.po)) {
+      blockers.push(
+        d.poNumber
+          ? "Confirm the purchase order match against the order lines shown."
+          : "The invoice prints no PO number: Sawwi suggested the open purchase order lines shown. Check them and confirm the match.",
+      );
+    }
+    d.lines.forEach((l, i) => {
+      if (!l.po) return blockers.push(`${name(i)} isn't on an open purchase order of this vendor with goods received and not invoiced. Post it as a standalone invoice, or receive it in Business Central first.`);
+      const grn = l.po.receipts.length ? ` (GRN ${l.po.receipts.join(", ")})` : "";
+      if (l.qty !== null && l.qty > l.po.open + 1e-9) blockers.push(`${name(i)}: ${l.qty} invoiced, but only ${l.po.open} received and not yet invoiced on ${l.po.orderNumber}${grn}.`);
+      if (l.unitPrice !== null && l.po.poPrice > 0 && Math.abs(l.unitPrice - l.po.poPrice) > l.po.poPrice * PRICE_TOLERANCE) {
+        const pct = ((l.unitPrice - l.po.poPrice) / l.po.poPrice) * 100;
+        warnings.push(`${name(i)}: price ${l.unitPrice} against ${l.po.poPrice} on ${l.po.orderNumber} (${pct > 0 ? "+" : ""}${pct.toFixed(1)}%). The invoice price goes on the order line.`);
+      }
+    });
+    const seen = new Map<string, number>();
+    d.lines.forEach((l, i) => {
+      if (!l.po) return;
+      if (seen.has(l.po.lineId)) blockers.push(`${name(i)} and line ${seen.get(l.po.lineId)! + 1} invoice the same order line on ${l.po.orderNumber}. Combine them into one line.`);
+      else seen.set(l.po.lineId, i);
+    });
+  } else {
+    // A standalone invoice for goods already received on a PO would receive them a second time.
+    const onPo = d.lines.flatMap((l, i) => (l.po ? [i] : []));
+    if (onPo.length) {
+      const l = d.lines[onPo[0]];
+      // Only Sawwi's own guess blocks; a user who chose "standalone invoice" is warned instead.
+      (d.postTo === "invoice" ? warnings : blockers).push(
+        `${onPo.length === 1 ? name(onPo[0]) : `${onPo.length} lines, starting with ${name(onPo[0]).toLowerCase()},`} ${onPo.length === 1 ? "was" : "were"} received on ${l.po!.orderNumber}${l.po!.receipts.length ? ` (GRN ${l.po!.receipts.join(", ")})` : ""}. Post against the purchase order, or a standalone invoice would receive the goods again.`,
+      );
+    }
+  }
 }
 
 /** Cleans what came from the browser: known keys only, numbers as numbers, ISO dates. */
@@ -198,6 +266,8 @@ export function sanitizeDraft(input: unknown): Draft | undefined {
     vendorNo: str(o.vendorNo, 20),
     vendorName: str(o.vendorName),
     vendorMatchedBy: by(o.vendorMatchedBy),
+    postTo: o.postTo === "order" ? "order" : o.postTo === "invoice" ? "invoice" : undefined,
+    poConfirmed: o.poConfirmed === true ? true : undefined,
     lines: o.lines.map((raw) => {
       const l = (raw ?? {}) as Record<string, unknown>;
       const erpType = l.erpType === "item" || l.erpType === "account" ? l.erpType : null;
@@ -212,9 +282,21 @@ export function sanitizeDraft(input: unknown): Draft | undefined {
         erpType,
         erpNo: erpType ? str(l.erpNo, 20) : "",
         matchedBy: by(l.matchedBy),
+        po: sanitizePo(l.po),
       };
     }),
   };
+}
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sanitizePo(v: unknown): PoLink | null {
+  if (!v || typeof v !== "object") return null;
+  const p = v as Record<string, unknown>;
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : NaN);
+  if (typeof p.orderNumber !== "string" || !GUID.test(String(p.orderId)) || !GUID.test(String(p.lineId)) || Number.isNaN(n(p.open)) || Number.isNaN(n(p.poPrice))) return null;
+  const receipts = Array.isArray(p.receipts) ? p.receipts.filter((r): r is string => typeof r === "string").map((r) => r.slice(0, 20)).slice(0, 20) : [];
+  return { orderNumber: p.orderNumber.slice(0, 20), orderId: String(p.orderId), lineId: String(p.lineId), receipts, open: n(p.open), poPrice: n(p.poPrice) };
 }
 
 // ─── CSV (D-65) ────────────────────────────────────────────────────────────
@@ -241,6 +323,11 @@ export const CSV_HEADERS = [
   "Invoice amount excl. VAT",
   "Invoice VAT",
   "Invoice amount incl. VAT",
+  "Post to",
+  "PO no. (matched)",
+  "GRN no.",
+  "PO unit cost",
+  "Received not invoiced",
 ];
 
 const plain = (n: number | null) => (n === null ? "" : String(n));
@@ -268,6 +355,11 @@ export function csvRows(d: Draft): string[][] {
     plain(d.subtotal),
     plain(d.vat),
     plain(d.total),
+    d.postTo === "order" ? "Purchase order" : "Purchase invoice",
+    l.po?.orderNumber ?? "",
+    l.po?.receipts.join(" ") ?? "",
+    plain(l.po?.poPrice ?? null),
+    plain(l.po?.open ?? null),
   ]);
 }
 

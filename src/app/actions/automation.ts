@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { ConnectorError } from "@/lib/connectors/types";
+import { ConnectorError, type ErpOpenOrderLine } from "@/lib/connectors/types";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { getProfile } from "@/lib/profile/session";
 import { canRun, getCurrentSession, runBlocker } from "@/lib/saas/session";
@@ -129,6 +129,30 @@ export async function rereadWithAiAction(id: string): Promise<Partial<Fail>> {
   } catch (error) {
     return { error: message(error) };
   }
+}
+
+/** Purchase order lines for the review page's side-by-side match (D-88): the vendor's open ones, or one PO by number. */
+export async function orderLinesAction(id: string, orderNumber?: string): Promise<{ lines?: ErpOpenOrderLine[] } & Partial<Fail>> {
+  const session = await getCurrentSession();
+  if (!session) return { error: "Log in again." };
+  try {
+    if (orderNumber !== undefined) return { lines: await service.pullOrder(session.org.key, id, String(orderNumber)) };
+    const view = await service.getView(session.org.key, id);
+    if (!view) return { error: "That invoice no longer exists." };
+    return { lines: await service.orderLinesFor(session.org.key, view.draft) };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+/** Reads failed invoices again (D-86): new work, so it goes through runBlocker() like a capture. */
+export async function retryReadAction(ids: string[]): Promise<{ results?: service.BulkResult[] } & Partial<Fail>> {
+  const who = await editor();
+  if ("error" in who) return who;
+  if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) return { error: "Pick invoices to retry." };
+  const results = await service.retryMany(who.orgKey, ids, { countries: (await getProfile())?.countries });
+  refresh();
+  return { results };
 }
 
 export async function discardAction(id: string): Promise<Partial<Fail>> {

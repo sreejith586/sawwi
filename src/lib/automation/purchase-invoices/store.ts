@@ -7,10 +7,14 @@ import type { MasterData, SupplierProfile } from "./matching";
 // All SQL for purchase invoice capture (D-61–D-66). Every query is scoped by org key.
 
 /**
+ * failed: Sawwi couldn't read the PDF; it waits for a retry or for the user to type it in (D-86).
  * needs_review: something blocks approval; ready: nothing blocks, not approved yet;
  * approved: the user signed off on this exact content (D-66); pushing / pushed: sent to the ERP.
  */
-export type CaptureStatus = "needs_review" | "ready" | "approved" | "pushing" | "pushed";
+export type CaptureStatus = "failed" | "needs_review" | "ready" | "approved" | "pushing" | "pushed";
+
+/** The last thing that went wrong with an invoice, for the Failed tab (D-86). Cleared when it reads or pushes. */
+export type Failure = { stage: "read" | "push"; message: string; at: string; attempts: number };
 
 /** How the PDF was read, kept for the review screen. */
 export type CaptureSource = {
@@ -42,8 +46,10 @@ export type ErpRecord = {
   company: string;
   id: string;
   number: string;
-  /** Business Central's own total incl. VAT after it worked out VAT. */
+  /** Business Central's own total incl. VAT after it worked out VAT. Null for a push against purchase orders. */
   erpTotal: number | null;
+  /** "order": the purchase orders were set up to be invoiced (D-88); unset: an unposted purchase invoice. */
+  mode?: "invoice" | "order";
   pushedBy: string;
   pushedAt: string;
 };
@@ -62,6 +68,7 @@ export type Capture = {
   approvedBy: string | null;
   approvedAt: string | null;
   erp: ErpRecord | null;
+  failure: Failure | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -85,18 +92,21 @@ const toCapture = (r: Row): Capture => ({
   approvedBy: r.approved_by === null ? null : String(r.approved_by),
   approvedAt: r.approved_at === null ? null : String(r.approved_at),
   erp: json<ErpRecord>(r.erp_json),
+  failure: json<Failure>(r.failure_json ?? null),
   createdBy: r.created_by === null ? null : String(r.created_by),
   createdAt: String(r.created_at),
   updatedAt: String(r.updated_at),
 });
 
-export async function insertCapture(c: Pick<Capture, "orgKey" | "fileName" | "fileHash" | "storedPath" | "issuerKey" | "status" | "draft" | "source" | "createdBy"> & { id?: string }): Promise<Capture> {
+export async function insertCapture(
+  c: Pick<Capture, "orgKey" | "fileName" | "fileHash" | "storedPath" | "issuerKey" | "status" | "draft" | "source" | "createdBy"> & { id?: string; failure?: Failure },
+): Promise<Capture> {
   const id = c.id ?? randomUUID();
   const t = now();
   await getDb().run(
-    `INSERT INTO purchase_invoices (id, org_key, file_name, file_hash, stored_path, issuer_key, status, draft_json, source_json, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    id, c.orgKey, c.fileName, c.fileHash, c.storedPath, c.issuerKey, c.status, JSON.stringify(c.draft), JSON.stringify(c.source), c.createdBy, t, t,
+    `INSERT INTO purchase_invoices (id, org_key, file_name, file_hash, stored_path, issuer_key, status, draft_json, source_json, failure_json, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id, c.orgKey, c.fileName, c.fileHash, c.storedPath, c.issuerKey, c.status, JSON.stringify(c.draft), JSON.stringify(c.source), c.failure ? JSON.stringify(c.failure) : null, c.createdBy, t, t,
   );
   return (await getCapture(c.orgKey, id))!;
 }
@@ -118,21 +128,28 @@ export async function listCaptures(orgKey: string): Promise<Capture[]> {
 /** Saves an edited draft. Approval is for content, so any save clears it (D-66). Not once pushed. */
 export async function saveDraft(orgKey: string, id: string, draft: Draft, status: CaptureStatus): Promise<boolean> {
   const r = await getDb().run(
-    `UPDATE purchase_invoices SET draft_json = ?, status = ?, approved_hash = NULL, approved_by = NULL, approved_at = NULL, updated_at = ?
+    `UPDATE purchase_invoices SET draft_json = ?, status = ?, approved_hash = NULL, approved_by = NULL, approved_at = NULL, failure_json = NULL, updated_at = ?
      WHERE org_key = ? AND id = ? AND status NOT IN ('pushing', 'pushed')`,
     JSON.stringify(draft), status, now(), orgKey, id,
   );
   return r.changes === 1;
 }
 
-/** Replaces the draft and how it was read (a re-read). Clears any approval. Not once pushed. */
-export async function replaceReading(orgKey: string, id: string, draft: Draft, source: CaptureSource, status: CaptureStatus): Promise<boolean> {
+/** Replaces the draft and how it was read (a re-read). Clears any approval and failure. Not once pushed. */
+export async function replaceReading(orgKey: string, id: string, draft: Draft, source: CaptureSource, status: CaptureStatus, issuerKey?: string): Promise<boolean> {
   const r = await getDb().run(
-    `UPDATE purchase_invoices SET draft_json = ?, source_json = ?, status = ?, approved_hash = NULL, approved_by = NULL, approved_at = NULL, updated_at = ?
+    `UPDATE purchase_invoices SET draft_json = ?, source_json = ?, status = ?, issuer_key = COALESCE(?, issuer_key), approved_hash = NULL, approved_by = NULL, approved_at = NULL, failure_json = NULL, updated_at = ?
      WHERE org_key = ? AND id = ? AND status NOT IN ('pushing', 'pushed')`,
-    JSON.stringify(draft), JSON.stringify(source), status, now(), orgKey, id,
+    JSON.stringify(draft), JSON.stringify(source), status, issuerKey ?? null, now(), orgKey, id,
   );
   return r.changes === 1;
+}
+
+/** Records what went wrong (D-86): a read keeps status "failed"; a push leaves the invoice approved, to retry. */
+export async function recordFailure(orgKey: string, id: string, stage: Failure["stage"], message: string): Promise<void> {
+  const prev = (await getCapture(orgKey, id))?.failure;
+  const failure: Failure = { stage, message, at: now(), attempts: (prev?.stage === stage ? prev.attempts : 0) + 1 };
+  await getDb().run("UPDATE purchase_invoices SET failure_json = ?, updated_at = ? WHERE org_key = ? AND id = ?", JSON.stringify(failure), now(), orgKey, id);
 }
 
 export async function setStatus(orgKey: string, id: string, status: CaptureStatus) {
@@ -169,7 +186,7 @@ export async function releasePush(orgKey: string, id: string) {
 }
 
 export async function markPushed(orgKey: string, id: string, erp: ErpRecord) {
-  await getDb().run("UPDATE purchase_invoices SET status = 'pushed', erp_json = ?, updated_at = ? WHERE org_key = ? AND id = ?", JSON.stringify(erp), now(), orgKey, id);
+  await getDb().run("UPDATE purchase_invoices SET status = 'pushed', erp_json = ?, failure_json = NULL, updated_at = ? WHERE org_key = ? AND id = ?", JSON.stringify(erp), now(), orgKey, id);
 }
 
 export async function deleteCapture(orgKey: string, id: string): Promise<Capture | undefined> {

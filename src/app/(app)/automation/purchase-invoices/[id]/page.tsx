@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { currentTarget, getView, masterData } from "@/lib/automation/purchase-invoices/service";
+import { currentTarget, orderLinesFor, getView, masterData } from "@/lib/automation/purchase-invoices/service";
 import { getMasterData } from "@/lib/automation/purchase-invoices/store";
 import { llmAvailable } from "@/lib/mapping/llm";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
@@ -25,8 +25,11 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
   const target = await currentTarget(orgKey);
   // Cached for an hour (D-62); if Business Central can't be reached, the last copy will do.
   const md = target ? ((await masterData(orgKey, target.connectionId).catch(() => undefined)) ?? (await getMasterData(orgKey, target.connectionId))) : undefined;
+  // Open purchase order lines for the side-by-side PO match (D-88). Null: the target can't read orders.
+  const orderLines = target && view.status !== "failed" ? await orderLinesFor(orgKey, view.draft).catch(() => []) : null;
   return (
     <Review
+      orderLines={orderLines}
       key={view.updatedAt}
       view={{
         id: view.id,
@@ -37,6 +40,7 @@ async function Workspace({ params }: { params: Promise<{ id: string }> }) {
         duplicates: view.duplicates,
         source: view.source,
         erp: view.erp,
+        failure: view.failure,
         approvedAt: view.approvedAt,
         serverBlockers: view.review.blockers.filter((b) => b.includes("already pushed")),
         serverWarnings: view.review.warnings.filter((w) => /duplicate|same supplier and invoice/i.test(w)),

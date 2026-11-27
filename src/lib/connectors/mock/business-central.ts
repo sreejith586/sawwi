@@ -11,7 +11,8 @@ import { DEMO_STORE_COMPANY, DEMO_STORE_COMPANY_INFORMATION, DEMO_STORE_DATA } f
 // document collections with `$filter=<date> ge X and <date> le Y` or `<field> eq '<text>'`
 // (joined with `and`), `$expand=<lines>` and server-driven paging through @odata.nextLink.
 // Writes (D-64): draft purchase invoices and their lines can be created, read back by id and
-// deleted. They live in memory (`writes`) and never change the invented books themselves.
+// deleted. Purchase order lines' quantity to invoice, quantity to receive and direct unit cost
+// can be changed (D-88). Writes live in memory (`writes`) and never change the invented books themselves.
 
 /** Made-up sign-in values for the demo tenant. They work only against this mock. */
 export const DEMO_BC_CREDENTIALS = {
@@ -107,7 +108,7 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     }
 
     // Business Central API v2.0.
-    if (!["GET", "POST", "DELETE"].includes(init.method)) return reply(odataError(405, "BadRequest_MethodNotAllowed", "Method not allowed."));
+    if (!["GET", "POST", "PATCH", "DELETE"].includes(init.method)) return reply(odataError(405, "BadRequest_MethodNotAllowed", "Method not allowed."));
     if (init.headers.Authorization !== `Bearer ${TOKEN}`) return reply(odataError(401, "Authentication_InvalidCredentials", "The credentials provided are incorrect."));
     const u = new URL(url);
     const m = u.pathname.match(/^\/v2\.0\/([^/]+)\/([^/]+)\/api\/v2\.0\/(.*)$/);
@@ -174,6 +175,42 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
       return reply(odataError(405, "BadRequest_MethodNotAllowed", "Not supported by the mock."));
     }
 
+    // Purchase order lines (D-88): read an order's lines, and change what to receive and invoice.
+    const poOverlay = writes.get(`${companyId}/purchaseOrderLines`) ?? [];
+    writes.set(`${companyId}/purchaseOrderLines`, poOverlay);
+    const withOverlay = (l: Doc) => ({ ...l, ...(poOverlay.find((o) => o.id === l.id) ?? {}) });
+    if (entity === "purchaseOrders" && docId) {
+      const order = (books.data.purchaseOrders ?? []).find((o) => o.id === docId);
+      if (!order) return reply(odataError(404, "BadRequest_NotFound", "The purchase order does not exist."));
+      const orderLines = ((order.purchaseOrderLines as Doc[]) ?? []).map(withOverlay);
+      if (!sub && init.method === "GET") return reply({ status: 200, body: Object.fromEntries(Object.entries(order).filter(([k]) => k !== "purchaseOrderLines")) });
+      if (sub !== "purchaseOrderLines") return reply(odataError(404, "BadRequest_NotFound", "No HTTP resource was found."));
+      if (init.method === "GET" && !subId) return reply({ status: 200, body: { value: orderLines } });
+      if (init.method === "PATCH" && subId) {
+        if (opts.readOnly) return reply(odataError(403, "Authorization_InsufficientPermissions", "You do not have the following permissions on TableData Purchase Line: Modify."));
+        if (init.headers["If-Match"] === undefined) return reply(odataError(400, "BadRequest", "If-Match header is required."));
+        const line = orderLines.find((l) => l.id === subId);
+        if (!line) return reply(odataError(404, "BadRequest_NotFound", "The purchase order line does not exist."));
+        let body: Doc;
+        try {
+          body = JSON.parse(init.body ?? "{}") as Doc;
+        } catch {
+          return reply(odataError(400, "BadRequest", "Invalid JSON."));
+        }
+        const patch = Object.fromEntries(Object.entries(body).filter(([k]) => ["invoiceQuantity", "receiveQuantity", "directUnitCost"].includes(k)));
+        if (Object.keys(patch).length !== Object.keys(body).length) return reply(odataError(400, "BadRequest", "The mock only changes invoiceQuantity, receiveQuantity and directUnitCost."));
+        const next = { ...line, ...patch };
+        const open = Number(next.receivedQuantity ?? 0) - Number(next.invoicedQuantity ?? 0) + Number(next.receiveQuantity ?? 0);
+        if (Number(next.invoiceQuantity ?? 0) > open + 1e-9) return reply(odataError(400, "Application_FieldValidationException", `Qty. to Invoice cannot be more than ${open}.`));
+        const i = poOverlay.findIndex((o) => o.id === subId);
+        const merged = { ...(i >= 0 ? poOverlay[i] : { id: subId }), ...patch };
+        if (i >= 0) poOverlay[i] = merged;
+        else poOverlay.push(merged);
+        return reply({ status: 200, body: withOverlay(line) });
+      }
+      return reply(odataError(405, "BadRequest_MethodNotAllowed", "Not supported by the mock."));
+    }
+
     // Writes: draft purchase invoices only (D-64).
     if (init.method !== "GET" || docId) {
       if (entity !== "purchaseInvoices") return reply(odataError(405, "BadRequest_MethodNotAllowed", "The mock only writes purchase invoices."));
@@ -234,6 +271,7 @@ export function mockBusinessCentral(opts: MockBusinessCentralOptions = {}): Fetc
     }
     const expand = u.searchParams.get("$expand");
     if (expand && expand !== LINES[entity]) return reply(odataError(400, "BadRequest", `Could not find a property named '${expand}'.`));
+    if (entity === "purchaseOrders") rows = rows.map((d) => ({ ...d, purchaseOrderLines: ((d.purchaseOrderLines as Doc[]) ?? []).map(withOverlay) }));
     const shaped = rows.map((d) => (expand ? d : Object.fromEntries(Object.entries(d).filter(([k]) => k !== LINES[entity]))));
 
     const skip = Number(u.searchParams.get("$skiptoken") ?? 0);

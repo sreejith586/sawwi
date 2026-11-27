@@ -917,3 +917,63 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Each function grows by about 25 MB; a route's traced `node_modules` is about 98 MB, under Vercel's 250 MB limit.
   - A tesseract.js upgrade that renames core files or moves its dependencies needs these globs checked. The sandbox check is in the PR.
 
+### D-86: Invoices Sawwi can't read, or can't push, wait under Failed for a person
+- **Context:** the user asked (27 Nov 2026) for a human-in-the-loop screen to manage failed invoices and retry them, while building supplier-invoice capture for a client whose suppliers send scanned Arabic tax invoices. Until now an unreadable PDF was only an error line after the upload and was gone: nobody could come back to it.
+- **Decision:**
+  - **A read that fails is kept**, with its PDF, as status `failed`, an empty draft named after the file, and a recorded failure (`failure_json`, migration 9: stage, message, time, attempts). Only bad input (not a PDF, over 10 MB) is still refused outright.
+  - **Push failures are recorded too**, on the approved invoice: Business Central errors, no answer, "already in Business Central", and a PO already set up for another unposted invoice. The invoice stays approved, so "Retry push" needs only the usual confirmation.
+  - **Failed tab** in the queue: unread invoices, and approved ones whose last push failed. Each shows the reason and the number of tries, with **Retry** (rules, then the AI where it's on, D-69), **Retry N failed** for a selection, and **Type in**.
+  - **Type in** opens the review page: the scan beside an empty form. Saving what the person typed moves it into the review queue like any other draft.
+  - Uploading the same file again retries it, rather than opening the failed draft.
+  - A failure is cleared when the invoice reads, is saved by hand or is pushed.
+  - When AI reading is off, the reason says only the text reader tried.
+- **Consequences:** nothing uploaded is lost. A failed invoice can't be approved. Re-reads use the kept PDF, so the user doesn't upload again.
+
+### D-87: Excel download of purchase invoices
+- **Context:** the user wants the extracted invoices as an Excel sheet as well as pushed to the ERP.
+- **Decision:** "Download Excel" next to CSV (selected, approved, or one invoice) gives a workbook with two sheets:
+  - **Invoices:** one row per invoice with file, status, supplier, TRN, vendor, dates, PO printed and matched, GRNs, line count, quantity, net, VAT, total, totals check, how it was read, ERP document and what's still to fix.
+  - **Lines:** the CSV's columns (D-65) plus post-to, matched PO, GRN, PO unit cost and quantity received but not invoiced.
+  Amounts are numbers and dates are dates, so it sums, filters and imports as it is. The CSV gains the same five PO columns at the end, so existing column positions don't move.
+- **Consequences:** `lib/excel/sheet.ts` gains a multi-sheet `workbook()`; `tableWorkbook` is now a one-sheet call of it.
+
+### D-88: Three-way match: supplier invoices against Business Central purchase orders and GRNs, suggested and confirmed
+- **Context:** the user wants invoices pushed against the PO and GRN in Dynamics, not as standalone invoices. Their suppliers' invoices print **no PO number**, so Sawwi must find the PO, show it beside the invoice and let the user confirm it. Where an invoice does print a PO, that PO is pulled and shown side by side. A "Link PO" box lets the user type a PO number and pull it from Business Central on demand.
+- **What Business Central's standard API v2.0 allows** (checked against Microsoft's reference, Nov 2026):
+  - **Reads:**
+    - `purchaseOrders` with `purchaseOrderLines`: received, invoiced, quantity to invoice and quantity to receive per line;
+    - `purchaseReceipts` (GRNs) with `orderNumber` and lines.
+  - **Writes:**
+    - `invoiceQuantity`, `receiveQuantity` and `directUnitCost` are editable on an order line;
+    - `purchaseOrder` has no Vendor Invoice No.;
+    - a purchase invoice can't be linked to receipt lines ("Get Receipt Lines" isn't in the API).
+  - A standalone purchase invoice for goods already received on a PO would receive them a second time.
+- **Decision:**
+  - **Match** (`orders.ts`, pure and browser-safe). Each item line is matched to an order line of the vendor for the same item, with goods received and not yet invoiced. Order of preference: the line whose open quantity equals the invoiced quantity, then the oldest that covers it, then the one with the most open. A printed PO number narrows the search to that order. Exact item numbers only, as in D-62. These suppliers print barcodes, which reach the item through its GTIN.
+  - **Suggest and confirm:** when every line matches, the draft posts "against the purchase order".
+    - Sawwi's suggestion must be confirmed by a person (`poConfirmed`), except where the invoice prints the PO number and every line agrees with it (quantity within what's open, price within 0.5%).
+    - Picking another order line, or changing a quantity, price or item, withdraws the confirmation.
+    - A confirmed match isn't re-matched by "Refresh from Business Central".
+  - **Side by side on the review page:** each invoice line (item, quantity, price) beside its PO line and GRN (ordered, received and invoiced quantities, open quantity, PO price) and a match flag.
+    - Each line has a picker of the other open order lines for that item.
+    - **Link PO** pulls one order by number. Another vendor's order is refused.
+    - **Search all open POs again** re-reads the vendor's open orders.
+  - **Checks:**
+    - blocked: more invoiced than received and not invoiced; two invoice lines on one order line; a line with no order line when posting against the PO; a suggested match not yet confirmed;
+    - blocked: a standalone invoice for goods Sawwi found received on a PO. If the user explicitly chooses "standalone", this is a warning instead;
+    - a price difference over 0.5% is a warning, and the invoice price goes on the order line.
+  - **Push against the PO** (`Connector.purchaseInvoices.prepareOrderInvoice`). For each order, Sawwi:
+    - checks the order belongs to the vendor and each line is still the expected item with enough received and not invoiced;
+    - sets the matched lines' quantity to invoice and direct unit cost, and zero to receive and invoice on the order's other lines;
+    - puts back what it changed if any write fails.
+    It never posts. The user then opens the order in Business Central, enters the Vendor Invoice No. (shown by Sawwi) and posts Invoice.
+  - **Duplicates:** before the push, the D-63 check (same vendor invoice number in Business Central) still runs. Sawwi also refuses when another invoice from the workspace was already set up on the same order line and isn't posted yet.
+  - **Mock Business Central:** reads an order's lines and changes those three fields in memory, with Business Central's "Qty. to Invoice cannot be more than" check. New demo sample GLS-2360 invoices 300 LED panels against PO-7002 (GRN PRC-8002). GLS-2307 and GLS-2342, which print no PO, now show the suggested PO-7002 match.
+- **Rejected alternatives:**
+  - **A standalone purchase invoice with the PO number in a text field:** it would receive the goods again and leave the PO open.
+  - **`receiveAndInvoice` on the order:** it posts, and Sawwi never posts (D-64). The order also has no Vendor Invoice No. through the API.
+  - **Fuzzy matching on description or price:** a wrong PO line costs more than a click, as for items (D-62).
+- **Consequences:**
+  - Posting still needs one step in Business Central: the Vendor Invoice No. and Post.
+  - A small AL extension (an API page exposing Vendor Invoice No. on the order, or "Get Receipt Lines" onto a purchase invoice) would remove that step; it's an open question for the client's BC partner.
+  - The app's permission set needs D365 PURCH DOC, EDIT, as for D-64.

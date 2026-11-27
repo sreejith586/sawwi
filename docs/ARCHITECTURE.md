@@ -360,7 +360,7 @@ My recommendation is to build **Shopify or Odoo first**. Both have free test acc
 - (c) a separate worker process.
 Any of these also enables the emailed reminders that D-26 deferred.
 
-## 10. Automation (Phase 9, D-60–D-77)
+## 10. Automation (Phase 9, D-60–D-88)
 
 Reconciliation checks work after it's done; Automation does the work: a document in, a reviewed ERP entry out. The section sits beside Reconciliation in the sidebar (Reconcile / Automate groups). `/automation` lists the use cases from `src/lib/automation/use-cases.ts`: the live one, then the backlog ranked by value and marked "Coming soon" (D-60).
 
@@ -374,11 +374,20 @@ Reconciliation checks work after it's done; Automation does the work: a document
 4. **Out.**
    - CSV (`/api/automation/purchase-invoices/export`, D-65): one row per line, header repeated.
    - Push (D-64): through `Connector.purchaseInvoices`. Only Business Central has it (`bcPurchaseInvoices`: `masterData`, `findExisting`, `createDraft`). The push confirmation names the company and every invoice, and sends each draft's hash. `pushMany` re-checks approval, hash and blockers, claims the row (`pushing`) and asks BC for the same vendor invoice number, then creates the header and lines, reads BC's total back, and records the BC number. If a line fails, it deletes its own half-made draft. Live calls go through `liveDeps` (`assertPublicUrl`) and the fixed API host. Reviewed vendor, item and terms choices become supplier memory (`supplier_profiles`) on push or export.
+   - **Against purchase orders** (D-88, `orders.ts`): once the vendor is known, `linkOrders` reads the vendor's order lines with goods received and not invoiced, and their receipts (GRNs), through `Connector.purchaseInvoices.openOrderLines` (by vendor, or one order by number). `matchOrders` links each item line to one, narrowed to a printed PO number if any.
+     - When every line links, the draft posts "against the purchase order" (`postTo`).
+     - Sawwi's suggestion needs `poConfirmed` from a person, unless the printed PO agrees on every line.
+     - The review page's `po-match.tsx` shows invoice and PO lines side by side. It re-runs `matchOrders` / `pickOrderLine` in the browser after Link PO (`orderLinesAction` → `pullOrder`) or a pick.
+     - `reviewDraft` blocks: over-invoicing, two lines on one order line, unconfirmed matches, and a standalone invoice for received goods unless the user chose it.
+     - `pushMany` calls `prepareOrderInvoice`. It checks vendor, item and open quantity, PATCHes `invoiceQuantity`, `receiveQuantity` (0) and `directUnitCost` on the order lines, and restores them if a write fails. It never posts. The ERP record is `{ mode: "order", number: <orders> }`.
+     - A second invoice on an order line still set up for an unposted one is refused (`pendingOnSameLines`).
+   - **Failed** (D-86): `capturePdf` keeps a PDF it can't read as status `failed` with `failure` (stage, message, attempts; migration 9 adds `failure_json`). `retryRead` / `retryMany` read the kept PDF again; saving a typed-in draft or a successful read clears it. Push failures are recorded with stage `push` on the still-approved invoice. The queue's Failed tab lists both.
+   - **Excel** (D-87, `excel.ts`): `capturesWorkbook` writes Invoices and Lines sheets through `lib/excel/sheet.ts`'s multi-sheet `workbook()`; `/api/automation/purchase-invoices/export?format=xlsx`.
 5. **Duplicates** (D-63): same file (hash), same supplier and normalised invoice number in Sawwi (warning; refused once one is pushed), and already in BC (checked when a draft opens and refused at push). A same-supplier, same-date, same-total draft is a soft warning.
 
 **Tables** (migration 5): `purchase_invoices`, `supplier_profiles`, `erp_master_data` (deleted with its connection), `automation_prefs` (the chosen push target; `"none"` for CSV only). All are keyed by `org_key`, so the demo reset clears them; it also deletes the kept PDFs and the mock BC's in-memory drafts.
 
-**Access:** capture, approve and push go through `runBlocker()` (role, plan, trial). Viewers can see everything and download, but change nothing. The demo store takes no uploads: it has four sample invoices (`samples.ts`, PDFs as base64 in `samples-data.ts`, drawn by `fixtures/samples.ts`) and pushes to the mock Business Central, which now accepts draft purchase invoice writes, `eq` filters, and vendors, items and accounts.
+**Access:** capture, approve and push go through `runBlocker()` (role, plan, trial). Viewers can see everything and download, but change nothing. The demo store takes no uploads: it has five sample invoices (GLS-2360 is against PO-7002) (`samples.ts`, PDFs as base64 in `samples-data.ts`, drawn by `fixtures/samples.ts`) and pushes to the mock Business Central, which now accepts draft purchase invoice writes, `eq` filters, and vendors, items and accounts.
 
 **Tests:** `purchase-invoices.test.ts` covers the draft model, matching, BC writes against the mock (deep insert, cleanup on failure, read-only 403, host pinning), and the demo flow end to end: capture, re-upload, approve and withdraw, push with a hash, refusal of an invoice BC already has, learning a supplier's item code, an OCR'd scan, and bulk approve plus CSV; photos made into one- and two-page PDFs and read by OCR.
 

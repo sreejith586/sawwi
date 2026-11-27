@@ -388,6 +388,11 @@ CREATE TABLE IF NOT EXISTS cod_settings (
   updated_at TEXT NOT NULL
 );`,
   },
+  {
+    id: 9,
+    name: "purchase invoices: failed reads and pushes kept for a retry (D-86)",
+    sql: `ALTER TABLE purchase_invoices ADD COLUMN IF NOT EXISTS failure_json TEXT;`,
+  },
 ];
 
 export type Params = (string | number | boolean | null)[];

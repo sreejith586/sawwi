@@ -108,11 +108,31 @@ describe("AI-assisted reading (D-69)", () => {
 
     const statement = await F.statementPdf({ opening: 1000, txns: F.JANUARY });
     const notInvoice = fake(extraction({ is_invoice: false, notes: "This is a bank statement." }));
-    await expect(service.capturePdf("acme", "u1", { name: "stmt.pdf", bytes: statement }, { ai: notInvoice })).rejects.toThrow(/bank statement/);
+    // Kept as "failed" with the reason, for a person to retry or type in (D-86).
+    const refused = await service.capturePdf("acme", "u1", { name: "stmt.pdf", bytes: statement }, { ai: notInvoice });
+    expect(refused).toMatchObject({ failed: true, capture: { status: "failed", failure: { stage: "read", message: expect.stringMatching(/bank statement/), attempts: 1 } } });
   });
 
-  it("without the AI, a PDF the rules can't read is refused as before", async () => {
-    await expect(service.capturePdf("acme", "u1", { name: "blank2.pdf", bytes: await F.longScanPdf(1) }, { ai: null })).rejects.toThrow();
+  it("without the AI, a PDF the rules can't read waits under Failed; a retry or the same upload reads it again (D-86)", async () => {
+    const bytes = await F.longScanPdf(1);
+    const { capture, failed } = await service.capturePdf("acme", "u1", { name: "blank2.pdf", bytes }, { ai: null });
+    expect(failed).toBe(true);
+    expect(capture).toMatchObject({ status: "failed", draft: { invoiceNumber: "blank2", lines: [] } });
+    expect((await service.approveMany("acme", [capture.id], "u1"))[0]).toMatchObject({ ok: false, message: expect.stringContaining("couldn't be read") });
+    // Retry with the AI on: it reads now and joins the review queue; the failure is cleared.
+    const ai = fake(extraction({ invoice_number: "INV-8888" }));
+    const again = await service.retryRead("acme", capture.id, { ai });
+    expect(again).toMatchObject({ status: "ready", failure: null, draft: { invoiceNumber: "INV-8888" } });
+  });
+
+  it("counts failed attempts, and a typed-in draft leaves Failed", async () => {
+    const bytes = await F.longScanPdf(2);
+    const { capture } = await service.capturePdf("acme", "u1", { name: "blank3.pdf", bytes }, { ai: null });
+    const second = await service.capturePdf("acme", "u1", { name: "blank3.pdf", bytes }, { ai: null });
+    expect(second).toMatchObject({ existing: true, failed: true, capture: { failure: { attempts: 2 } } });
+    const typed = { ...capture.draft, supplierName: "Typed Supplier", invoiceDate: "2026-11-20", subtotal: 100, vat: 15, total: 115, lines: [{ description: "Goods", sku: "", qty: 1, unitPrice: 100, net: 100, vatRate: 15, vat: 15, erpType: null, erpNo: "" }] };
+    const saved = await service.saveEdits("acme", capture.id, typed);
+    expect(saved).toMatchObject({ status: "ready", failure: null });
   });
 
   it("re-reads a draft with the AI on request and withdraws its approval", async () => {

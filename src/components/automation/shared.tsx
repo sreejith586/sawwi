@@ -6,9 +6,10 @@ import type { Draft } from "@/lib/automation/purchase-invoices/draft";
 
 // Pieces shared by the review queue and the single-invoice review (D-66).
 
-export type Status = "needs_review" | "ready" | "approved" | "pushing" | "pushed";
+export type Status = "failed" | "needs_review" | "ready" | "approved" | "pushing" | "pushed";
 
 const STATUS: Record<Status, { label: string; className: string }> = {
+  failed: { label: "Couldn't read", className: "bg-danger-soft text-danger" },
   needs_review: { label: "Needs review", className: "bg-warn-soft text-warn" },
   ready: { label: "Ready to approve", className: "bg-info-soft text-info" },
   approved: { label: "Approved", className: "bg-success-soft text-success" },

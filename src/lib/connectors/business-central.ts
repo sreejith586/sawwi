@@ -393,15 +393,15 @@ async function exchangeRates(s: Session, companyId: string): Promise<Rate[]> {
 const WRITE_FORBIDDEN =
   "Business Central didn't let the app create a purchase invoice. In Business Central, give the app (on “Microsoft Entra Applications”) a permission set that can create purchase documents, such as D365 PURCH DOC, EDIT, next to D365 READ.";
 
-async function sendJson(s: Session, method: "POST" | "DELETE", url: string, body?: unknown): Promise<Doc> {
+async function sendJson(s: Session, method: "POST" | "PATCH" | "DELETE", url: string, body?: unknown, forbidden = WRITE_FORBIDDEN): Promise<Doc> {
   if (!url.startsWith(`${BC_API_HOST}/`)) throw new ConnectorError("Refused to write outside Business Central's API host.");
   const headers: Record<string, string> = { Authorization: `Bearer ${s.token}`, Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (method === "DELETE") headers["If-Match"] = "*";
+  if (method === "DELETE" || method === "PATCH") headers["If-Match"] = "*";
   for (let attempt = 1; ; attempt++) {
     const res = await s.deps.fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     if (res.status === 401) throw new ConnectorError("Business Central rejected the app. Check it's enabled on “Microsoft Entra Applications”.");
-    if (res.status === 403) throw new ConnectorError(WRITE_FORBIDDEN);
+    if (res.status === 403) throw new ConnectorError(forbidden);
     // Only "too many requests" is retried: it wasn't processed. A 5xx on a POST may have been, so it isn't.
     if (res.status === 429 && attempt < MAX_ATTEMPTS) {
       const after = Number(res.headers.get("Retry-After"));
@@ -482,6 +482,96 @@ export const bcPurchaseInvoices: PurchaseInvoiceWriter<BusinessCentralCredential
     const total = Number(back.totalAmountIncludingTax);
     return { id, number: str(back.number ?? created.number), status: str(back.status ?? "Draft"), company: name, totalIncludingTax: Number.isFinite(total) ? total : null };
   },
+};
+
+// ─── Purchase orders and receipts: invoicing against the PO (D-88) ───────────
+
+const ORDER_FORBIDDEN =
+  "Business Central didn't let the app change the purchase order. Give the app (on “Microsoft Entra Applications”) a permission set that can edit purchase documents, such as D365 PURCH DOC, EDIT, next to D365 READ.";
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const qty = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+export const bcOpenOrderLines: NonNullable<PurchaseInvoiceWriter<BusinessCentralCredentials>["openOrderLines"]> = async (creds, by, deps) => {
+  const s = await openSession(creds, deps);
+  const { root } = await companyContext(s);
+  const byOrder = "orderNumber" in by;
+  const orderFilter = encodeURIComponent(byOrder ? `number eq ${odataString(by.orderNumber.trim())}` : `vendorNumber eq ${odataString(by.vendorNumber)}`);
+  const receiptFilter = encodeURIComponent(byOrder ? `orderNumber eq ${odataString(by.orderNumber.trim())}` : `vendorNumber eq ${odataString(by.vendorNumber)}`);
+  const [orders, receipts] = await Promise.all([
+    collect(s, `${root}/purchaseOrders?$filter=${orderFilter}&$expand=purchaseOrderLines`),
+    collect(s, `${root}/purchaseReceipts?$filter=${receiptFilter}&$expand=purchaseReceiptLines`),
+  ]);
+  // Receipt numbers per order and item: the GRNs that brought the goods in.
+  const grn = new Map<string, Set<string>>();
+  for (const r of receipts) {
+    for (const l of lines(r, "purchaseReceiptLines")) {
+      if (qty(l.quantity) <= 0) continue;
+      const key = `${str(r.orderNumber)}|${str(l.lineObjectNumber)}`;
+      grn.set(key, (grn.get(key) ?? new Set()).add(str(r.number)));
+    }
+  }
+  return orders.flatMap((o) =>
+    lines(o, "purchaseOrderLines")
+      .filter((l) => str(l.lineType) === "Item" && (byOrder || qty(l.receivedQuantity) - qty(l.invoicedQuantity) > 0))
+      .map((l) => ({
+        orderId: str(o.id),
+        orderNumber: str(o.number),
+        vendorNumber: str(o.vendorNumber),
+        orderDate: str(o.orderDate),
+        lineId: str(l.id),
+        sequence: qty(l.sequence),
+        itemNumber: str(l.lineObjectNumber),
+        description: str(l.description),
+        quantity: qty(l.quantity),
+        received: qty(l.receivedQuantity),
+        invoiced: qty(l.invoicedQuantity),
+        directUnitCost: qty(l.directUnitCost),
+        receipts: [...(grn.get(`${str(o.number)}|${str(l.lineObjectNumber)}`) ?? [])].sort(),
+      })),
+  );
+};
+
+export const bcPrepareOrderInvoice: NonNullable<PurchaseInvoiceWriter<BusinessCentralCredentials>["prepareOrderInvoice"]> = async (creds, plan, deps) => {
+  const s = await openSession(creds, deps);
+  const { root, name } = await companyContext(s);
+  const undo: { url: string; body: Doc }[] = [];
+  try {
+    for (const order of plan) {
+      if (!GUID_RE.test(order.orderId)) throw new ConnectorError(`Purchase order ${order.orderNumber} has no valid id.`);
+      const header = (await getJson(s, `${root}/purchaseOrders(${order.orderId})`)) as Doc;
+      if (str(header.vendorNumber) !== order.vendorNumber) throw new ConnectorError(`Purchase order ${order.orderNumber} belongs to vendor ${str(header.vendorNumber)}, not ${order.vendorNumber}.`);
+      const base = `${root}/purchaseOrders(${order.orderId})/purchaseOrderLines`;
+      // Read the order again: goods received since matching, or another invoice already set up on it.
+      const current = await collect(s, base);
+      for (const want of order.lines) {
+        const l = current.find((x) => str(x.id) === want.lineId);
+        if (!l) throw new ConnectorError(`A line of purchase order ${order.orderNumber} is no longer there. Match the invoice again.`);
+        if (str(l.lineObjectNumber) !== want.itemNumber) throw new ConnectorError(`Purchase order ${order.orderNumber}: the line is for item ${str(l.lineObjectNumber)}, not ${want.itemNumber}. Match the invoice again.`);
+        const open = qty(l.receivedQuantity) - qty(l.invoicedQuantity);
+        if (want.invoiceQuantity > open + 1e-9) {
+          throw new ConnectorError(`Purchase order ${order.orderNumber}, item ${str(l.lineObjectNumber)}: only ${open} received and not invoiced, against ${want.invoiceQuantity} on the invoice.`);
+        }
+      }
+      for (const l of current) {
+        if (str(l.lineType) === "Comment") continue;
+        const want = order.lines.find((x) => x.lineId === str(l.id));
+        const next: Doc = want
+          ? { invoiceQuantity: want.invoiceQuantity, receiveQuantity: 0, directUnitCost: want.directUnitCost }
+          : { invoiceQuantity: 0, receiveQuantity: 0 };
+        const prev: Doc = { invoiceQuantity: qty(l.invoiceQuantity), receiveQuantity: qty(l.receiveQuantity), directUnitCost: qty(l.directUnitCost) };
+        if (Object.entries(next).every(([k, v]) => prev[k] === v)) continue;
+        const url = `${base}(${str(l.id)})`;
+        // Price first, then quantities: Business Central recalculates the line from both.
+        await sendJson(s, "PATCH", url, next, ORDER_FORBIDDEN);
+        undo.push({ url, body: prev });
+      }
+    }
+  } catch (error) {
+    for (const u of undo.reverse()) await sendJson(s, "PATCH", u.url, u.body, ORDER_FORBIDDEN).catch(() => undefined);
+    throw error;
+  }
+  return { company: name, orders: plan.map((o) => o.orderNumber) };
 };
 
 // ─── Writes: unposted general journal lines (D-71) ─────────────────────────────
@@ -699,7 +789,7 @@ export const businessCentral: Connector<BusinessCentralCredentials> = {
     return { headers: [...spec.columns], rows };
   },
 
-  purchaseInvoices: bcPurchaseInvoices,
+  purchaseInvoices: { ...bcPurchaseInvoices, openOrderLines: bcOpenOrderLines, prepareOrderInvoice: bcPrepareOrderInvoice },
   journals: bcJournals,
   customerPayments: bcCustomerPayments,
 };

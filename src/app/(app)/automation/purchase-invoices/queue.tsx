@@ -7,11 +7,12 @@ import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { PhotoPages } from "@/components/automation/photo-pages";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
-import { approveAction, captureSampleAction, pushAction, refreshErpAction, setTargetAction } from "@/app/actions/automation";
+import { approveAction, captureSampleAction, pushAction, refreshErpAction, retryReadAction, setTargetAction } from "@/app/actions/automation";
 import type { Draft } from "@/lib/automation/purchase-invoices/draft";
 
 // The review queue (D-66): every captured invoice with what Sawwi read, its checks and what
-// blocks it, with single and bulk approve, CSV download, and push to Business Central.
+// blocks it, with single and bulk approve, CSV or Excel download, and push to Business Central.
+// Invoices Sawwi couldn't read, or couldn't push, wait in the Failed tab for a retry (D-86).
 
 export type QueueRow = {
   id: string;
@@ -27,6 +28,8 @@ export type QueueRow = {
   ai: boolean;
   layout: string | null;
   erpNumber: string | null;
+  /** What went wrong last (D-86). */
+  failure: { stage: "read" | "push"; message: string; attempts: number } | null;
   createdAt: string;
 };
 
@@ -44,10 +47,14 @@ type Props = {
 
 const FILTERS: { id: "all" | Status | "open"; label: string }[] = [
   { id: "open", label: "To review" },
+  { id: "failed", label: "Failed" },
   { id: "approved", label: "Approved" },
   { id: "pushed", label: "In ERP" },
   { id: "all", label: "All" },
 ];
+
+/** Couldn't be read, or the last push failed and it's still waiting to go (D-86). */
+const isFailed = (r: QueueRow) => r.status === "failed" || (r.failure?.stage === "push" && r.status === "approved");
 
 const METHOD: Record<string, string> = { text: "Text PDF", ocr: "Scan (OCR)", zatca_xml: "ZATCA e-invoice", zatca_qr: "ZATCA QR only" };
 
@@ -64,8 +71,9 @@ export function Queue(props: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const counts = useMemo(() => {
-    const c = { open: 0, approved: 0, pushed: 0, all: props.rows.length } as Record<string, number>;
+    const c = { open: 0, failed: 0, approved: 0, pushed: 0, all: props.rows.length } as Record<string, number>;
     for (const r of props.rows) {
+      if (isFailed(r)) c.failed++;
       if (r.status === "needs_review" || r.status === "ready") c.open++;
       if (r.status === "approved") c.approved++;
       if (r.status === "pushed") c.pushed++;
@@ -74,7 +82,13 @@ export function Queue(props: Props) {
   }, [props.rows]);
 
   const shown = props.rows.filter((r) =>
-    filter === "all" ? true : filter === "open" ? r.status === "needs_review" || r.status === "ready" || r.status === "pushing" : r.status === filter,
+    filter === "all"
+      ? true
+      : filter === "open"
+        ? r.status === "needs_review" || r.status === "ready" || r.status === "pushing"
+        : filter === "failed"
+          ? isFailed(r)
+          : r.status === filter,
   );
   const shownIds = shown.map((r) => r.id);
   const picked = props.rows.filter((r) => selected.has(r.id));
@@ -85,6 +99,21 @@ export function Queue(props: Props) {
 
   const approvable = picked.filter((r) => (r.status === "ready" || r.status === "needs_review") && r.blockers.length === 0);
   const pushable = picked.filter((r) => r.status === "approved");
+  const retryable = picked.filter((r) => r.status === "failed");
+  const idsParam = picked.map((r) => r.id).join(",");
+
+  const retry = (ids: string[]) =>
+    startBusy(async () => {
+      setError(null);
+      setUploading(`Reading ${ids.length === 1 ? "the invoice" : `${ids.length} invoices`} again…`);
+      const res = await retryReadAction(ids);
+      setUploading(null);
+      if (res.error) return setError(res.error);
+      const ok = res.results!.filter((r) => r.ok).length;
+      setNotice({ title: `${ok} of ${ids.length} read. ${ok ? "They're in To review." : "Open one to type it in from the PDF."}`, results: res.results! });
+      setSelected(new Set());
+      router.refresh();
+    });
 
   const approve = (ids: string[]) =>
     startBusy(async () => {
@@ -135,9 +164,16 @@ export function Queue(props: Props) {
           body.append("file", file);
           res = await fetch("/api/automation/purchase-invoices", { method: "POST", body });
         }
-        const json = (await res.json()) as { results?: { name: string; existing?: boolean; error?: string }[]; error?: string };
+        const json = (await res.json()) as { results?: { name: string; existing?: boolean; failed?: boolean; error?: string }[]; error?: string };
         if (json.error) results.push({ ok: false, message: `${file.name}: ${json.error}` });
-        for (const r of json.results ?? []) results.push(r.error ? { ok: false, message: r.error } : { ok: true, message: r.existing ? `${r.name} was uploaded before; it's the draft already listed.` : `${r.name} read.` });
+        for (const r of json.results ?? [])
+          results.push(
+            r.error
+              ? { ok: false, message: r.error }
+              : r.failed
+                ? { ok: false, message: `${r.name} couldn't be read. It's kept under Failed: retry it, or open it and type it in.` }
+                : { ok: true, message: r.existing ? `${r.name} was uploaded before; it's the draft already listed.` : `${r.name} read.` },
+          );
       }
     } catch {
       results.push({ ok: false, message: "Upload failed. Check your connection and try again." });
@@ -145,7 +181,7 @@ export function Queue(props: Props) {
       setUploading(null);
       if (fileRef.current) fileRef.current.value = "";
     }
-    setFilter("open");
+    setFilter(results.some((r) => r.ok) || !results.some((r) => /under Failed/.test(r.message ?? "")) ? "open" : "failed");
     setNotice({ title: `${results.filter((r) => r.ok).length} of ${pdfs.length} invoices read.`, results });
     router.refresh();
     return results.some((r) => r.ok);
@@ -305,9 +341,14 @@ export function Queue(props: Props) {
             ))}
           </div>
           {counts.approved > 0 && (
-            <a href="/api/automation/purchase-invoices/export?approved=1" className={`${buttonClass("secondary")} ml-auto`}>
-              Download approved as CSV
-            </a>
+            <span className="ml-auto flex gap-2">
+              <a href="/api/automation/purchase-invoices/export?approved=1&format=xlsx" className={buttonClass("secondary")}>
+                Download approved as Excel
+              </a>
+              <a href="/api/automation/purchase-invoices/export?approved=1" className={buttonClass("secondary")}>
+                CSV
+              </a>
+            </span>
           )}
         </div>
 
@@ -317,16 +358,26 @@ export function Queue(props: Props) {
             <button type="button" className={buttonClass("primary")} disabled={busy || approvable.length === 0} onClick={() => approve(approvable.map((r) => r.id))}>
               Approve {approvable.length || ""}
             </button>
-            <a href={`/api/automation/purchase-invoices/export?ids=${picked.map((r) => r.id).join(",")}`} className={buttonClass("secondary")}>
-              Download CSV
+            {retryable.length > 0 && (
+              <button type="button" className={buttonClass("secondary")} disabled={busy} onClick={() => retry(retryable.map((r) => r.id))}>
+                Retry {retryable.length} failed
+              </button>
+            )}
+            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}&format=xlsx`} className={buttonClass("secondary")}>
+              Download Excel
+            </a>
+            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}`} className={buttonClass("secondary")}>
+              CSV
             </a>
             {props.target && (
               <button type="button" className={buttonClass("secondary")} disabled={busy || pushable.length === 0} onClick={() => setPushing(pushable.map((r) => r.id))}>
                 Push {pushable.length || ""} approved to Business Central
               </button>
             )}
-            {picked.length > approvable.length + pushable.length && (
-              <span className="text-xs text-muted">{picked.length - approvable.length - pushable.length} can&apos;t be approved yet: open them to fix what&apos;s flagged.</span>
+            {picked.length > approvable.length + pushable.length + retryable.length && (
+              <span className="text-xs text-muted">
+                {picked.length - approvable.length - pushable.length - retryable.length} can&apos;t be approved yet: open them to fix what&apos;s flagged.
+              </span>
             )}
             <button type="button" className="ml-auto text-muted hover:text-foreground" onClick={() => setSelected(new Set())}>
               Clear
@@ -336,7 +387,11 @@ export function Queue(props: Props) {
 
         {shown.length === 0 ? (
           <p className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
-            {props.rows.length === 0 ? "No invoices yet. Upload supplier invoice PDFs above." : "Nothing here."}
+            {props.rows.length === 0
+              ? "No invoices yet. Upload supplier invoice PDFs above."
+              : filter === "failed"
+                ? "Nothing failed. Invoices Sawwi can't read, or can't push, wait here for a retry."
+                : "Nothing here."}
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
@@ -380,30 +435,51 @@ export function Queue(props: Props) {
                         <td className="px-3 py-3">
                           <p>{d.invoiceNumber || <span className="text-warn">missing</span>}</p>
                           <p className="text-xs text-muted">
-                            {r.ai ? "Read by AI" : (METHOD[r.method] ?? r.method)}
+                            {r.status === "failed" ? "Not read" : r.ai ? "Read by AI" : (METHOD[r.method] ?? r.method)}
                             {r.layout === "remembered" && !r.ai ? " · layout remembered" : ""}
                           </p>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
-                          <p>{d.invoiceDate || <span className="text-warn">missing</span>}</p>
-                          <p className="text-xs text-muted">{d.dueDate ? `due ${d.dueDate}` : "no due date"}</p>
+                          {r.status === "failed" ? (
+                            <p className="text-muted">—</p>
+                          ) : (
+                            <>
+                              <p>{d.invoiceDate || <span className="text-warn">missing</span>}</p>
+                              <p className="text-xs text-muted">{d.dueDate ? `due ${d.dueDate}` : "no due date"}</p>
+                            </>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           <button type="button" className="text-left underline decoration-dotted underline-offset-2" onClick={() => toggleExpand(r.id)} aria-expanded={open}>
                             {d.lines.length} line{d.lines.length === 1 ? "" : "s"}
                           </button>
-                          {props.target && uncoded > 0 && <p className="text-xs text-warn">{uncoded} not coded</p>}
+                          {props.target && uncoded > 0 && r.status !== "failed" && <p className="text-xs text-warn">{uncoded} not coded</p>}
+                          {d.postTo === "order" && (
+                            <p className={`text-xs ${d.poConfirmed ? "text-success" : "text-warn"}`}>
+                              {d.poConfirmed ? "✓ " : "PO suggested: "}
+                              {[...new Set(d.lines.flatMap((l) => (l.po ? [l.po.orderNumber] : [])))].join(", ")}
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">{money(d.subtotal)}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{money(d.vat)}</td>
                         <td className="px-3 py-3 text-right tabular-nums">
                           <p className="font-medium">{money(d.total, d.currency)}</p>
-                          <p className={`text-xs ${r.checksOk ? "text-success" : "text-danger"}`}>{r.checksOk ? "✓ totals check" : "✕ totals don't add up"}</p>
+                          {r.status !== "failed" && (
+                            <p className={`text-xs ${r.checksOk ? "text-success" : "text-danger"}`}>{r.checksOk ? "✓ totals check" : "✕ totals don't add up"}</p>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           <StatusPill status={r.status} />
                           {r.erpNumber && <p className="mt-1 text-xs text-muted">{r.erpNumber}</p>}
-                          {r.status !== "pushed" && r.blockers.length > 0 && (
+                          {r.failure && r.status !== "pushed" && (
+                            <p className="mt-1 max-w-56 text-xs text-danger" title={r.failure.message}>
+                              {r.failure.stage === "push" ? "Push failed: " : ""}
+                              {r.failure.message}
+                              {r.failure.attempts > 1 ? ` (${r.failure.attempts} tries)` : ""}
+                            </p>
+                          )}
+                          {r.status !== "pushed" && r.status !== "failed" && r.blockers.length > 0 && (
                             <p className="mt-1 max-w-48 text-xs text-warn" title={r.blockers.join("\n")}>
                               {r.blockers[0]}
                               {r.blockers.length > 1 ? ` (+${r.blockers.length - 1})` : ""}
@@ -413,8 +489,18 @@ export function Queue(props: Props) {
                         </td>
                         <td className="px-3 py-3 text-right whitespace-nowrap">
                           <Link href={`/automation/purchase-invoices/${r.id}`} className="text-sm font-medium text-brand hover:underline">
-                            {r.status === "pushed" ? "View" : "Review"}
+                            {r.status === "pushed" ? "View" : r.status === "failed" ? "Type in" : "Review"}
                           </Link>
+                          {props.canEdit && r.status === "failed" && (
+                            <button type="button" className="ml-3 text-sm text-muted hover:text-foreground" disabled={busy} onClick={() => retry([r.id])}>
+                              Retry
+                            </button>
+                          )}
+                          {props.canEdit && props.target && r.status === "approved" && r.failure?.stage === "push" && (
+                            <button type="button" className="ml-3 text-sm text-muted hover:text-foreground" disabled={busy} onClick={() => setPushing([r.id])}>
+                              Retry push
+                            </button>
+                          )}
                           {props.canEdit && r.status === "ready" && (
                             <button type="button" className="ml-3 text-sm text-muted hover:text-foreground" disabled={busy} onClick={() => approve([r.id])}>
                               Approve
@@ -433,6 +519,7 @@ export function Queue(props: Props) {
                                   <th className="py-1 pr-3 font-medium">Description</th>
                                   <th className="py-1 pr-3 font-medium">Supplier SKU</th>
                                   <th className="py-1 pr-3 font-medium">ERP item / account</th>
+                                  <th className="py-1 pr-3 font-medium">PO · GRN</th>
                                   <th className="py-1 pr-3 text-right font-medium">Qty</th>
                                   <th className="py-1 pr-3 text-right font-medium">Unit price</th>
                                   <th className="py-1 pr-3 text-right font-medium">VAT %</th>
@@ -448,6 +535,16 @@ export function Queue(props: Props) {
                                     <td className="py-1 pr-3">{l.sku}</td>
                                     <td className={`py-1 pr-3 ${l.erpNo ? "" : "text-warn"}`}>
                                       {l.erpNo ? `${l.erpType === "account" ? "G/L " : ""}${l.erpNo} (${MATCHED_BY[l.matchedBy ?? "user"]})` : "not coded"}
+                                    </td>
+                                    <td className="py-1 pr-3">
+                                      {l.po ? (
+                                        <span title={`${l.po.open} received and not invoiced at ${l.po.poPrice}`}>
+                                          {l.po.orderNumber}
+                                          {l.po.receipts.length ? ` · ${l.po.receipts.join(", ")}` : ""}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted">—</span>
+                                      )}
                                     </td>
                                     <td className="py-1 pr-3 text-right tabular-nums">{l.qty ?? "—"}</td>
                                     <td className="py-1 pr-3 text-right tabular-nums">{money(l.unitPrice)}</td>

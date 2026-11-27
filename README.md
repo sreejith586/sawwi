@@ -76,10 +76,12 @@ pnpm build
     currency, lines and totals, read by rules first. Where the rules fall short, Claude Opus 5.5 reads the PDF, and its reading is checked
     and compared with the rules' (needs `ANTHROPIC_API_KEY`; off in the demo). A review queue shows them all with their checks, for
     approving one at a time or in bulk. Each invoice also has a review page with its PDF next to an
-    editable form. Approved drafts download as CSV, or push to Business Central as unposted purchase
-    invoices after a confirmation. Vendors and items are matched to Business Central's, and choices are
-    remembered per supplier. In the demo store, try the four sample invoices against the mock Business
-    Central. To push to a real tenant, the connection's Entra app needs a permission set that can create
+    editable form. Approved drafts download as Excel or CSV (D-87), or push to Business Central after a
+    confirmation: against the purchase order and its goods receipts (GRNs) where Sawwi found or the user linked
+    the PO and the user confirmed the match, otherwise as unposted purchase invoices (D-88). Invoices Sawwi
+    can't read, or couldn't push, wait under Failed for a retry or to be typed in (D-86). Vendors and items are matched to Business Central's, and choices are
+    remembered per supplier. In the demo store, try the five sample invoices against the mock Business
+    Central (GLS-2360 is invoiced against PO-7002). To push to a real tenant, the connection's Entra app needs a permission set that can create
     purchase documents (e.g. D365 PURCH DOC, EDIT). Re-make the sample PDFs with
     `pnpm dlx tsx scripts/make-purchase-invoice-samples.mts`.
 16. **Automation → Marketplace settlements** (D-70–D-73): upload settlement reports (Amazon flat files, Noon or any

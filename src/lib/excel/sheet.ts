@@ -16,9 +16,21 @@ export type SheetColumn = {
 const MONEY = "#,##0.00;[Red]-#,##0.00";
 const NUMBER = "#,##0.##;[Red]-#,##0.##";
 
-export async function tableWorkbook(opts: { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] }): Promise<ArrayBuffer> {
+export type SheetSpec = { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] };
+
+export async function tableWorkbook(opts: SheetSpec): Promise<ArrayBuffer> {
+  return workbook([opts]);
+}
+
+/** Several sheets in one workbook, each styled as `tableWorkbook` styles its one. */
+export async function workbook(sheets: SheetSpec[]): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Sawwi";
+  for (const opts of sheets) addSheet(wb, opts);
+  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+}
+
+function addSheet(wb: ExcelJS.Workbook, opts: SheetSpec) {
   const ws = wb.addWorksheet(opts.sheetName.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Sheet1");
 
   ws.columns = opts.columns.map((c) => {
@@ -50,8 +62,6 @@ export async function tableWorkbook(opts: { sheetName: string; columns: SheetCol
   header.border = { bottom: { style: "thin", color: { argb: "FFE4E7EC" } } };
   ws.views = [{ state: "frozen", ySplit: 1 }];
   if (opts.columns.length) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: opts.columns.length } };
-
-  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
 export function xlsxResponse(bytes: ArrayBuffer, fileName: string): Response {
