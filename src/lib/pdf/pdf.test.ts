@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseUpload, parseUploads, UnsupportedFileError } from "@/lib/files/parse";
 import { profileTable } from "@/lib/files/profile";
 import * as F from "./fixtures/make";
-import { extractPdf, type LayoutMemory, type LayoutRecipe } from "./index";
+import { extractPdf, ScanNotRead, type LayoutMemory, type LayoutRecipe } from "./index";
 import { invoiceChecks } from "./invoice";
 import { groupLines, readTable, toWords } from "./layout";
 import { cleanText, normalizeDigits, parseAmount } from "./text";
@@ -205,6 +205,16 @@ describe("scanned PDFs (local OCR)", () => {
       ["total", true],
     ]);
   }, 60_000);
+
+  it("leaves a scan unread when asked for no OCR, saying how many pages it has (D-100)", async () => {
+    const pdf = await F.longScanPdf(3);
+    const err = await extractPdf("scan.pdf", pdf, { ocr: false }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ScanNotRead);
+    expect((err as ScanNotRead).pages).toBe(3);
+    // A text PDF is read as usual.
+    const text = await F.invoicePdf({ number: "INV-1", date: "15/01/2026", lines: F.MOUSE_LINES });
+    expect((await extractPdf("inv.pdf", text, { ocr: false, grain: "line" })).invoice).toBeDefined();
+  });
 
   it("refuses a scan it can't read, and scans over the page cap", async () => {
     await expect(parseUpload("blank.pdf", await F.blankScanPdf())).rejects.toThrow(/couldn't read this scan/);

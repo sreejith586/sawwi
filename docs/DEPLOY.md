@@ -31,7 +31,7 @@ a person, never by an agent or committed to the repo.
 | `ANTHROPIC_WORKSPACE_ID` | Config | Only for an unscoped key | The Claude Console workspace ID (`wrkspc_…`). Needed when the API key isn't scoped to a workspace; Anthropic refuses every call otherwise. |
 | `SAWWI_SUPERADMIN_EMAILS` | Your email | Your email | Who gets `/admin`. |
 | `APP_URL` | `https://sawwiapp.ai` | unset | Pins links and Stripe return URLs. |
-| `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_WEBHOOK_SECRET` | Live keys, Sensitive | Test-mode keys | Card checkout. Only shown while the paywall is on. |
+| `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_WEBHOOK_SECRET` | Live keys, Sensitive | Test-mode keys | Card checkout. Only shown while the paywall is on. The two price variables take Stripe **Price IDs** (`price_…`, Product catalog → product → price), not amounts. Anything else is ignored and logged (D-100). |
 | `SAWWI_DEMO` | unset (demo on) | unset | `off` hides the public demo store. |
 | `RESEND_API_KEY` | Sensitive | Sensitive (same key is fine) | Sends email through Resend (D-45). Without it, emails are only logged. |
 | `EMAIL_FROM` | optional, default `Sawwi <sawwi@sawwiapp.ai>` | same | The sender. Must be on the domain verified in Resend. |

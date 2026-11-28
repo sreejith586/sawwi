@@ -7,7 +7,7 @@ import { connectorById } from "@/lib/connectors/registry";
 import { liveDeps, openConnection } from "@/lib/connectors/service";
 import { listConnections } from "@/lib/connectors/store";
 import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine, type ErpReceipt } from "@/lib/connectors/types";
-import { extractPdf, PdfInputError } from "@/lib/pdf";
+import { extractPdf, PdfInputError, ScanNotRead } from "@/lib/pdf";
 import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
 import { planBlock } from "@/lib/saas/limits";
@@ -266,32 +266,51 @@ type Reading = { draft: Draft; source: CaptureSource; issuerKey: string };
 async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Array }, opts: { countries?: string[]; ai?: AiReader | null; force?: boolean; wantAi?: boolean }): Promise<Reading> {
   let table: Awaited<ReturnType<typeof extractPdf>> | undefined;
   let ruleError: CaptureError | undefined;
-  try {
-    table = await extractPdf(file.name, file.bytes, {
-      grain: "line",
-      countries: opts.countries,
-      layouts: { find: (issuer) => runStore.getPdfLayouts(orgKey, issuer), save: (recipe) => runStore.savePdfLayout(orgKey, recipe) },
-    });
-    if (!table.invoice || table.info.kind !== "invoice") ruleError = new CaptureError(`${file.name} doesn't look like an invoice. Upload the supplier's tax invoice PDF.`);
-  } catch (error) {
-    if (!(error instanceof PdfInputError)) throw error;
-    ruleError = new CaptureError(`${file.name}: ${error.message}`);
-  }
-  const rules = !ruleError && table?.invoice ? draftFromInvoice(table.invoice) : undefined;
-  const source: CaptureSource = table
-    ? {
+  let rules: Draft | undefined;
+  let source: CaptureSource = { method: "ocr", pages: 0, checks: [] };
+  let scanSkipped = false;
+  const readRules = async (ocr: boolean) => {
+    table = undefined;
+    ruleError = undefined;
+    scanSkipped = false;
+    try {
+      table = await extractPdf(file.name, file.bytes, {
+        grain: "line",
+        countries: opts.countries,
+        ocr,
+        layouts: { find: (issuer) => runStore.getPdfLayouts(orgKey, issuer), save: (recipe) => runStore.savePdfLayout(orgKey, recipe) },
+      });
+      if (!table.invoice || table.info.kind !== "invoice") ruleError = new CaptureError(`${file.name} doesn't look like an invoice. Upload the supplier's tax invoice PDF.`);
+    } catch (error) {
+      if (!(error instanceof PdfInputError)) throw error;
+      scanSkipped = error instanceof ScanNotRead;
+      ruleError = new CaptureError(`${file.name}: ${error.message}`);
+      if (error instanceof ScanNotRead) source = { method: "ocr", pages: error.pages, checks: [] };
+    }
+    rules = !ruleError && table?.invoice ? draftFromInvoice(table.invoice) : undefined;
+    if (table) {
+      source = {
         method: table.info.method,
         pages: table.info.pages,
         layout: table.info.layout,
         checks: table.info.checks,
         ocr: table.info.ocr ? { pages: table.info.ocr.pages, confidence: table.info.ocr.confidence } : undefined,
-      }
-    : { method: "ocr", pages: 0, checks: [] };
+      };
+    } else if (!scanSkipped) source = { method: "ocr", pages: 0, checks: [] };
+  };
   const issuerOf = (d: Draft) => table?.issuer ?? (d.supplierTrn ? `trn:${d.supplierTrn}` : `name:${d.supplierName.toLowerCase()}`);
+  /** A scan left for the AI that the AI then can't read: OCR it after all, as without AI. */
+  const ocrAfterAll = async () => {
+    if (scanSkipped) await readRules(true);
+  };
 
-  let reasons = opts.force ? ["Read again with AI on request."] : aiReasons(rules, rules ? source : undefined);
-  if (opts.wantAi && reasons.length === 0) reasons = ["Read with AI on request."];
+  // With the AI on, a scan goes to the AI without OCR first (D-100): the AI reads scans better, and
+  // OCR of a long scan took most of a function's time and ran it out of memory.
   const ai = opts.ai === undefined ? defaultAiReader(orgKey) : opts.ai;
+  await readRules(!ai);
+
+  let reasons = opts.force ? ["Read again with AI on request."] : scanSkipped ? ["It's a scan: read by AI directly."] : aiReasons(rules, rules ? source : undefined);
+  if (opts.wantAi && reasons.length === 0) reasons = ["Read with AI on request."];
   if (reasons.length === 0 || !ai) {
     if (!rules) throw ruleError!;
     return { draft: rules, source, issuerKey: issuerOf(rules) };
@@ -311,6 +330,7 @@ async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Arr
     const refused = await aiGuard(orgKey, file.bytes, cached?.calls ?? 0, Boolean(opts.force || cached));
     if (refused) {
       if (opts.force) throw new CaptureError(refused);
+      await ocrAfterAll();
       if (!rules) throw new CaptureError(`${ruleError!.message} ${refused}`);
       return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: refused, at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
     }
@@ -323,6 +343,7 @@ async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Arr
         await store.saveAiReading(orgKey, fileHash, EXTRACTION_MODEL, null);
       }
       if (!(error instanceof AiReadError)) console.error("AI invoice reading failed", error);
+      await ocrAfterAll();
       if (!rules) throw ruleError!;
       return { draft: rules, source: { ...source, ai: { model: EXTRACTION_MODEL, reasons, used: "rules", conflicts: [], notes: "The AI couldn't read it; this is the text reader's reading.", at: new Date().toISOString() } }, issuerKey: issuerOf(rules) };
     }
@@ -345,7 +366,7 @@ async function readInvoice(orgKey: string, file: { name: string; bytes: Uint8Arr
     at: new Date().toISOString(),
     reusedFrom,
   };
-  if (!table) source.pages = 0;
+  if (!table && !scanSkipped) source.pages = 0;
   return { draft, source: { ...source, ai: info }, issuerKey: issuerOf(draft) };
 }
 

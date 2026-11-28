@@ -8,10 +8,22 @@ export const PAID_PLANS: PaidPlan[] = ["starter", "growth"];
 
 type Env = Record<string, string | undefined>;
 
+const PRICE_ENV: Partial<Record<PlanId, string>> = { starter: "STRIPE_PRICE_STARTER", growth: "STRIPE_PRICE_GROWTH" };
+
+/**
+ * The Stripe Price ID for a plan. Only a real Price ID (`price_…`) counts: an amount such as "399"
+ * pasted into the variable made every checkout fail at Stripe (D-100). Anything else is treated as
+ * not set, so checkout says card payments aren't set up, and the server log names the variable.
+ */
 export function priceIdFor(plan: PlanId, env: Env = process.env): string | undefined {
-  if (plan === "starter") return env.STRIPE_PRICE_STARTER || undefined;
-  if (plan === "growth") return env.STRIPE_PRICE_GROWTH || undefined;
-  return undefined;
+  const name = PRICE_ENV[plan];
+  const value = name ? env[name]?.trim() : undefined;
+  if (!value) return undefined;
+  if (!/^price_[A-Za-z0-9]+$/.test(value)) {
+    console.error(`${name} must be a Stripe Price ID (price_…), from Stripe → Product catalog → the product → its price. It isn't, so ${plan} checkout is off.`);
+    return undefined;
+  }
+  return value;
 }
 
 export function planForPrice(priceId: string | undefined, env: Env = process.env): PaidPlan | undefined {
