@@ -30,7 +30,8 @@ async function livePrice(plan: PaidPlan): Promise<string | undefined> {
 
 async function Checkout({ params }: { params: Promise<{ plan: string }> }) {
   const { plan: planId } = await params;
-  if (!PLANS.some((p) => p.id === planId && p.public)) notFound();
+  // Free is never bought (D-99); only the public paid plans have a checkout.
+  if (planId === "free" || !PLANS.some((p) => p.id === planId && p.public)) notFound();
   const session = await getCurrentSession();
   if (!session) return null;
   const plan = planById(planId);

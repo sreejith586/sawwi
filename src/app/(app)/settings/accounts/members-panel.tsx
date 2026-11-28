@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { track } from "@/lib/analytics/track";
 import { useActionState, useTransition } from "react";
 import { changeAccess, invite, remove, setActive, type InviteState } from "@/app/actions/accounts";
@@ -157,7 +158,7 @@ function InviteForm({ teams }: { teams: { value: string; label: string }[] }) {
         <label className="block">
           <span className="sr-only">Email</span>
           <input name="email" type="email" defaultValue={v?.email} placeholder="name@company.com" className={field} aria-invalid={Boolean(state.errors.email)} />
-          {state.errors.email && <span className="mt-1 block text-xs text-danger">{state.errors.email}</span>}
+          {state.errors.email && <span className="mt-1 block text-xs text-danger"><LimitText text={state.errors.email} /></span>}
         </label>
         <label className="block">
           <span className="sr-only">Access</span>

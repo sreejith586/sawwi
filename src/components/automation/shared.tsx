@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { useEffect, useRef } from "react";
 import { buttonClass } from "@/components/ui";
 import type { Draft } from "@/lib/automation/purchase-invoices/draft";
@@ -121,7 +122,7 @@ export function ResultList({ results }: { results: { ok: boolean; message?: stri
     <ul className="mt-2 space-y-1 text-sm">
       {lines.map((r, i) => (
         <li key={i} className={r.ok ? "text-success" : "text-danger"}>
-          {r.ok ? "✓" : "✕"} {r.message}
+          {r.ok ? "✓" : "✕"} {r.message && <LimitText text={r.message} />}
         </li>
       ))}
     </ul>

@@ -7,6 +7,7 @@ import { addConnection } from "@/lib/connectors/service";
 import { deleteConnection } from "@/lib/connectors/store";
 import { ConnectorError } from "@/lib/connectors/types";
 import { isDemoOrg } from "@/lib/demo/demo";
+import { blockFor } from "@/lib/saas/limits";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 
 // Connections hold credentials to other systems, so only owners and admins add or
@@ -23,6 +24,8 @@ export async function addConnectionAction(_prev: ConnectionActionState, form: Fo
   const provider = String(form.get("provider") ?? "");
   const connector = connectorById(provider);
   if (!connector) return { error: "Pick a source." };
+  const overPlan = await blockFor(session.org, "connector");
+  if (overPlan) return { error: overPlan.message };
   const input = Object.fromEntries(connector.fields.map((f) => [f.key, String(form.get(f.key) ?? "")]));
   try {
     const c = await addConnection(session.org.key, provider, input, session.user.id);

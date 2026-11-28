@@ -12,7 +12,7 @@ import * as service from "@/lib/automation/settlements/service";
 type Fail = { error: string };
 
 async function editor(): Promise<{ orgKey: string; userId: string } | Fail> {
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) return { error: blocked.message };
   const session = (await getCurrentSession())!;
   return { orgKey: session.org.key, userId: session.user.id };

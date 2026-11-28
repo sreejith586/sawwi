@@ -16,11 +16,11 @@ describe("Stripe price ↔ plan", () => {
     for (const status of ["active", "trialing", "past_due"]) expect(planFromSubscription(status, "price_growth", env)).toBe("growth");
   });
 
-  it("drops back to trial once the subscription stops", () => {
+  it("drops to the Free plan once the subscription stops", () => {
     for (const status of ["canceled", "unpaid", "incomplete_expired", "paused", "incomplete"]) {
-      expect(planFromSubscription(status, "price_growth", env)).toBe("trial");
+      expect(planFromSubscription(status, "price_growth", env)).toBe("free");
     }
-    expect(planFromSubscription("active", "price_unknown", env)).toBe("trial");
+    expect(planFromSubscription("active", "price_unknown", env)).toBe("free");
   });
 });
 

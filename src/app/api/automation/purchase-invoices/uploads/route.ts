@@ -19,7 +19,7 @@ export async function POST(request: Request) {
         const session = await getCurrentSession();
         if (!session) throw new Error("Log in again.");
         if (isDemoOrg(session.org.key)) throw new Error("Uploads are off in the live demo.");
-        const blocked = await runBlocker();
+        const blocked = await runBlocker("invoice");
         if (blocked) throw new Error(blocked.message);
         const folder = incomingFolder(session.org.key);
         if (!pathname.startsWith(folder) || pathname.slice(folder.length).includes("/") || pathname.includes("..")) throw new Error("Uploads must go to this workspace.");

@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -143,7 +144,7 @@ function ActionCard({ action, onDecided }: { action: AgentAction; onDecided: (a:
           {r.message}
         </p>
       ))}
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger"><LimitText text={error} /></p>}
       {pending ? (
         <div className="mt-3 flex gap-2">
           <button type="button" onClick={() => decide("confirm")} disabled={busy !== null} className={buttonClass("primary")}>
@@ -299,7 +300,7 @@ export function AgentChat({ fallback }: { fallback: ReactNode }) {
             <ActionCard key={it.action.id} action={it.action} onDecided={decided} />
           ) : (
             <p key={i} role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">
-              {it.text}
+              <LimitText text={it.text} />
             </p>
           ),
         )}

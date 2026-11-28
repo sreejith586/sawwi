@@ -12,7 +12,7 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/runs/[id]/
   const { id } = await ctx.params;
   const owned = await getOwnedRun(id);
   if (!owned || !isDemoOrg(owned.run.orgKey)) return Response.json({ error: "Run not found." }, { status: 404 });
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) return Response.json({ error: blocked.message }, { status: 403 });
   try {
     const result = await fillRunWithDemoData(owned.run, { countries: owned.profile.countries });

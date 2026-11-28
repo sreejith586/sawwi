@@ -16,7 +16,7 @@ import type { RunActionResult } from "./runs";
 export async function getNarrative(runId: string): Promise<NarrativeView | undefined> {
   const owned = await getOwnedRun(runId);
   if (!owned) return undefined;
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   return narrativeFor(owned.run, !blocked);
 }
 
@@ -25,7 +25,7 @@ export async function sendChat(runId: string, intent: ChatIntent): Promise<RunAc
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
   // Chat can spend AI tokens, so it follows the same plan and role gate as running a reco.
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) return { error: blocked.message, view: await buildRunView(runId) };
   try {
     await runChat(owned.run, intent, owned.profile.company);
@@ -41,7 +41,7 @@ export async function sendChat(runId: string, intent: ChatIntent): Promise<RunAc
 export async function startGenericRun(formData: FormData) {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
   const run = await store.createRun(orgKeyFor(profile), GENERIC_TEMPLATE_ID);
   await store.setRunCheck(run.id, GENERIC_SETUP_KEY, {
@@ -62,7 +62,7 @@ export async function startGenericRun(formData: FormData) {
 export async function saveAsTemplate(runId: string, title: string): Promise<RunActionResult & { templateId?: string }> {
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) return { error: blocked.message, view: await buildRunView(runId) };
   const { run } = owned;
   if (run.templateId !== GENERIC_TEMPLATE_ID) return { error: "Only custom reconciliations can be saved as templates.", view: await buildRunView(runId) };
@@ -78,7 +78,7 @@ export async function saveAsTemplate(runId: string, title: string): Promise<RunA
 export async function deleteTemplate(templateId: string) {
   const profile = await getProfile();
   if (!profile || !isCustomId(templateId)) return;
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) return;
   await store.deleteCustomTemplate(orgKeyFor(profile), templateId);
   redirect("/templates");

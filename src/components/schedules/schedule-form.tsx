@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { track } from "@/lib/analytics/track";
 import { useActionState, useState } from "react";
 import { createScheduleAction, type ScheduleActionState } from "@/app/actions/schedules";
@@ -55,7 +56,7 @@ export function ScheduleForm({ templateId, initial }: { templateId: string; init
       </button>
       {state.error && (
         <p role="alert" className="w-full text-sm text-danger">
-          {state.error}
+          <LimitText text={state.error} />
         </p>
       )}
     </form>

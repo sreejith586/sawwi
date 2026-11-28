@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { runAgent, type AgentEvent } from "@/lib/agent/agent";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { llmAvailable } from "@/lib/mapping/llm";
+import { blockFor } from "@/lib/saas/limits";
 import { canRun, getCurrentSession } from "@/lib/saas/session";
 
 /** A turn can take several model calls and tool runs. */
@@ -28,6 +29,9 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { messages?: unknown; text?: unknown };
   const text = typeof body.text === "string" ? body.text.trim().slice(0, 4000) : "";
   if (!text) return Response.json({ error: "Type a message." }, { status: 400 });
+  // The plan's daily allowance (D-99), checked here too so the refusal comes back as one plain message.
+  const overPlan = await blockFor(session.org, "agent_call");
+  if (overPlan) return Response.json({ error: overPlan.message, limit: overPlan.reason }, { status: 429 });
   // The browser keeps the conversation; only well-formed turns are taken back.
   const history = Array.isArray(body.messages)
     ? (body.messages as unknown[]).filter((m): m is Anthropic.Beta.BetaMessageParam => {

@@ -17,7 +17,7 @@ export type ScheduleActionState = { error?: string };
 
 /** Form action on a template page: { cadence, anchor }. */
 export async function createScheduleAction(templateId: string, _prev: ScheduleActionState, form: FormData): Promise<ScheduleActionState> {
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("schedule");
   if (blocked) return { error: blocked.message };
   const session = (await getCurrentSession())!;
   const orgKey = session.org.key;
@@ -47,7 +47,8 @@ export async function startScheduledRun(scheduleId: string) {
   if (state.state === "started") redirect(`/runs/${state.runId}`);
   const period = currentDue(schedule, today);
   if (state.state !== "due" || !period) redirect("/schedules");
-  const blocked = await runBlocker();
+  // A schedule kept from a trial or paid plan doesn't start runs on a plan without schedules (D-99).
+  const blocked = (await runBlocker("schedule")) ?? (await runBlocker("run"));
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
   const run = await createRun(session.org.key, schedule.templateId);
   await store.linkRunToSchedule(run.id, schedule.id, period);

@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { outcomeOf } from "@/lib/analytics/events";
 import { track } from "@/lib/analytics/track";
 import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
@@ -374,7 +375,7 @@ export function Queue(props: Props) {
 
       {error && (
         <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          {error}
+          <LimitText text={error} />
         </p>
       )}
       {notice && (

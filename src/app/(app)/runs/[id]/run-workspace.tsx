@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -106,7 +107,7 @@ export function RunWorkspace({
         )}
       </p>
       <Steps status={view.status} />
-      {error && <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger"><LimitText text={error} /></p>}
       {demo && view.slots.some((s) => !s.file) && <DemoFill runId={view.id} onView={update} onError={setError} />}
 
       {view.report && (

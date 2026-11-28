@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { OAUTH_COOKIE, OAUTH_COOKIE_MAX_AGE, OAUTH_COOKIE_PATH, startOAuth } from "@/lib/connectors/oauth-flow";
 import { ConnectorError } from "@/lib/connectors/types";
+import { listConnections } from "@/lib/connectors/store";
+import { blockFor } from "@/lib/saas/limits";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 
 // "Connect with QuickBooks / Xero" (D-81): sends an owner or admin to the provider to sign in.
@@ -10,6 +12,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/connections/
   const session = await getCurrentSession();
   if (!session) return seeOther(new URL("/login", request.url));
   try {
+    // A new connection counts toward the plan (D-99); signing in again to one already there doesn't.
+    if (!(await listConnections(session.org.key)).some((c) => c.provider === provider)) {
+      const overPlan = await blockFor(session.org, "connector");
+      if (overPlan) throw new ConnectorError(overPlan.message);
+    }
     const { url, cookie } = startOAuth(provider, session.org.key, canManageTeam(session.access) && session.org.status !== "suspended");
     (await cookies()).set(OAUTH_COOKIE, cookie, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: OAUTH_COOKIE_PATH, maxAge: OAUTH_COOKIE_MAX_AGE });
     return seeOther(url);

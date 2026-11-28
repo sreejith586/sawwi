@@ -3,6 +3,7 @@ import { codeLine, findInvoice, linkGrn, linkPo, matchAgain, setPostTo } from "@
 import * as invoices from "@/lib/automation/purchase-invoices/service";
 import type { CaptureView } from "@/lib/automation/purchase-invoices/service";
 import { aiReadingsSince } from "@/lib/automation/purchase-invoices/store";
+import { dailyCapFor } from "@/lib/saas/limits";
 import { propose, type ActionKind, type AgentAction } from "./actions";
 
 // The chat agent's tools (D-96). Three kinds:
@@ -158,7 +159,7 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
           failed_pushes: by((v) => v.status === "approved" && v.failure?.stage === "push"),
           suggested_matches_to_confirm: by((v) => v.draft.postTo === "order" && !v.draft.poConfirmed && v.status !== "pushed"),
           push_target: target?.label ?? "none (Excel/CSV only)",
-          ai_reading: ctx.aiAvailable ? { used_last_24h: await aiReadingsSince(ctx.orgKey, new Date(Date.now() - 86_400_000).toISOString()), daily_cap: invoices.aiDailyLimit() } : "off",
+          ai_reading: ctx.aiAvailable ? { used_last_24h: await aiReadingsSince(ctx.orgKey, new Date(Date.now() - 86_400_000).toISOString()), daily_cap: await dailyCapFor(ctx.orgKey, "aiReadsPerDay", invoices.aiDailyLimit()) } : "off",
         },
       };
     }

@@ -24,12 +24,12 @@ const KEEPS_PLAN = new Set(["active", "trialing", "past_due"]);
 
 /**
  * The plan a workspace should be on given its Stripe subscription. Anything that has
- * stopped paying (canceled, unpaid, incomplete_expired, paused) falls back to "trial",
- * whose end date has normally passed, so the paywall blocks new runs.
+ * stopped paying (canceled, unpaid, incomplete_expired, paused) drops to the Free plan
+ * (D-99), so the workspace keeps working within Free's limits instead of being blocked.
  */
 export function planFromSubscription(status: string, priceId: string | undefined, env: Env = process.env): PlanId {
-  if (!KEEPS_PLAN.has(status)) return "trial";
-  return planForPrice(priceId, env) ?? "trial";
+  if (!KEEPS_PLAN.has(status)) return "free";
+  return planForPrice(priceId, env) ?? "free";
 }
 
 export const SUBSCRIPTION_LABELS: Record<string, string> = {

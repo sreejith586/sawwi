@@ -1,5 +1,6 @@
 "use client";
 
+import { LimitText } from "@/components/billing/limit-text";
 import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -272,7 +273,7 @@ export function Review({
       )}
       {error && (
         <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          {error}
+          <LimitText text={error} />
         </p>
       )}
       {notice && (
