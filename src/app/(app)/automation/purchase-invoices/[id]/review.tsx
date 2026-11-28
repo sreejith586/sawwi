@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { MATCHED_BY, money, PushDialog, ResultList, StatusPill, type Status } from "@/components/automation/shared";
 import { buttonClass } from "@/components/ui";
-import { approveAction, discardAction, erpDuplicatesAction, pushAction, rereadWithAiAction, saveDraftAction, unapproveAction } from "@/app/actions/automation";
+import type { ErpOpenOrderLine, ErpReceipt } from "@/lib/connectors/types";
+import { PoMatch } from "./po-match";
+import { approveAction, discardAction, erpDuplicatesAction, pushAction, rereadWithAiAction, retryReadAction, saveDraftAction, unapproveAction } from "@/app/actions/automation";
 import { reviewDraft, type Draft, type DraftLine } from "@/lib/automation/purchase-invoices/draft";
 
 // One invoice: the supplier's PDF (text or scan) next to everything Sawwi read from it, editable,
@@ -27,7 +29,9 @@ type View = {
     sample?: boolean;
     ai?: { model: string; used: "ai" | "rules"; reasons: string[] };
   };
-  erp: { company: string; number: string; erpTotal: number | null; pushedAt: string } | null;
+  erp: { company: string; number: string; erpTotal: number | null; pushedAt: string; mode?: "invoice" | "order" } | null;
+  /** What went wrong last (D-86). */
+  failure: { stage: "read" | "push"; message: string; attempts: number; at: string } | null;
   approvedAt: string | null;
   serverBlockers: string[];
   serverWarnings: string[];
@@ -66,7 +70,25 @@ function NumberInput(props: { value: number | null; onChange: (n: number | null)
   );
 }
 
-export function Review({ view, target, master, canEdit, aiAvailable }: { view: View; target: { connectionId: string; label: string } | null; master: Master | null; canEdit: boolean; aiAvailable: boolean }) {
+export function Review({
+  view,
+  target,
+  master,
+  canEdit,
+  aiAvailable,
+  orderLines: props_orders,
+  receipts,
+}: {
+  view: View;
+  target: { connectionId: string; label: string } | null;
+  master: Master | null;
+  canEdit: boolean;
+  aiAvailable: boolean;
+  /** Open purchase order lines for the PO match (D-88); null when the target can't read orders. */
+  orderLines: ErpOpenOrderLine[] | null;
+  /** The vendor's recent GRNs for the match (D-92). */
+  receipts: ErpReceipt[];
+}) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(view.draft);
   const [dirty, setDirty] = useState(false);
@@ -102,12 +124,19 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
       const lines = d.lines.map((l, j) => {
         if (j !== i) return l;
         const next = { ...l, ...patch };
+        // Another item: the PO line no longer fits (D-88).
+        if ("erpNo" in patch && patch.erpNo !== l.erpNo) {
+          next.po = null;
+          next.grn = null;
+        }
         // Quantity or price changed: the line amount and its VAT follow.
         if (("qty" in patch || "unitPrice" in patch) && next.qty !== null && next.unitPrice !== null) next.net = r2(next.qty * next.unitPrice);
         if (("qty" in patch || "unitPrice" in patch || "vatRate" in patch || "net" in patch) && next.net !== null && next.vatRate !== null) next.vat = r2((next.net * next.vatRate) / 100);
         return next;
       });
-      return { ...d, lines };
+      // Quantities, prices or items changed: a confirmed PO match needs confirming again.
+      const touchesPo = "qty" in patch || "unitPrice" in patch || "erpNo" in patch;
+      return { ...d, lines, poConfirmed: touchesPo ? undefined : d.poConfirmed };
     });
     setDirty(true);
   };
@@ -165,6 +194,17 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
       router.refresh();
     });
 
+  const onRetry = () =>
+    start(async () => {
+      setError(null);
+      setNotice({ title: "Reading the invoice again…", results: [] });
+      const res = await retryReadAction([view.id]);
+      setNotice(null);
+      if (res.error) return setError(res.error);
+      if (!res.results![0].ok) setError(res.results![0].message ?? "Still couldn't read it. Type it in from the PDF.");
+      router.refresh();
+    });
+
   const onDelete = () =>
     start(async () => {
       if (!confirm(`Delete the draft for ${draft.invoiceNumber || view.fileName}? The PDF is deleted too.`)) return;
@@ -183,13 +223,38 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
         {dirty && <span className="text-xs text-warn">Unsaved changes</span>}
       </div>
       <p className="mt-1 text-sm text-muted">
-        {draft.supplierName || "Unknown supplier"} · read from{" "}
-        {view.source.ai?.used === "ai" ? "the PDF by AI (the text reader fell short)" : (METHOD[view.source.method] ?? view.source.method)}
+        {draft.supplierName || "Unknown supplier"} ·{" "}
+        {view.status === "failed"
+          ? "not read yet: type it in from the PDF"
+          : `read from ${view.source.ai?.used === "ai" ? "the PDF by AI (the text reader fell short)" : (METHOD[view.source.method] ?? view.source.method)}`}
         {view.source.ocr ? ` (${view.source.ocr.confidence}% confidence: check the figures against the scan)` : ""}
         {view.source.layout === "remembered" ? " · this supplier's layout was remembered" : view.source.layout === "learned" ? " · layout learned for next time" : ""}
       </p>
 
-      {view.erp && (
+      {view.status === "failed" && view.failure && (
+        <div className="mt-4 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
+          <p className="font-medium text-danger">Sawwi couldn&apos;t read this PDF{view.failure.attempts > 1 ? ` (${view.failure.attempts} tries)` : ""}.</p>
+          <p className="mt-1">{view.failure.message}</p>
+          <p className="mt-1 text-muted">Retry it, or type the invoice in from the PDF on the left and save: it then joins the review queue like any other.</p>
+          {canEdit && (
+            <button type="button" className={`${buttonClass("secondary")} mt-2`} onClick={onRetry} disabled={busy}>
+              Retry reading
+            </button>
+          )}
+        </div>
+      )}
+      {view.status !== "failed" && view.status !== "pushed" && view.failure?.stage === "push" && (
+        <p className="mt-4 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
+          <span className="font-medium text-danger">The last push failed:</span> {view.failure.message}
+        </p>
+      )}
+      {view.erp?.mode === "order" && (
+        <p className="mt-4 rounded-lg bg-brand-soft px-4 py-3 text-sm">
+          Set up to invoice on <strong>{view.erp.number}</strong> in {view.erp.company}, {new Date(view.erp.pushedAt).toLocaleString()}. In Business Central, open the order, enter Vendor
+          Invoice No. <strong>{draft.invoiceNumber}</strong> and post Invoice.
+        </p>
+      )}
+      {view.erp && view.erp.mode !== "order" && (
         <p className="mt-4 rounded-lg bg-brand-soft px-4 py-3 text-sm">
           In Business Central as draft <strong>{view.erp.number}</strong> in {view.erp.company}, pushed {new Date(view.erp.pushedAt).toLocaleString()}.
           {view.erp.erpTotal !== null && draft.total !== null && Math.abs(view.erp.erpTotal - draft.total) > 0.01
@@ -209,7 +274,7 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         {/* The supplier's document, scan or text, as uploaded. */}
         <section aria-label="Invoice PDF" className="lg:sticky lg:top-4 lg:self-start">
           <object data={`/api/automation/purchase-invoices/${view.id}/pdf#view=FitH`} type="application/pdf" className="h-[70vh] w-full rounded-xl border border-border bg-surface-muted lg:h-[calc(100dvh-8rem)]">
@@ -304,6 +369,10 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
             </label>
           </fieldset>
 
+          {target && props_orders !== null && (
+            <PoMatch viewId={view.id} draft={draft} lines={props_orders} receipts={receipts} locked={locked} onChange={(next) => set(next)} onError={setError} />
+          )}
+
           <fieldset disabled={locked} className="min-w-0">
             <legend className="mb-2 text-sm font-semibold">Lines</legend>
             <div className="overflow-x-auto rounded-xl border border-border">
@@ -355,6 +424,12 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
                             </optgroup>
                           </select>
                           {l.erpNo && l.matchedBy && <span className="text-xs text-success">{MATCHED_BY[l.matchedBy]}</span>}
+                          {l.po && (
+                            <span className="block text-xs text-muted" title="The purchase order line and goods receipt (GRN) this line invoices">
+                              {l.po.orderNumber}
+                              {l.grn ? ` · GRN ${l.grn.number}` : l.po.receipts.length ? ` · GRN ${l.po.receipts.join(", ")}` : ""} · {l.po.open} open at {l.po.poPrice}
+                            </span>
+                          )}
                         </td>
                       )}
                       <td className="px-2 py-2">
@@ -461,6 +536,14 @@ export function Review({ view, target, master, canEdit, aiAvailable }: { view: V
             )}
             <a href={`/api/automation/purchase-invoices/export?ids=${view.id}`} className={buttonClass("secondary")} aria-disabled={dirty} onClick={(e) => dirty && (e.preventDefault(), setError("Save your changes first, then download."))}>
               Download CSV
+            </a>
+            <a
+              href={`/api/automation/purchase-invoices/export?ids=${view.id}&format=xlsx`}
+              className={buttonClass("secondary")}
+              aria-disabled={dirty}
+              onClick={(e) => dirty && (e.preventDefault(), setError("Save your changes first, then download."))}
+            >
+              Excel
             </a>
             {view.approvedAt && view.status === "approved" && <span className="text-xs text-muted">Approved {new Date(view.approvedAt).toLocaleString()}</span>}
             {canEdit && aiAvailable && view.status !== "pushed" && view.status !== "pushing" && (

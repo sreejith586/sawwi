@@ -77,7 +77,9 @@ function purchaseLine(l: L, i: number) {
 }
 
 function purchaseOrder(number: string, date: string, vendor: string, ls: L[]): Doc {
-  const lines = ls.map((l, i) => ({ ...purchaseLine(l, i), receivedQuantity: l.received ?? 0, invoicedQuantity: l.invoiced ?? 0, expectedReceiptDate: date.replace(/-\d\d$/, "-25") }));
+  const lines = ls.map((l, i) => ({ ...purchaseLine(l, i), receivedQuantity: l.received ?? 0, invoicedQuantity: l.invoiced ?? 0,
+    // Business Central's defaults: receive the rest, invoice what's received and not invoiced.
+    receiveQuantity: l.qty - (l.received ?? 0), invoiceQuantity: (l.received ?? 0) - (l.invoiced ?? 0), expectedReceiptDate: date.replace(/-\d\d$/, "-25") }));
   return { id: guid("6666"), number, orderDate: date, postingDate: date, vendorNumber: vendor, vendorName: VENDORS[vendor], currencyCode: "", ...totals(lines), fullyReceived: false, status: "Open", purchaseOrderLines: lines };
 }
 

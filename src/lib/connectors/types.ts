@@ -89,7 +89,50 @@ export type PurchaseInvoiceWriter<C> = {
   findExisting(credentials: C, vendorNumber: string, vendorInvoiceNumber: string, deps: ConnectorDeps): Promise<ErpDocumentRef[]>;
   /** Creates an unposted purchase invoice; never posts. Returns it with the ERP's total incl. VAT. */
   createDraft(credentials: C, invoice: ErpPurchaseInvoice, deps: ConnectorDeps): Promise<ErpDocumentRef & { company: string; totalIncludingTax: number | null }>;
+  /**
+   * Purchase order item lines with their receipts (D-88). By vendor: the lines with goods received
+   * and not yet invoiced. By order number: every item line of that order, to show side by side.
+   */
+  openOrderLines?(credentials: C, by: { vendorNumber: string } | { orderNumber: string }, deps: ConnectorDeps): Promise<ErpOpenOrderLine[]>;
+  /**
+   * Sets the order lines up to be invoiced: quantity to invoice and direct unit cost on the given
+   * lines, nothing to receive or invoice on the order's other lines. Never posts. On a failure,
+   * puts back what it changed (D-88).
+   */
+  prepareOrderInvoice?(credentials: C, plan: ErpOrderInvoicePlan, deps: ConnectorDeps): Promise<{ company: string; orders: string[] }>;
+  /** Posted purchase receipts (GRNs) with their item lines: a vendor's since a date, or one by number (D-92). */
+  receipts?(credentials: C, by: { vendorNumber: string; since: string } | { receiptNumber: string }, deps: ConnectorDeps): Promise<ErpReceipt[]>;
 };
+
+/** A posted purchase receipt (GRN) and its item lines (D-92). */
+export type ErpReceipt = {
+  id: string;
+  number: string;
+  orderNumber: string;
+  vendorNumber: string;
+  postingDate: string;
+  lines: { itemNumber: string; description: string; quantity: number; unitCost: number }[];
+};
+
+export type ErpOpenOrderLine = {
+  orderId: string;
+  orderNumber: string;
+  vendorNumber: string;
+  orderDate: string;
+  lineId: string;
+  sequence: number;
+  itemNumber: string;
+  description: string;
+  quantity: number;
+  received: number;
+  invoiced: number;
+  directUnitCost: number;
+  /** Posted receipt (GRN) numbers for this order with this item. */
+  receipts: string[];
+};
+
+/** Per order: the vendor it must belong to, and each line's item, quantity to invoice and price. */
+export type ErpOrderInvoicePlan = { orderId: string; orderNumber: string; vendorNumber: string; lines: { lineId: string; itemNumber: string; invoiceQuantity: number; directUnitCost: number }[] }[];
 
 /** A problem the user can act on (bad token, wrong shop, missing scope). */
 export class ConnectorError extends Error {}

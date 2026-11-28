@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { ConnectorError } from "@/lib/connectors/types";
+import { ConnectorError, type ErpOpenOrderLine, type ErpReceipt } from "@/lib/connectors/types";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { getProfile } from "@/lib/profile/session";
 import { canRun, getCurrentSession, runBlocker } from "@/lib/saas/session";
@@ -129,6 +129,47 @@ export async function rereadWithAiAction(id: string): Promise<Partial<Fail>> {
   } catch (error) {
     return { error: message(error) };
   }
+}
+
+/**
+ * What the review page's side-by-side match shows (D-88, D-92): the vendor's open PO lines and
+ * recent GRNs, or one PO or one GRN pulled by number.
+ */
+export async function orderLinesAction(
+  id: string,
+  pull?: { orderNumber?: string; receiptNumber?: string },
+): Promise<{ lines?: ErpOpenOrderLine[]; receipts?: ErpReceipt[] } & Partial<Fail>> {
+  const session = await getCurrentSession();
+  if (!session) return { error: "Log in again." };
+  try {
+    if (pull?.receiptNumber !== undefined) return await service.pullReceipt(session.org.key, id, String(pull.receiptNumber));
+    if (pull?.orderNumber !== undefined) return { lines: await service.pullOrder(session.org.key, id, String(pull.orderNumber)), receipts: [] };
+    const view = await service.getView(session.org.key, id);
+    if (!view) return { error: "That invoice no longer exists." };
+    return await service.matchDataFor(session.org.key, view.draft);
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+/** "Read with AI" for selected drafts (D-89): earlier readings of the same PDF are reused, within the caps. */
+export async function rereadManyAction(ids: string[]): Promise<{ results?: service.BulkResult[] } & Partial<Fail>> {
+  const who = await editor();
+  if ("error" in who) return who;
+  if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) return { error: "Pick invoices to read." };
+  const results = await service.rereadMany(who.orgKey, ids, { countries: (await getProfile())?.countries });
+  refresh();
+  return { results };
+}
+
+/** Reads failed invoices again (D-86): new work, so it goes through runBlocker() like a capture. */
+export async function retryReadAction(ids: string[]): Promise<{ results?: service.BulkResult[] } & Partial<Fail>> {
+  const who = await editor();
+  if ("error" in who) return who;
+  if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) return { error: "Pick invoices to retry." };
+  const results = await service.retryMany(who.orgKey, ids, { countries: (await getProfile())?.countries });
+  refresh();
+  return { results };
 }
 
 export async function discardAction(id: string): Promise<Partial<Fail>> {

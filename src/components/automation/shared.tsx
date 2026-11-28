@@ -6,9 +6,10 @@ import type { Draft } from "@/lib/automation/purchase-invoices/draft";
 
 // Pieces shared by the review queue and the single-invoice review (D-66).
 
-export type Status = "needs_review" | "ready" | "approved" | "pushing" | "pushed";
+export type Status = "failed" | "needs_review" | "ready" | "approved" | "pushing" | "pushed";
 
 const STATUS: Record<Status, { label: string; className: string }> = {
+  failed: { label: "Couldn't read", className: "bg-danger-soft text-danger" },
   needs_review: { label: "Needs review", className: "bg-warn-soft text-warn" },
   ready: { label: "Ready to approve", className: "bg-info-soft text-info" },
   approved: { label: "Approved", className: "bg-success-soft text-success" },
@@ -41,6 +42,9 @@ export function PushDialog(props: { open: boolean; target: string; items: PushIt
     if (!props.open && d.open) d.close();
   }, [props.open]);
   const total = props.items.reduce<Record<string, number>>((acc, i) => ({ ...acc, [i.draft.currency]: (acc[i.draft.currency] ?? 0) + (i.draft.total ?? 0) }), {});
+  // Against a PO the order lines are set up to invoice; otherwise an unposted purchase invoice is created (D-88).
+  const onOrder = props.items.filter((i) => i.draft.postTo === "order").length;
+  const orders = (d: Draft) => [...new Set(d.lines.flatMap((l) => (l.po ? [l.po.orderNumber] : [])))].join(", ");
   return (
     <dialog
       ref={ref}
@@ -55,8 +59,18 @@ export function PushDialog(props: { open: boolean; target: string; items: PushIt
           Push {props.items.length} purchase invoice{props.items.length === 1 ? "" : "s"} to Business Central?
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Each one is created as an <strong className="font-medium text-foreground">unposted draft</strong> in {props.target}. Nothing is posted; you post them in Business Central.
-          Sawwi checks each against Business Central for duplicates first.
+          {onOrder < props.items.length && (
+            <>
+              {onOrder ? "Those not on a purchase order are" : "Each one is"} created as an <strong className="font-medium text-foreground">unposted draft</strong> invoice in {props.target}.{" "}
+            </>
+          )}
+          {onOrder > 0 && (
+            <>
+              {onOrder < props.items.length ? "Those against a purchase order" : "Each one"} <strong className="font-medium text-foreground">sets its purchase order lines up to invoice</strong> (quantity and price) in{" "}
+              {props.target}; you enter the Vendor Invoice No. on the order and post it there.{" "}
+            </>
+          )}
+          Nothing is posted. Sawwi checks each against Business Central for duplicates first.
         </p>
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-border">
           <table className="w-full text-sm">
@@ -75,6 +89,7 @@ export function PushDialog(props: { open: boolean; target: string; items: PushIt
                   </td>
                   <td className="px-3 py-2">
                     {i.draft.invoiceNumber} <span className="text-xs text-muted">{i.draft.invoiceDate}</span>
+                    {i.draft.postTo === "order" && <span className="block text-xs text-muted">Against {orders(i.draft)}</span>}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(i.draft.total, i.draft.currency)}</td>
                 </tr>
@@ -90,7 +105,7 @@ export function PushDialog(props: { open: boolean; target: string; items: PushIt
             Cancel
           </button>
           <button type="button" className={buttonClass("primary")} onClick={props.onConfirm} disabled={props.busy} autoFocus>
-            {props.busy ? "Pushing…" : `Push ${props.items.length} draft${props.items.length === 1 ? "" : "s"}`}
+            {props.busy ? "Pushing…" : `Push ${props.items.length} invoice${props.items.length === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>

@@ -57,7 +57,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Suspense fallback={null}>
           <PlanBanner />
         </Suspense>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8 sm:py-10">{children}</main>
+        {/* The full width of the screen: queues, reviews and reports use it (D-95). Prose keeps its own reading width. */}
+        <main className="w-full min-w-0 flex-1 px-4 py-8 sm:px-8 sm:py-10">{children}</main>
       </div>
       <ChatPanel />
     </div>

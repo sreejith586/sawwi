@@ -917,3 +917,173 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Each function grows by about 25 MB; a route's traced `node_modules` is about 98 MB, under Vercel's 250 MB limit.
   - A tesseract.js upgrade that renames core files or moves its dependencies needs these globs checked. The sandbox check is in the PR.
 
+### D-86: Invoices Sawwi can't read, or can't push, wait under Failed for a person
+- **Context:** the user asked (27 Nov 2026) for a human-in-the-loop screen to manage failed invoices and retry them, while building supplier-invoice capture for a client whose suppliers send scanned Arabic tax invoices. Until now an unreadable PDF was only an error line after the upload and was gone: nobody could come back to it.
+- **Decision:**
+  - **A read that fails is kept**, with its PDF, as status `failed`, an empty draft named after the file, and a recorded failure (`failure_json`, migration 9: stage, message, time, attempts). Only bad input (not a PDF, over 10 MB) is still refused outright.
+  - **Push failures are recorded too**, on the approved invoice: Business Central errors, no answer, "already in Business Central", and a PO already set up for another unposted invoice. The invoice stays approved, so "Retry push" needs only the usual confirmation.
+  - **Failed tab** in the queue: unread invoices, and approved ones whose last push failed. Each shows the reason and the number of tries, with **Retry** (rules, then the AI where it's on, D-69), **Retry N failed** for a selection, and **Type in**.
+  - **Type in** opens the review page: the scan beside an empty form. Saving what the person typed moves it into the review queue like any other draft.
+  - Uploading the same file again retries it, rather than opening the failed draft.
+  - A failure is cleared when the invoice reads, is saved by hand or is pushed.
+  - When AI reading is off, the reason says only the text reader tried.
+- **Consequences:** nothing uploaded is lost. A failed invoice can't be approved. Re-reads use the kept PDF, so the user doesn't upload again.
+
+### D-87: Excel download of purchase invoices
+- **Context:** the user wants the extracted invoices as an Excel sheet as well as pushed to the ERP.
+- **Decision:** "Download Excel" next to CSV (selected, approved, or one invoice) gives a workbook with two sheets:
+  - **Invoices:** one row per invoice with file, status, supplier, TRN, vendor, dates, PO printed and matched, GRNs, line count, quantity, net, VAT, total, totals check, how it was read, ERP document and what's still to fix.
+  - **Lines:** the CSV's columns (D-65) plus post-to, matched PO, GRN, PO unit cost and quantity received but not invoiced.
+  Amounts are numbers and dates are dates, so it sums, filters and imports as it is. The CSV gains the same five PO columns at the end, so existing column positions don't move.
+- **Consequences:** `lib/excel/sheet.ts` gains a multi-sheet `workbook()`; `tableWorkbook` is now a one-sheet call of it.
+
+### D-88: Three-way match: supplier invoices against Business Central purchase orders and GRNs, suggested and confirmed
+- **Context:** the user wants invoices pushed against the PO and GRN in Dynamics, not as standalone invoices. Their suppliers' invoices print **no PO number**, so Sawwi must find the PO, show it beside the invoice and let the user confirm it. Where an invoice does print a PO, that PO is pulled and shown side by side. A "Link PO" box lets the user type a PO number and pull it from Business Central on demand.
+- **What Business Central's standard API v2.0 allows** (checked against Microsoft's reference, Nov 2026):
+  - **Reads:**
+    - `purchaseOrders` with `purchaseOrderLines`: received, invoiced, quantity to invoice and quantity to receive per line;
+    - `purchaseReceipts` (GRNs) with `orderNumber` and lines.
+  - **Writes:**
+    - `invoiceQuantity`, `receiveQuantity` and `directUnitCost` are editable on an order line;
+    - `purchaseOrder` has no Vendor Invoice No.;
+    - a purchase invoice can't be linked to receipt lines ("Get Receipt Lines" isn't in the API).
+  - A standalone purchase invoice for goods already received on a PO would receive them a second time.
+- **Decision:**
+  - **Match** (`orders.ts`, pure and browser-safe). Each item line is matched to an order line of the vendor for the same item, with goods received and not yet invoiced. Order of preference: the line whose open quantity equals the invoiced quantity, then the oldest that covers it, then the one with the most open. A printed PO number narrows the search to that order. Exact item numbers only, as in D-62. These suppliers print barcodes, which reach the item through its GTIN.
+  - **Suggest and confirm:** when every line matches, the draft posts "against the purchase order".
+    - Sawwi's suggestion must be confirmed by a person (`poConfirmed`), except where the invoice prints the PO number and every line agrees with it (quantity within what's open, price within 0.5%).
+    - Picking another order line, or changing a quantity, price or item, withdraws the confirmation.
+    - A confirmed match isn't re-matched by "Refresh from Business Central".
+  - **Side by side on the review page:** each invoice line (item, quantity, price) beside its PO line and GRN (ordered, received and invoiced quantities, open quantity, PO price) and a match flag.
+    - Each line has a picker of the other open order lines for that item.
+    - **Link PO** pulls one order by number. Another vendor's order is refused.
+    - **Search all open POs again** re-reads the vendor's open orders.
+  - **Checks:**
+    - blocked: more invoiced than received and not invoiced; two invoice lines on one order line; a line with no order line when posting against the PO; a suggested match not yet confirmed;
+    - blocked: a standalone invoice for goods Sawwi found received on a PO. If the user explicitly chooses "standalone", this is a warning instead;
+    - a price difference over 0.5% is a warning, and the invoice price goes on the order line.
+  - **Push against the PO** (`Connector.purchaseInvoices.prepareOrderInvoice`). For each order, Sawwi:
+    - checks the order belongs to the vendor and each line is still the expected item with enough received and not invoiced;
+    - sets the matched lines' quantity to invoice and direct unit cost, and zero to receive and invoice on the order's other lines;
+    - puts back what it changed if any write fails.
+    It never posts. The user then opens the order in Business Central, enters the Vendor Invoice No. (shown by Sawwi) and posts Invoice.
+  - **Duplicates:** before the push, the D-63 check (same vendor invoice number in Business Central) still runs. Sawwi also refuses when another invoice from the workspace was already set up on the same order line and isn't posted yet.
+  - **Mock Business Central:** reads an order's lines and changes those three fields in memory, with Business Central's "Qty. to Invoice cannot be more than" check. New demo sample GLS-2360 invoices 300 LED panels against PO-7002 (GRN PRC-8002). GLS-2307 and GLS-2342, which print no PO, now show the suggested PO-7002 match.
+- **Rejected alternatives:**
+  - **A standalone purchase invoice with the PO number in a text field:** it would receive the goods again and leave the PO open.
+  - **`receiveAndInvoice` on the order:** it posts, and Sawwi never posts (D-64). The order also has no Vendor Invoice No. through the API.
+  - **Fuzzy matching on description or price:** a wrong PO line costs more than a click, as for items (D-62).
+- **Consequences:**
+  - Posting still needs one step in Business Central: the Vendor Invoice No. and Post.
+  - A small AL extension (an API page exposing Vendor Invoice No. on the order, or "Get Receipt Lines" onto a purchase invoice) would remove that step; it's an open question for the client's BC partner.
+  - The app's permission set needs D365 PURCH DOC, EDIT, as for D-64.
+
+### D-89: AI invoice reading: each PDF read once, spend capped, item codes kept clean
+- **Context:** the first live run of AI reading (27 Nov 2026, with the key the user added) found that the D-69 schema was refused by the API: 18 nullable fields against a limit of 16. On the client's scans, the text reader's OCR mixed barcodes with Arabic description text in the item code field. The user asked that PDFs already read by AI aren't read again, to avoid unnecessary spend or misuse. They also asked that the item code field be strict: it's the only reference to the ERP item, and codes can be alphanumeric.
+- **Decision:**
+  - **Schema:** text fields are plain strings (`""` = not printed); only figures are nullable (8 in all). A test keeps it within the API's limit.
+  - **One reading per PDF:** each AI reading is kept per workspace, PDF (SHA-256) and model (`ai_invoice_readings`, migration 10). Any later need for it reuses the reading at no cost and says so on the draft: a retry, a re-upload after deleting the draft, or "Read with AI" in bulk. Readings aren't shared between workspaces.
+  - **Caps:**
+    - two paid AI calls per PDF: the first reading plus one "Read again with AI". A paid call that gave nothing usable counts too;
+    - at most `SAWWI_AI_INVOICES_PER_DAY` (default 200) paid readings per workspace in any 24 hours;
+    - no AI on a PDF over 15 pages.
+    A capped invoice keeps the text reader's reading, or goes to Failed with the reason, for a person to type in.
+  - **Bulk "Read with AI"** in the queue, for drafts read before AI was on. It skips drafts already read by AI.
+  - **Item codes:** the field holds the code alone, exactly as printed: letters and digits, Western digits, no spaces, never description text or Arabic words.
+    - From the text reader, other text read into the code column moves to the description. A numeric barcode printed in groups is joined. Alphanumeric codes are kept whole.
+    - The AI is told to put the barcode in this field when one is printed, and the supplier's own code otherwise.
+    - Typed-in codes are cleaned the same way.
+    - Where most lines carry valid GTINs, a line whose code isn't one (e.g. "917", or a misread check digit) is flagged for checking.
+- **Checked live:** the client's 002946 (5 lines), 6641 (4) and 4272 (52, three pages) were read by AI and match the hand transcription line for line: codes, quantities, prices and totals.
+- **Consequences:** a repeat upload or retry of the same PDF costs nothing. The daily cap is per workspace and can be raised per deployment.
+
+### D-90: Bulk Excel download of a whole tab; Business Central gets invoices through the API push only
+- **Context:** the user asked (27 Nov 2026) for one Excel download covering all invoices at once, importable into Business Central with no manual fixes on the sheet.
+- **Decision:**
+  - **Bulk download:** each queue tab (To review, Failed, Approved, In ERP, All) has "Download … as Excel" and CSV for everything in it (`?scope=`), not only the selected rows. It's the D-87 workbook: an Invoices sheet with status and what's open, and a Lines sheet.
+  - **BC import from Excel isn't built yet.** Business Central imports an Excel only through a configuration package, and only a workbook exported from that package in BC (it carries the table and field definitions BC checks; Microsoft documents no layout to build one from scratch). A file generated without one isn't guaranteed to import. Two routes:
+    - **Sawwi fills the client's template:** their BC partner sets up a configuration package with Purchase Header (38) and Purchase Line (39) and the fields to fill, exports it to Excel once, and gives Sawwi the file. Sawwi then writes rows into that workbook unchanged.
+    - **The API push** (D-64, D-88), which needs no file.
+  - **For an import with no fixes,** every invoice needs Business Central's numbers, not the supplier's: the vendor no., and per line the item no. (from the barcode via the item's GTIN, D-62) or an Item Reference No. if the client keeps barcodes as item references. Only invoices with nothing blocking can be in it.
+- **User decision (27 Nov 2026):** Business Central gets invoices through the API push only. No BC import from Excel will be built; the template route above is dropped.
+- **Consequences:** the bulk Excel is for review, archive or another system, not for importing into BC.
+
+### D-91: A standard Excel export for selected invoices
+- **Context:** the user asked (27 Nov 2026) for a standard bulk Excel export, with every selected invoice in one file.
+- **Decision:**
+  - **Button:** selecting invoices in the queue shows "Export N to Excel" (and CSV): one workbook for all of them. A whole tab still downloads with "Download all" (D-90).
+  - **Lines sheet:** standard invoice columns first, so it reads and imports anywhere: supplier, supplier VAT no., invoice no., dates, currency, printed PO no., line, item code / barcode, description, quantity, unit price, amount excl. VAT, VAT %, VAT amount, amount incl. VAT, invoice totals and status. The ERP coding, PO and GRN columns come after, then the file name.
+  - **VAT per line:** where an invoice prints VAT only in its totals, the line's VAT is worked out from the invoice's own rate (VAT ÷ net, when it's a standard rate) and labelled "Worked out from invoice rate"; printed figures are labelled "Printed". The draft itself is unchanged.
+  - **Formats:** item codes and invoice numbers are text cells (leading zeros kept); amounts are numbers; dates are dates.
+- **Consequences:** the CSV (D-65) keeps its column order for anyone already importing it.
+
+### D-92: GRNs matched like POs: suggested from the vendor's receipts, or linked by number
+- **Context:** the user asked (27 Nov 2026) to bring the GRN in the way the PO is: Sawwi finds the matching GRN, or the user types a GRN number and Sawwi pulls it. Until now a GRN showed only as every receipt on the matched PO line's order.
+- **Decision:**
+  - **Reading:** `Connector.purchaseInvoices.receipts` reads posted purchase receipts with their item lines (`purchaseReceipts` with `purchaseReceiptLines`, API v2.0): a vendor's from the last 180 days, or one by number. The mock filters on vendor and date together.
+  - **Matching** (`orders.ts`, before the PO lines):
+    - each invoice item line gets a GRN line for the same item;
+    - the receipt whose lines best agree with the invoice (same item, then same quantity) is taken first, so a delivery's invoice stays on one GRN; other lines look at the vendor's other receipts, newest first;
+    - the PO line then comes from that GRN's order, or any open order for the item if that one has nothing left to invoice;
+    - a GRN number on the draft (`grnNumber`, linked by the user) narrows the search to that receipt.
+  - **Confirmation:** as for POs (D-88), a suggested match must be confirmed. A linked GRN, or a printed PO, needs none when every line agrees: GRN quantity, open PO quantity, price, and the GRN on the line's order.
+  - **Checks:**
+    - blocked: a line whose GRN is for another order than its PO line;
+    - warning: invoice quantity different from the GRN's (a partial invoice of a delivery).
+  - **Review page:** the panel is "GRN and purchase order". Each invoice line sits beside its GRN (number, date, order, quantity received) and its PO line, each with a picker. Picking another GRN moves the line to that GRN's order. **Link GRN** pulls a receipt by number with its order's lines; another vendor's GRN is refused. **Link PO** and "Search all again" stay.
+  - **Exports:** the queue, the Excel (D-91) and the CSV show the line's own GRN.
+- **What it doesn't do:** Business Central's API can't tie an invoice to a particular receipt when posting. Posting from the order invoices the received, not-yet-invoiced quantity. The GRN link is the three-way check and the audit trail; the page says so.
+- **Consequences:** one more read per match (receipts with lines, 180 days). A supplier's delivery note number usually isn't Business Central's receipt number, so printed GRN numbers aren't read from invoices; the user links one when Sawwi's suggestion isn't right.
+
+### D-93: Bulk uploads show progress and read three invoices at a time
+- **Context:** the user asked (27 Nov 2026) for a visual progress indicator during bulk uploads, so a user knows how long to wait. Scanned invoices read by OCR and AI take 20 seconds to 3 minutes each (measured on the client's 15: one-page invoices 20–45 s, 74–80-line four-page ones 2.5–3 min). The page showed only "Reading 3 of 12: file.pdf" and read one file at a time.
+- **Decision:**
+  - **Three at a time:** a bulk upload reads three invoices in parallel, each still its own request, so one slow scan doesn't hold up the rest.
+  - **Progress panel** (`components/automation/upload-progress.tsx`): "N of M invoices read" with a bar, the time so far and the time left, and each file's state: waiting, reading (with its own timer), read in how long, or couldn't read. It's announced to screen readers.
+  - **Time left** (`estimateRemaining`): the average time of the invoices already read (45 s assumed until the first one finishes), times those waiting, plus what's left of those being read, shared across the three readers. It improves as files finish.
+  - **Leaving the page** mid-upload asks first, since files not sent yet would be dropped.
+- **Consequences:** a batch of 12 scans that took about 15 minutes one at a time takes about 5. Three requests at once stays within the AI daily cap (D-89) and the function time limit, since each is still its own request.
+
+### D-94: A local mock Business Central sandbox for the three-way match
+- **Context:** the user asked (27 Nov 2026) to build the three-way match with mocked PO and GRN data, as if from a Business Central sandbox, for the client's real invoices. The demo store's mock company (D-32) is shared and takes no uploads, and the old developer switch that pointed real workspaces at the mock (`SAWWI_CONNECTOR_MOCK`) was removed in D-32.
+- **Decision:**
+  - **`SAWWI_MOCK_BC_SANDBOX`** names a JSON file (`connectors/mock/sandbox.ts`, `SandboxFile`): company, currency, VAT rate, vendors (with VAT numbers), items (with GTINs), G/L accounts, purchase orders with received and invoiced quantities, and posted receipts (GRNs). `sandboxBooks` turns it into API v2.0 documents. The mock tenant (D-29) serves it as one more company, in-process: the real connector code reads master data, open PO lines and GRNs, creates drafts and sets order lines to invoice against it.
+  - **Every local workspace** gets the push target "Business Central: <company> (mock sandbox, local)" (`SANDBOX_CONNECTION_ID`). There are no credentials to enter. Writes stay in memory until the server restarts.
+  - **Development only:** off whenever `NODE_ENV=production`, and off in the demo store. It never reaches the network.
+  - **A customer's data stays out of git:** a sandbox built from a customer's invoices holds their suppliers and barcodes, so the file lives in the ignored `.data` folder. Only the loader is committed; its tests use an invented file.
+  - The mock charges the sandbox's VAT rate on draft invoice lines (15% for a Saudi sandbox); the invented UAE companies keep 5%.
+- **Checked on the client's 15 invoices** (27 Nov 2026), against a sandbox with their 5 suppliers, 284 items by barcode, 13 POs and 15 GRNs, with exceptions planted:
+  - all 15 matched vendor by VAT number, items by GTIN, then GRN and PO;
+  - each planted exception was caught: a line received 1 short (blocked), a 5% price difference (warning), a delivery split over two GRNs (warnings), an item not on its PO, and a PO with no GRN. In the last two, Sawwi found the same item received on another of the supplier's POs and blocked a standalone invoice;
+  - 002946 was confirmed, approved and pushed, setting PO-260101 up to invoice.
+- **Also fixed:**
+  - the push confirmation said "unposted draft" for invoices posted against a PO; it now says the order lines are set up to invoice, and names the PO;
+  - the review page gives the form two thirds of the width on wide screens, so the GRN and PO table fits.
+- **Consequences:** the match can be shown and tested on a customer's real invoices before their sandbox exists. A real sandbox replaces it with no code change.
+
+### D-95: The app's work area uses the full screen width
+- **Context:** the user asked (27 Nov 2026) for the work area to be truly full screen: on a wide screen the main column stopped at 72rem (`max-w-6xl`), leaving the review page's PDF, form and GRN/PO table cramped beside empty margins.
+- **Decision:** the app shell's `<main>` has no maximum width; it fills the space beside the sidebar, with the same side padding. Pages that read better narrow keep their own width: Settings (forms, 56rem), a template's detail page (64rem), and paragraphs that already cap their line length. Public pages (landing, checkout, onboarding) are unchanged.
+- **Consequences:** queues, run reports and the invoice review use the whole screen. A page that needs a reading width sets it itself.
+
+### D-96: The chat panel becomes an agent that works on purchase invoices, with a person confirming every consequential action
+- **Context:** the user asked (27 Nov 2026) to "empower the chat agent to help automate whatever the user would want to do in it". Outside a reconciliation, the panel only answered four fixed questions (D-35), and its text box was a "coming soon" placeholder.
+- **Decision:**
+  - **Agent:** Claude Opus 5.5 with tools (`lib/agent/`), in the general panel wherever AI is on. It's off in the demo store and without a key, where the fixed questions stay. The loop runs on the server (`/api/agent`, NDJSON events: steps, text, action cards, the conversation). The browser keeps the conversation for the tab and sends it back whole each turn (append-only).
+  - **Scope v1: the workspace's purchase invoices.** Read tools: overview, list and search, one invoice in full, download links. Edit tools: link a GRN or PO, match again, code a line, post against the PO or standalone. Edits change only Sawwi's draft and withdraw an approval, as on the page (`purchase-invoices/assist.ts`).
+  - **Consequential actions need a person.** Approve, confirm a PO/GRN match, push, read with AI, retry failed reads and delete are never run by the agent: `propose_action` stores a proposal (`agent_actions`, migration 11) that the chat shows as a card listing every invoice, with Confirm and Cancel.
+    - Only the proposer can confirm it, once, within 30 minutes, under their own permissions (`runBlocker`).
+    - A push carries the content hash each invoice was shown with; anything changed since is refused.
+    - Invoices that can't take the action are left out up front, with the reason.
+    - An approve card also confirms a suggested PO/GRN match, and says so per invoice, so one click does both.
+    - The card's result is passed to the agent with the user's next message.
+    - So text inside a supplier's invoice can never approve, push, spend or delete anything.
+  - **Limits:** viewers get the read tools only; at most 10 model calls per message; `SAWWI_AGENT_CALLS_PER_DAY` (default 400) per workspace; conversations over 600,000 characters are closed. Usage is logged as `agent_chat`. Unexpected errors are logged and shown as a plain message, never raw.
+  - **Prompt and thinking:** byte-stable instructions cached for an hour; effort `medium`. With `thinking.block_binding.prefix_mismatch_behavior: "drop_block"` (beta `thinking-binding-controls-2026-08-01`), a deploy that changes the instructions or tools drops Claude's earlier thinking instead of failing an open chat (found in testing: a 400).
+  - **Chat UI** (`components/shell/agent-chat.tsx`): steps as they happen, answers with links inside Sawwi (download links as plain file links; links elsewhere shown as text), action cards, "New chat", suggestions in a fresh chat.
+- **Checked live** (27 Nov 2026, the client's 15 invoices and the mock sandbox, D-94):
+  - "What needs my attention?": a correct summary of the blocked, suggested and approved invoices, each blocker explained;
+  - "Switch 6664 to post against its purchase order, then get 002952 and 002956 ready": an edit, then a confirm-match card. Confirmed;
+  - "Approve 002952, 002956, 6641 and 6645, then give me an Excel": one approve card, which noted the two matches it would also confirm, plus an explanation of why 6664 still can't go. Confirmed: four approved, and the Excel link worked;
+  - 15 model calls in all, USD 0.52 (about 3.5¢ a call; 10–15¢ for a request of several steps).
+- **Consequences:** reconciliations keep their own chat (Phase 4). Settlements, COD and reconciliation runs can join this agent as more tools. Each new action kind gets a card, never a direct run.

@@ -7,18 +7,32 @@ import ExcelJS from "exceljs";
 export type SheetColumn = {
   header: string;
   key: string;
-  type?: "text" | "number" | "money" | "date";
+  type?: "text" | "number" | "integer" | "money" | "date";
   width?: number;
   /** Overrides the type's number format, e.g. "0.0%" or "$#,##0.0000". */
   numFmt?: string;
 };
 
 const MONEY = "#,##0.00;[Red]-#,##0.00";
-const NUMBER = "#,##0.##;[Red]-#,##0.##";
+// General, not "#,##0.##": that pattern shows a stray dot after whole numbers ("37.").
+const NUMBER = "General";
+const INTEGER = "#,##0;[Red]-#,##0";
 
-export async function tableWorkbook(opts: { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] }): Promise<ArrayBuffer> {
+export type SheetSpec = { sheetName: string; columns: SheetColumn[]; rows: Record<string, unknown>[] };
+
+export async function tableWorkbook(opts: SheetSpec): Promise<ArrayBuffer> {
+  return workbook([opts]);
+}
+
+/** Several sheets in one workbook, each styled as `tableWorkbook` styles its one. */
+export async function workbook(sheets: SheetSpec[]): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Sawwi";
+  for (const opts of sheets) addSheet(wb, opts);
+  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+}
+
+function addSheet(wb: ExcelJS.Workbook, opts: SheetSpec) {
   const ws = wb.addWorksheet(opts.sheetName.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Sheet1");
 
   ws.columns = opts.columns.map((c) => {
@@ -27,7 +41,7 @@ export async function tableWorkbook(opts: { sheetName: string; columns: SheetCol
       header: c.header,
       key: c.key,
       width: c.width ?? Math.min(60, Math.max(10, longest + 2)),
-      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : {},
+      style: c.numFmt ? { numFmt: c.numFmt } : c.type === "money" ? { numFmt: MONEY } : c.type === "number" ? { numFmt: NUMBER } : c.type === "integer" ? { numFmt: INTEGER } : c.type === "date" ? { numFmt: "dd-mmm-yyyy" } : c.type === "text" ? { numFmt: "@" } : {},
     };
   });
 
@@ -50,8 +64,6 @@ export async function tableWorkbook(opts: { sheetName: string; columns: SheetCol
   header.border = { bottom: { style: "thin", color: { argb: "FFE4E7EC" } } };
   ws.views = [{ state: "frozen", ySplit: 1 }];
   if (opts.columns.length) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: opts.columns.length } };
-
-  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
 export function xlsxResponse(bytes: ArrayBuffer, fileName: string): Response {

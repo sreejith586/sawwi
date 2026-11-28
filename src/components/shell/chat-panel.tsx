@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChatIcon, CloseIcon } from "@/components/icons";
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, currentChatWidth, isChatOpen, resetChatWidth, setChatOpen, setChatWidth, subscribeChatPanel } from "@/lib/chat-panel";
+import { AgentChat } from "./agent-chat";
 
 // Right-hand "Ask Sawwi" panel, the mirror of the left sidebar. Desktop (≥ 64rem): docked, full
 // height, pushes the page over, and the user drags its left border to resize it (or focuses the
@@ -102,8 +103,8 @@ function ResizeHandle() {
   );
 }
 
-// The general panel (no reconciliation open): canned questions with fixed answers (D-35). Free
-// questions across all reconciliations come later.
+// The general panel (no reconciliation open) without AI: canned questions with fixed answers (D-35).
+// With AI on, the chat agent (D-96) takes its place.
 const GENERAL_QUESTIONS: { q: string; a: ReactNode }[] = [
   {
     q: "What can Sawwi reconcile?",
@@ -231,7 +232,8 @@ export function ChatPanel() {
         {/* A page's own chat (a reconciliation's) is portalled in here; otherwise the general panel shows. */}
         <div id={CHAT_SLOT_ID} ref={registerBody} className="app-chat-slot flex min-h-0 flex-1 flex-col" />
         <div className="app-chat-fallback flex min-h-0 flex-1 flex-col">
-          <GeneralChat />
+          {/* The chat agent (D-96) where AI is on; otherwise the canned questions (D-35). */}
+          <AgentChat fallback={<GeneralChat />} />
         </div>
       </aside>
     </>

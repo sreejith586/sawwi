@@ -46,11 +46,12 @@ export async function POST(request: Request) {
   }
 
   const countries = (await getProfile())?.countries;
-  const results: { name: string; id?: string; existing?: boolean; error?: string }[] = [];
+  const results: { name: string; id?: string; existing?: boolean; failed?: boolean; error?: string }[] = [];
   for (const f of files) {
     try {
-      const { capture, existing } = await capturePdf(orgKey, session.user.id, f, { countries });
-      results.push({ name: f.name, id: capture.id, existing });
+      // A PDF that can't be read is kept as "failed" for a retry (D-86); only bad input throws.
+      const { capture, existing, failed } = await capturePdf(orgKey, session.user.id, f, { countries });
+      results.push({ name: f.name, id: capture.id, existing, failed });
     } catch (error) {
       if (!(error instanceof CaptureError)) console.error("purchase invoice capture failed", error);
       results.push({ name: f.name, error: error instanceof CaptureError ? error.message : `${f.name}: Sawwi couldn't read this PDF.` });
