@@ -139,11 +139,20 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
     return { count, images: out };
   }
 
+  /** Drops the decoded images pdf.js keeps per page: a scanned page is tens of MB (D-100). */
+  async function release(pageNumbers: number[]) {
+    for (const n of pageNumbers) if (n >= 1 && n <= doc.numPages) (await doc.getPage(n)).cleanup();
+  }
+
   return {
     numPages: doc.numPages,
     pages,
     attachments,
-    imageCount: async (n) => (await images(n)).count,
+    imageCount: async (n) => {
+      const { count } = await images(n);
+      await release(n);
+      return count;
+    },
     qrCodes: async (n) => {
       const { default: jsQR } = await import("jsqr");
       const codes: string[] = [];
@@ -153,6 +162,7 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
         const hit = jsQR(rgba, img.width, img.height, { inversionAttempts: "attemptBoth" });
         if (hit?.data) codes.push(hit.data);
       }
+      await release(n);
       return codes;
     },
     pageImages: async (n) => {
@@ -164,6 +174,7 @@ export async function loadPdf(bytes: Uint8Array): Promise<LoadedPdf> {
         const page = pages[pageNumber - 1];
         if (biggest && rgba && page) out.push({ page: pageNumber, pageWidth: page.width, pageHeight: page.height, width: biggest.width, height: biggest.height, rgba });
       }
+      await release(n);
       return out;
     },
     close: () => task!.destroy(),

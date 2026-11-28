@@ -1202,3 +1202,21 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - Paid plans, prices and Stripe checkout are unchanged; upgrading from Free uses the same checkout.
   - The admin console counts "On Free" (ended trials plus `free`) instead of "Trial ended". An ended trial shows as "Free (trial ended)".
   - The limits are placeholders like the prices: edit `PLANS` in `plans.ts`.
+
+### D-100: Scans go straight to the AI; OCR frees its memory after each page; checkout only takes real Stripe Price IDs
+- **Context:** two production errors on 28 Nov 2026.
+  - Uploading the client's two-page Arabic scan 1022825.pdf showed "upload failed. Check your connection". The Vercel logs showed the capture function killed for running out of memory during OCR. Measured locally on that file: OCR peaked at 3.1 GB. Almost all of it is tesseract's WebAssembly memory, about 2 GB per Arabic page, which only grows. A standard Vercel function has 2 GB.
+  - Upgrading said "We couldn't reach the payment provider". Stripe refused the checkout: `STRIPE_PRICE_STARTER` holds an amount, not a Price ID.
+- **Decision:**
+  - **AI first for scans:** with the AI on, a scanned PDF goes to the AI without OCR (`extractPdf(..., { ocr: false })` throws `ScanNotRead`). The AI reads scans better, and the reading had to go to it anyway (D-69). If the AI can't be used (the per-file or daily cap, D-89) or gives nothing usable, the scan is OCR'd after all, as before. Without the AI nothing changes. The draft's reasons say "It's a scan: read by AI directly."
+  - **OCR memory:**
+    - scanned pages are decoded and OCR'd one at a time;
+    - pdf.js's decoded page images are released after use;
+    - the tesseract worker is ended after each job instead of being kept warm.
+    - On 1022825.pdf: peak 2.2 GB instead of 3.1 GB, same time (about 23 s) and the same reading.
+  - **Upload errors say what happened:** a capture that stops without a JSON answer (out of memory or time) shows "Sawwi stopped while reading this PDF (error N)". A refused storage upload shows Vercel's reason. "Check your connection" is kept for real network failures.
+  - **Stripe Price IDs are checked:** `priceIdFor` only accepts `price_…`. Anything else counts as not set, so checkout says "Card payments aren't set up yet", and the server log names the variable to fix.
+- **Consequences:**
+  - Each OCR job starts a fresh worker. That costs about a second, and it's only paid where there's no AI.
+  - Scans are no longer cross-checked against an OCR reading when the AI reads them. The AI's own checks (totals, VAT) still run.
+  - OCR of a dense Arabic page can still approach 2 GB. Raising the function memory in Vercel (Settings → Functions, 4 GB on Pro) gives OCR-only workspaces headroom.

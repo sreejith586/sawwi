@@ -24,7 +24,19 @@ export type PdfOptions = {
   layouts?: LayoutMemory;
   /** Workspace countries, for the expected VAT rate. */
   countries?: string[];
+  /**
+   * false: don't OCR a scan; throw ScanNotRead instead. For callers that hand scans to the AI,
+   * which reads them better, faster and without OCR's memory use (D-100).
+   */
+  ocr?: boolean;
 };
+
+/** A scanned PDF, left unread because the caller asked for no OCR (`ocr: false`). */
+export class ScanNotRead extends PdfInputError {
+  constructor(readonly pages: number) {
+    super("This PDF is a scan; it wasn't OCR'd.");
+  }
+}
 
 export type PdfTable = {
   headers: string[];
@@ -69,23 +81,33 @@ export async function extractPdf(fileName: string, bytes: Uint8Array, opts: PdfO
     let qrOnly: Awaited<ReturnType<typeof zatcaQr>>;
     if (chars(lines) < 20 * Math.min(pdf.numPages, 3)) {
       // 2. No text layer: a scan. OCR it locally (D-24); the ZATCA QR is kept as a fallback for invoices.
+      if (opts.ocr === false) throw new ScanNotRead(pdf.numPages);
       qrOnly = await zatcaQr(pdf, [1, pdf.numPages]);
       if (pdf.numPages > MAX_OCR_PAGES) {
         if (qrOnly) return invoiceTable(fileName, qrOnly, "zatca_qr", pdf.numPages, opts);
         throw new PdfInputError(`This scanned PDF has ${pdf.numPages} pages. Sawwi reads up to ${MAX_OCR_PAGES} scanned pages at a time: split it, or export the data as CSV/Excel.`);
       }
-      const images = await pdf.pageImages(Array.from({ length: pdf.numPages }, (_, i) => i + 1));
-      if (images.length === 0) {
+      // One page at a time: a decoded scan is tens of MB, so holding every page at once ran a
+      // function out of memory on a multi-page scan (D-100).
+      const items: OcrItem[] = [];
+      let scanned = 0;
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const [image] = await pdf.pageImages([n]);
+        if (!image) continue;
+        scanned++;
+        items.push(...(await ocrPages([image])).items);
+      }
+      if (scanned === 0) {
         if (qrOnly) return invoiceTable(fileName, qrOnly, "zatca_qr", pdf.numPages, opts);
         throw new PdfInputError("This PDF has no readable text or scanned pages. Export it as CSV/Excel, or upload a text PDF.");
       }
-      const result = await ocrPages(images);
-      lines = groupLines(toWords(result.items));
-      if (chars(lines) < 20 * Math.min(images.length, 3)) {
+      lines = groupLines(toWords(items));
+      if (chars(lines) < 20 * Math.min(scanned, 3)) {
         if (qrOnly) return invoiceTable(fileName, qrOnly, "zatca_qr", pdf.numPages, opts);
         throw new PdfInputError(SCANNED_UNREADABLE);
       }
-      ocr = { ...result, pages: images.length };
+      const confidence = items.length ? items.reduce((sum, i) => sum + i.confidence, 0) / items.length : 0;
+      ocr = { items, confidence, pages: scanned };
     }
 
     const out = await fromLines(fileName, lines, pdf, opts, ocr ? "ocr" : "text");

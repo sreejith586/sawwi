@@ -45,6 +45,16 @@ function worker(): Promise<TesseractWorker> {
   return workerPromise;
 }
 
+/**
+ * Ends the OCR worker. Its WebAssembly memory only grows (about 2 GB after one Arabic page), so
+ * it's ended after each upload's pages instead of being kept for the next upload (D-100).
+ */
+export async function releaseOcr(): Promise<void> {
+  const pending = workerPromise;
+  workerPromise = undefined;
+  if (pending) await (await pending.catch(() => undefined))?.terminate();
+}
+
 /** A 24-bit BMP: a format tesseract's image reader takes, built without any image library. */
 export function rgbaToBmp(rgba: Uint8ClampedArray, width: number, height: number): Buffer {
   const row = Math.ceil((width * 3) / 4) * 4;
@@ -77,34 +87,43 @@ type OcrBlock = { paragraphs: { lines: { words: OcrWord[] }[] }[] };
 /** OCRs each page's scan and returns words in page coordinates, like pdf.js text items. */
 export async function ocrPages(images: PageImage[]): Promise<OcrResult> {
   const run = queue.then(async () => {
-    const w = await worker();
-    const items: OcrItem[] = [];
-    for (const img of images) {
-      const { data } = await w.recognize(rgbaToBmp(img.rgba, img.width, img.height), {}, { blocks: true });
-      // The scan fills the page: image pixels map onto page units.
-      const sx = img.pageWidth / img.width;
-      const sy = img.pageHeight / img.height;
-      const words = ((data.blocks ?? []) as OcrBlock[]).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
-      for (const word of words) {
-        // Specks and rules read as "~~", "|" or "—": a word with no letter or digit is noise.
-        if (!/[\p{L}\p{N}]/u.test(word.text)) continue;
-        const h = (word.bbox.y1 - word.bbox.y0) * sy;
-        items.push({
-          str: word.text,
-          x: word.bbox.x0 * sx,
-          // pdf.js gives the baseline; the bottom of the box is close enough for grouping lines.
-          y: word.bbox.y1 * sy,
-          w: (word.bbox.x1 - word.bbox.x0) * sx,
-          h: Math.max(h, 4),
-          page: img.page,
-          confidence: word.confidence,
-        });
-      }
+    try {
+      return await recognizeAll(images);
+    } finally {
+      // Free the worker's memory now rather than holding ~2 GB until the next scan (D-100).
+      await releaseOcr();
     }
-    const confidence = items.length ? items.reduce((s, i) => s + i.confidence, 0) / items.length : 0;
-    return { items, confidence };
   });
   // One recognition at a time: the worker is shared by every upload on this server.
   queue = run.catch(() => undefined);
   return run;
+}
+
+async function recognizeAll(images: PageImage[]): Promise<OcrResult> {
+  const w = await worker();
+  const items: OcrItem[] = [];
+  for (const img of images) {
+    const { data } = await w.recognize(rgbaToBmp(img.rgba, img.width, img.height), {}, { blocks: true });
+    // The scan fills the page: image pixels map onto page units.
+    const sx = img.pageWidth / img.width;
+    const sy = img.pageHeight / img.height;
+    const words = ((data.blocks ?? []) as OcrBlock[]).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
+    for (const word of words) {
+      // Specks and rules read as "~~", "|" or "—": a word with no letter or digit is noise.
+      if (!/[\p{L}\p{N}]/u.test(word.text)) continue;
+      const h = (word.bbox.y1 - word.bbox.y0) * sy;
+      items.push({
+        str: word.text,
+        x: word.bbox.x0 * sx,
+        // pdf.js gives the baseline; the bottom of the box is close enough for grouping lines.
+        y: word.bbox.y1 * sy,
+        w: (word.bbox.x1 - word.bbox.x0) * sx,
+        h: Math.max(h, 4),
+        page: img.page,
+        confidence: word.confidence,
+      });
+    }
+  }
+  const confidence = items.length ? items.reduce((s, i) => s + i.confidence, 0) / items.length : 0;
+  return { items, confidence };
 }

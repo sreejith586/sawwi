@@ -12,6 +12,15 @@ describe("Stripe price ↔ plan", () => {
     expect(planForPrice("price_unknown", env)).toBeUndefined();
   });
 
+  it("ignores a price variable that isn't a Stripe Price ID (D-100)", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(priceIdFor("starter", { STRIPE_PRICE_STARTER: "399" })).toBeUndefined();
+    expect(priceIdFor("growth", { STRIPE_PRICE_GROWTH: "AED 999" })).toBeUndefined();
+    expect(err).toHaveBeenCalledWith(expect.stringContaining("STRIPE_PRICE_STARTER must be a Stripe Price ID"));
+    expect(priceIdFor("starter", { STRIPE_PRICE_STARTER: " price_1AbC " })).toBe("price_1AbC");
+    err.mockRestore();
+  });
+
   it("keeps the paid plan while active, trialing or retrying payment", () => {
     for (const status of ["active", "trialing", "past_due"]) expect(planFromSubscription(status, "price_growth", env)).toBe("growth");
   });

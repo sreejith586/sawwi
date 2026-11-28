@@ -114,6 +114,24 @@ describe("AI-assisted reading (D-69)", () => {
     expect(refused).toMatchObject({ failed: true, capture: { status: "failed", failure: { stage: "read", message: expect.stringMatching(/bank statement/), attempts: 1 } } });
   });
 
+  it("sends a scan to the AI without OCR, and OCRs it only when the AI can't read it (D-100)", async () => {
+    const scan = await F.invoicePdf({ number: "INV-2026-0042", date: "15/01/2026", po: "PO-7781", lines: F.MOUSE_LINES, scan: true });
+    const ai = fake(extraction({ invoice_number: "INV-2026-0042" }));
+    const { capture } = await service.capturePdf("scans", "u1", { name: "scan.pdf", bytes: scan }, { ai });
+    expect(ai.calls).toBe(1);
+    expect(capture.draft.invoiceNumber).toBe("INV-2026-0042");
+    expect(capture.source).toMatchObject({ method: "ocr", pages: 1, ai: { used: "ai", reasons: ["It's a scan: read by AI directly."] } });
+    expect(capture.source.ocr).toBeUndefined(); // never OCR'd
+
+    // The AI fails: the scan is OCR'd after all and the text reader's reading is kept.
+    const broken = fake(new AiReadError("no answer"));
+    const other = await F.invoicePdf({ number: "INV-2026-0043", date: "15/01/2026", lines: F.MOUSE_LINES, scan: true });
+    const fallback = await service.capturePdf("scans", "u1", { name: "scan2.pdf", bytes: other }, { ai: broken });
+    expect(broken.calls).toBe(1);
+    expect(fallback.capture).toMatchObject({ status: "ready", draft: { invoiceNumber: "INV-2026-0043" }, source: { method: "ocr", ai: { used: "rules" } } });
+    expect(fallback.capture.source.ocr?.pages).toBe(1);
+  }, 120_000);
+
   it("without the AI, a PDF the rules can't read waits under Failed; a retry or the same upload reads it again (D-86)", async () => {
     const bytes = await F.longScanPdf(1);
     const { capture, failed } = await service.capturePdf("acme", "u1", { name: "blank2.pdf", bytes }, { ai: null });

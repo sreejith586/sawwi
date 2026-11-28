@@ -211,7 +211,7 @@ export function Queue(props: Props) {
           body.append("file", file);
           res = await fetch("/api/automation/purchase-invoices", { method: "POST", body });
         }
-        const json = (await res.json()) as { results?: { name: string; existing?: boolean; failed?: boolean; error?: string }[]; error?: string };
+        const json = await readUploadAnswer(res);
         let ok = false;
         if (json.error) results.push({ ok: false, message: `${file.name}: ${json.error}` });
         for (const r of json.results ?? []) {
@@ -225,8 +225,10 @@ export function Queue(props: Props) {
           );
         }
         set(i, { state: ok ? "done" : "failed", ms: Date.now() - started, note: json.error ?? json.results?.[0]?.error });
-      } catch {
-        results.push({ ok: false, message: `${file.name}: upload failed. Check your connection and try again.` });
+      } catch (error) {
+        // A network failure is a TypeError; anything else (the storage upload refused) says why.
+        const why = error instanceof Error && !(error instanceof TypeError) ? ` (${error.message.replace(/^Vercel Blob: /, "")})` : "";
+        results.push({ ok: false, message: why ? `${file.name}: the upload was refused${why}. Try again.` : `${file.name}: upload failed. Check your connection and try again.` });
         set(i, { state: "failed", ms: Date.now() - started });
       }
     };
@@ -665,4 +667,20 @@ export function Queue(props: Props) {
       />
     </div>
   );
+}
+
+type UploadAnswer = { results?: { name: string; existing?: boolean; failed?: boolean; error?: string }[]; error?: string };
+
+/**
+ * The capture route's answer. A server that stopped mid-read (out of time or memory) answers with
+ * a platform error page, not JSON: say that, instead of blaming the user's connection (D-100).
+ */
+export async function readUploadAnswer(res: Response): Promise<UploadAnswer> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as UploadAnswer;
+  } catch {
+    if (res.status === 413) return { error: "it's too big to upload. Upload PDFs up to 10 MB." };
+    return { error: `Sawwi stopped while reading this PDF (error ${res.status}). Try again in a minute.` };
+  }
 }

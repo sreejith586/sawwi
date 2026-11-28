@@ -33,6 +33,11 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Recent changes
 
+- **Fix: uploads failing on scans, and checkout** (D-100, `fix/production-upload-and-checkout`).
+  - **Scans:** 1022825.pdf ran the capture function out of memory in OCR (Vercel log), and the page said only "Check your connection". With the AI on, scans now go straight to the AI. OCR runs only without it, or when the AI can't read the scan, one page at a time, freeing its memory after each page: 3.1 GB → 2.2 GB peak on that file.
+  - **Upload errors** now say when Sawwi stopped mid-read, or why the storage upload was refused.
+  - **Checkout:** `STRIPE_PRICE_STARTER` in production holds an amount, not a Stripe Price ID, so Stripe refused every Starter checkout. Non-IDs are now ignored and logged. **Waits for the user:** set `STRIPE_PRICE_STARTER` (and check `STRIPE_PRICE_GROWTH`) to the `price_…` IDs from Stripe, then redeploy.
+  - 3 new tests.
 - **Free plan** (D-99, `feature/free-plan`, #51).
   - **The plan:** Free, with no card:
     - 10 reconciliations and 25 purchase invoices a month;
