@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { addConnectionAction, removeConnectionAction, type ConnectionActionState } from "@/app/actions/connections";
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
 import { buttonClass } from "@/components/ui";
+import { track } from "@/lib/analytics/track";
 import { SYNC_SEARCH } from "@/lib/connectors/columns";
 import type { SyncRow } from "@/lib/connectors/rows";
 import type { CredentialField } from "@/lib/connectors/types";
@@ -28,6 +29,11 @@ export function OAuthResult() {
   const params = useSearchParams();
   const connected = params.get("connected");
   const error = params.get("error");
+  // Once per return from the provider; the account name and message are never sent.
+  useEffect(() => {
+    if (connected) track("connector_connect", { provider: "oauth" });
+    else if (error) track("connector_connect_failed", { provider: "oauth" });
+  }, [connected, error]);
   if (error) {
     return (
       <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
@@ -49,7 +55,9 @@ export function AddConnection({ connectors }: { connectors: ConnectorOption[] })
   const [values, setValues] = useState<Record<string, string>>({});
   const [state, action, pending] = useActionState<ConnectionActionState, FormData>(async (prev, form) => {
     const result = await addConnectionAction(prev, form);
+    const provider = String(form.get("provider") ?? "");
     if (result.added) setValues({}); // keep the source, clear what was typed
+    track(result.added ? "connector_connect" : "connector_connect_failed", { provider });
     return result;
   }, {});
   const [, startSubmit] = useTransition();
@@ -161,7 +169,10 @@ export function ConnectionList({ items, canManage, labels = {} }: { items: Conne
               type="button"
               disabled={pending}
               onClick={() => {
-                if (confirm("Remove this connection? Sawwi deletes its stored credentials. Files already imported stay in their runs.")) start(() => removeConnectionAction(c.id));
+                if (confirm("Remove this connection? Sawwi deletes its stored credentials. Files already imported stay in their runs.")) {
+                  track("connector_disconnect", { provider: c.provider });
+                  start(() => removeConnectionAction(c.id));
+                }
               }}
               className="text-sm text-muted hover:text-danger disabled:opacity-40"
             >

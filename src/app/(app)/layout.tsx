@@ -37,7 +37,8 @@ async function AccountMenu() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh">
+    // Everything signed in is client data: Clarity masks all of it, not only inputs (D-97).
+    <div className="flex min-h-dvh" data-clarity-mask="True">
       {/* First, so the user's theme is set before the sidebar paints. */}
       <ThemeScope />
       <Sidebar

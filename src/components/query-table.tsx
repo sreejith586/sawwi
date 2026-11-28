@@ -93,7 +93,7 @@ export function QueryTable<T extends Record<string, unknown> & { id: string }>({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table data-clarity-mask="True" className="w-full text-sm">
           <thead className="border-b border-border bg-surface-muted/50 text-xs">
             <tr>
               {columns.map((c) =>

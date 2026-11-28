@@ -9,7 +9,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
           <LogoLockup />
         </span>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
+      <main data-clarity-mask="True" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { flashEvent } from "@/lib/analytics/flash-server";
 import { demoEnabled } from "@/lib/demo/enabled";
 import { ensureDemoWorkspace, resetDemoIfDue } from "@/lib/demo/workspace";
 import { startSession } from "@/lib/saas/session";
@@ -14,5 +15,6 @@ export async function startDemo() {
   const { org, user } = await ensureDemoWorkspace();
   await resetDemoIfDue();
   await startSession(user.id, org);
+  await flashEvent("demo_start");
   redirect("/home");
 }

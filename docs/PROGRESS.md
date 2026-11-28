@@ -25,12 +25,25 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
+| Google Analytics 4 + Microsoft Clarity, consent banner, event tracking (D-97) | `feature/analytics-clarity-ga` | #50 | Analytics session |
 
 Merged on 28 Nov 2026: purchase invoices, three-way match and the chat agent (D-86–D-96, #47); QuickBooks Online, Xero and NetSuite connectors (D-80–D-85, #46, rebased on #47).
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
+
+- **Analytics: Google Analytics 4 and Microsoft Clarity** (D-97, `feature/analytics-clarity-ga`).
+  - **Off by default:** loads only when `NEXT_PUBLIC_GA_MEASUREMENT_ID` or `NEXT_PUBLIC_CLARITY_PROJECT_ID` is set. With neither: no script, cookie or banner.
+  - **One typed `track(event, params)`** sends to both (gtag event; Clarity event plus tags). 34 events cover landing and SEO CTAs, sign-up, log in and out, demo, onboarding steps, connectors, reconciliation runs, purchase invoices (upload, AI read, retry, link PO/GRN, confirm match, approve, push, Excel/CSV), settlements and COD, Ask Sawwi (message, card proposed, confirmed, cancelled), settings, upgrade clicks and every error alert. The list is in ARCHITECTURE §12.
+  - **Page views** on every App Router navigation, with routes only (`/runs/:id`), no query strings.
+  - **Server-side moments** that redirect (sign-up, log in, log out, demo, onboarding done, run started) are sent on the next page through a 60-second cookie.
+  - **Privacy:** parameters are categories, counts and flags; anything else is dropped at runtime. Clarity masks the whole signed-in app, onboarding, auth and checkout, plus the chat panel, invoice review and tables on their own. Clarity doesn't load on `/reset-password` or on a connector sign-in's return (its address names the account).
+  - **Consent banner (Consent Mode v2),** the user's choice: GA4 cookieless and Clarity without cookies until "Accept". "Cookie settings" in the footer and Settings.
+  - **No CSP** exists, so none changed; DEPLOY.md lists the domains for one, and the GA4/Clarity admin settings to make (turn off GA4's automatic history page views, site search, form and download tracking).
+  - 31 new tests (helper, no-ID no-op, consent, sanitising, paths, flash cookie).
+  - **Checked in the browser** (dev server with test IDs): banner → Accept updates both tools' consent; `cta_click` (try_demo, hero), `demo_start` and `logout` via the flash cookie, page views on client navigation with `:id` paths, `invoice_upload` (sample), `invoice_approve`, `invoice_export` (xlsx, single), `error_shown` (area `/login`), and Cookie settings reopening the banner. Found and fixed during the check: `<script id="clarity">` shadowed `window.clarity`; React's dev double effect sent two page views; Next re-encoded the flash cookie.
+  - **Waits for the user:** create the GA4 property and Clarity project, set the two env vars in Vercel, and make the admin settings in DEPLOY.md.
 
 - **QuickBooks Online, Xero and NetSuite connectors** (D-80–D-85, `feature/accounting-connectors`, #46, merged 28 Nov 2026). Read-only. Their reports fill the same template slots as Business Central's and use its column names, so they map with no questions.
   - **"Connect with …" sign-in (D-81)**, new for QuickBooks and Xero: an owner or admin signs in at the provider and picks the company. The state is checked against a short-lived cookie bound to the workspace. Tokens are encrypted like other secrets; rotated refresh tokens are saved back on every renewal. Signing in again to the same account replaces its tokens instead of adding a second connection.

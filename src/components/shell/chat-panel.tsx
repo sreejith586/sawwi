@@ -209,7 +209,7 @@ export function ChatPanel() {
       {/* Narrow screens: backdrop behind the drawer. */}
       <div aria-hidden onClick={() => setChatOpen(false)} className="app-chat-backdrop fixed inset-0 z-40 bg-black/40 lg:hidden" />
 
-      <aside id="chat-panel" aria-label="Ask Sawwi" className="app-chat fixed inset-y-0 right-0 z-50 flex-col border-l border-border bg-surface lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:shrink-0">
+      <aside id="chat-panel" aria-label="Ask Sawwi" data-clarity-mask="True" className="app-chat fixed inset-y-0 right-0 z-50 flex-col border-l border-border bg-surface lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:shrink-0">
         <ResizeHandle />
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
           <ChatIcon className="size-4 shrink-0 text-muted" />

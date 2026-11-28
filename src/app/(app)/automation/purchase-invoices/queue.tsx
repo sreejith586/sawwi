@@ -1,5 +1,7 @@
 "use client";
 
+import { outcomeOf } from "@/lib/analytics/events";
+import { track } from "@/lib/analytics/track";
 import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -123,6 +125,7 @@ export function Queue(props: Props) {
       setUploading(`Reading ${ids.length === 1 ? "the invoice" : `${ids.length} invoices`} with AI…`);
       const res = await rereadManyAction(ids);
       setUploading(null);
+      track("invoice_ai_read", { count: ids.length, ok_count: res.results?.filter((r) => r.ok).length ?? 0, location: "queue" });
       if (res.error) return setError(res.error);
       setNotice({ title: `${res.results!.filter((r) => r.ok).length} of ${ids.length} read with AI. Check them before approving.`, results: res.results! });
       setSelected(new Set());
@@ -136,6 +139,7 @@ export function Queue(props: Props) {
       setUploading(`Reading ${ids.length === 1 ? "the invoice" : `${ids.length} invoices`} again…`);
       const res = await retryReadAction(ids);
       setUploading(null);
+      track("invoice_retry", { count: ids.length, ok_count: res.results?.filter((r) => r.ok).length ?? 0, location: "queue" });
       if (res.error) return setError(res.error);
       const ok = res.results!.filter((r) => r.ok).length;
       setNotice({ title: `${ok} of ${ids.length} read. ${ok ? "They're in To review." : "Open one to type it in from the PDF."}`, results: res.results! });
@@ -147,6 +151,7 @@ export function Queue(props: Props) {
     startBusy(async () => {
       setError(null);
       const res = await approveAction(ids);
+      track("invoice_approve", { count: ids.length, ok_count: res.results?.filter((r) => r.ok).length ?? 0, location: "queue" });
       if (res.error) return setError(res.error);
       const ok = res.results!.filter((r) => r.ok).length;
       setNotice({ title: `${ok} of ${ids.length} approved.`, results: res.results! });
@@ -159,6 +164,8 @@ export function Queue(props: Props) {
       const items = props.rows.filter((r) => pushing?.includes(r.id)).map((r) => ({ id: r.id, hash: r.hash }));
       const res = await pushAction(items);
       setPushing(null);
+      const pushed = res.results?.filter((r) => r.ok).length ?? 0;
+      track("invoice_push", { count: items.length, ok_count: pushed, failed_count: items.length - pushed, outcome: outcomeOf(pushed, items.length), location: "queue" });
       if (res.error) return setError(res.error);
       const ok = res.results!.filter((r) => r.ok).length;
       setNotice({ title: `${ok} of ${items.length} pushed to Business Central as drafts.`, results: res.results! });
@@ -168,7 +175,7 @@ export function Queue(props: Props) {
 
   /** True when at least one file was read. */
   /** True when at least one file was read. Files are read a few at a time, with progress for each (D-93). */
-  async function upload(files: File[]): Promise<boolean> {
+  async function upload(files: File[], source: "pdf" | "photo" = "pdf"): Promise<boolean> {
     const pdfs = files.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
     if (pdfs.length === 0) return (setError("Upload supplier invoices as PDF files."), false);
     if (pdfs.some((f) => f.size > 10 * 1024 * 1024)) return (setError("Each PDF must be under 10 MB."), false);
@@ -236,7 +243,9 @@ export function Queue(props: Props) {
       if (fileRef.current) fileRef.current.value = "";
     }
     setFilter(results.some((r) => r.ok) || !results.some((r) => /under Failed/.test(r.message ?? "")) ? "open" : "failed");
-    setNotice({ title: `${results.filter((r) => r.ok).length} of ${pdfs.length} invoices read.`, results });
+    const read = results.filter((r) => r.ok).length;
+    track("invoice_upload", { count: pdfs.length, ok_count: read, failed_count: pdfs.length - read, source });
+    setNotice({ title: `${read} of ${pdfs.length} invoices read.`, results });
     router.refresh();
     return results.some((r) => r.ok);
   }
@@ -247,6 +256,7 @@ export function Queue(props: Props) {
       setUploading("Reading the sample…");
       const res = await captureSampleAction(id);
       setUploading(null);
+      track("invoice_upload", { count: 1, ok_count: res.error ? 0 : 1, failed_count: res.error ? 1 : 0, source: "sample" });
       if (res.error) return setError(res.error);
       setFilter("open");
       setNotice({ title: res.existing ? "That sample is already in the list." : "Sample read. Review it below.", results: [] });
@@ -257,6 +267,7 @@ export function Queue(props: Props) {
     startBusy(async () => {
       const res = await setTargetAction(value || null);
       if (res.error) setError(res.error);
+      else track("settings_change", { setting: "push_target", value: value ? "erp" : "csv" });
       router.refresh();
     });
 
@@ -336,7 +347,7 @@ export function Queue(props: Props) {
             <>
             {/* Phones and tablets: photograph the invoice, one photo per page (D-67). */}
             <div className="mb-3 md:hidden">
-              <PhotoPages disabled={Boolean(uploading || progress)} onReady={(pdf) => upload([pdf])} />
+              <PhotoPages disabled={Boolean(uploading || progress)} onReady={(pdf) => upload([pdf], "photo")} />
             </div>
             <label
               onDragOver={(e) => e.preventDefault()}
@@ -398,10 +409,10 @@ export function Queue(props: Props) {
           {shown.length > 0 && (
             // Everything in the tab in one file (D-90): the Invoices sheet lists each one with its status and what's open.
             <span className="ml-auto flex gap-2">
-              <a href={`/api/automation/purchase-invoices/export?scope=${filter}&format=xlsx`} className={buttonClass("secondary")}>
+              <a href={`/api/automation/purchase-invoices/export?scope=${filter}&format=xlsx`} className={buttonClass("secondary")} onClick={() => track("invoice_export", { format: "xlsx", scope: "tab", count: shown.length })}>
                 Download {filter === "all" ? "all" : `these`} {shown.length} as Excel
               </a>
-              <a href={`/api/automation/purchase-invoices/export?scope=${filter}`} className={buttonClass("secondary")}>
+              <a href={`/api/automation/purchase-invoices/export?scope=${filter}`} className={buttonClass("secondary")} onClick={() => track("invoice_export", { format: "csv", scope: "tab", count: shown.length })}>
                 CSV
               </a>
             </span>
@@ -424,10 +435,10 @@ export function Queue(props: Props) {
                 Retry {retryable.length} failed
               </button>
             )}
-            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}&format=xlsx`} className={buttonClass("secondary")}>
+            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}&format=xlsx`} className={buttonClass("secondary")} onClick={() => track("invoice_export", { format: "xlsx", scope: "selected", count: picked.length })}>
               Export {picked.length} to Excel
             </a>
-            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}`} className={buttonClass("secondary")}>
+            <a href={`/api/automation/purchase-invoices/export?ids=${idsParam}`} className={buttonClass("secondary")} onClick={() => track("invoice_export", { format: "csv", scope: "selected", count: picked.length })}>
               CSV
             </a>
             {props.target && (
@@ -456,7 +467,7 @@ export function Queue(props: Props) {
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full min-w-[56rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[56rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="w-10 px-3 py-2">
@@ -574,7 +585,7 @@ export function Queue(props: Props) {
                         <tr className="bg-surface-muted/40">
                           <td />
                           <td colSpan={9} className="px-3 pb-4">
-                            <table className="w-full text-xs">
+                            <table data-clarity-mask="True" className="w-full text-xs">
                               <thead className="text-left text-muted">
                                 <tr>
                                   <th className="py-1 pr-3 font-medium">#</th>

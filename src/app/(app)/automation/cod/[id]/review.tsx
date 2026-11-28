@@ -1,5 +1,7 @@
 "use client";
 
+import { outcomeOf } from "@/lib/analytics/events";
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -57,6 +59,7 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
       setError(null);
       if (dirty && !(await save())) return;
       const res = await approveRemittancesAction([view.id]);
+      track("automation_approve", { automation: "cod", count: 1, ok_count: res.results?.filter((r) => r.ok).length ?? 0 });
       if (res.error) return setError(res.error);
       if (!res.results![0].ok) setError(res.results![0].message ?? "Couldn't approve.");
       router.refresh();
@@ -64,6 +67,11 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
   const onPush = () =>
     start(async () => {
       const res = await pushRemittancesAction([{ id: view.id, hash: view.hash }]);
+      {
+        const total = 1;
+        const ok = res.results?.filter((r) => r.ok).length ?? 0;
+        track("automation_push", { automation: "cod", count: total, ok_count: ok, failed_count: total - ok, outcome: outcomeOf(ok, total) });
+      }
       setPushing(false);
       if (res.error) return setError(res.error);
       setNotice({ title: res.results![0].ok ? "Added to Business Central." : "Not pushed.", results: res.results! });
@@ -143,7 +151,7 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
           </label>
         </div>
         <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[58rem] text-sm">
+          <table data-clarity-mask="True" className="w-full min-w-[58rem] text-sm">
             <thead className="bg-surface-muted text-left text-xs text-muted">
               <tr>
                 <th className="px-3 py-2 font-medium">AWB · order</th>
@@ -207,7 +215,7 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
         <section className="min-w-0">
           <h2 className="text-sm font-semibold">Customer payments</h2>
           <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[26rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[26rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">Customer</th>
@@ -230,7 +238,7 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
         <section className="min-w-0">
           <h2 className="text-sm font-semibold">Journal: bank, fees and clearing</h2>
           <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[26rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[26rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">Account</th>
@@ -289,7 +297,7 @@ export function RemittanceReviewPage({ view, target, canEdit }: { view: View; ta
             )}
           </>
         )}
-        <a href={`/api/automation/cod/export?ids=${view.id}`} className={buttonClass("secondary")}>
+        <a href={`/api/automation/cod/export?ids=${view.id}`} className={buttonClass("secondary")} onClick={() => track("automation_export", { automation: "cod", format: "csv" })}>
           Download CSV
         </a>
         {view.approvedAt && view.status === "approved" && <span className="text-xs text-muted">Approved {new Date(view.approvedAt).toLocaleString()}</span>}

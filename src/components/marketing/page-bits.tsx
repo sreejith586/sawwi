@@ -1,3 +1,4 @@
+import { ctaAttrs } from "@/lib/analytics/events";
 import Link from "next/link";
 import { TryDemoButton } from "@/components/demo/try-demo";
 import { buttonClass } from "@/components/ui";
@@ -30,10 +31,10 @@ export function Breadcrumbs({ items }: { items: { name: string; path: string }[]
 export function Ctas() {
   return (
     <div className="mt-8 flex flex-wrap gap-3">
-      <Link href="/signup" className={`${buttonClass("primary")} h-11 px-5 text-[15px]`}>
+      <Link href="/signup" className={`${buttonClass("primary")} h-11 px-5 text-[15px]`} {...ctaAttrs("start_free", "seo_page")}>
         Start free
       </Link>
-      {demoEnabled() && <TryDemoButton className="h-11 px-5 text-[15px]" />}
+      {demoEnabled() && <TryDemoButton className="h-11 px-5 text-[15px]" location="seo_page" />}
     </div>
   );
 }
@@ -46,6 +47,7 @@ export function ClosingCta() {
         <p className="mx-auto mt-3 max-w-xl opacity-75">Setup takes two minutes.{demoEnabled() ? " Or try the demo store with invented data first, no sign-up." : ""}</p>
         <Link
           href="/signup"
+          {...ctaAttrs("start_free", "closing")}
           className="mt-8 inline-flex h-11 items-center rounded-lg bg-background px-5 text-[15px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
         >
           Create your workspace

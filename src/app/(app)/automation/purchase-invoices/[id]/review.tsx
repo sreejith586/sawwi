@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -162,6 +163,7 @@ export function Review({
       setError(null);
       if (dirty && !(await save())) return;
       const res = await approveAction([view.id]);
+      track("invoice_approve", { count: 1, ok_count: res.results?.[0]?.ok ? 1 : 0, location: "review" });
       if (res.error) return setError(res.error);
       const r = res.results![0];
       if (!r.ok) setError(r.message ?? "Couldn't approve.");
@@ -178,6 +180,8 @@ export function Review({
     start(async () => {
       const res = await pushAction([{ id: view.id, hash: view.hash }]);
       setPushing(false);
+      const pushed = res.results?.[0]?.ok ? 1 : 0;
+      track("invoice_push", { count: 1, ok_count: pushed, failed_count: 1 - pushed, outcome: pushed ? "ok" : "failed", location: "review" });
       if (res.error) return setError(res.error);
       setNotice({ title: res.results![0].ok ? "Pushed to Business Central." : "Not pushed.", results: res.results! });
       router.refresh();
@@ -190,6 +194,7 @@ export function Review({
       setNotice({ title: "Reading the invoice with AI…", results: [] });
       const res = await rereadWithAiAction(view.id);
       setNotice(null);
+      track("invoice_ai_read", { count: 1, ok_count: res.error ? 0 : 1, location: "review" });
       if (res.error) return setError(res.error);
       router.refresh();
     });
@@ -200,6 +205,7 @@ export function Review({
       setNotice({ title: "Reading the invoice again…", results: [] });
       const res = await retryReadAction([view.id]);
       setNotice(null);
+      track("invoice_retry", { count: 1, ok_count: res.results?.[0]?.ok ? 1 : 0, location: "review" });
       if (res.error) return setError(res.error);
       if (!res.results![0].ok) setError(res.results![0].message ?? "Still couldn't read it. Type it in from the PDF.");
       router.refresh();
@@ -210,13 +216,15 @@ export function Review({
       if (!confirm(`Delete the draft for ${draft.invoiceNumber || view.fileName}? The PDF is deleted too.`)) return;
       const res = await discardAction(view.id);
       if (res.error) return setError(res.error);
+      track("invoice_delete");
       router.push("/automation/purchase-invoices");
     });
 
   const erpValue = (l: DraftLine) => (l.erpType && l.erpNo ? `${l.erpType}:${l.erpNo}` : "");
 
   return (
-    <div className="mt-3">
+    // Invoice contents: masked in Clarity even if the app shell's mask is ever lifted (D-97).
+    <div className="mt-3" data-clarity-mask="True">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{draft.invoiceNumber || view.fileName}</h1>
         <StatusPill status={view.status} />
@@ -376,7 +384,7 @@ export function Review({
           <fieldset disabled={locked} className="min-w-0">
             <legend className="mb-2 text-sm font-semibold">Lines</legend>
             <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[46rem] text-sm">
+              <table data-clarity-mask="True" className="w-full min-w-[46rem] text-sm">
                 <thead className="bg-surface-muted text-left text-xs text-muted">
                   <tr>
                     <th className="px-2 py-2 font-medium">Description · supplier SKU</th>
@@ -534,14 +542,14 @@ export function Review({
                 )}
               </>
             )}
-            <a href={`/api/automation/purchase-invoices/export?ids=${view.id}`} className={buttonClass("secondary")} aria-disabled={dirty} onClick={(e) => dirty && (e.preventDefault(), setError("Save your changes first, then download."))}>
+            <a href={`/api/automation/purchase-invoices/export?ids=${view.id}`} className={buttonClass("secondary")} aria-disabled={dirty} onClick={(e) => (dirty ? (e.preventDefault(), setError("Save your changes first, then download.")) : track("invoice_export", { format: "csv", scope: "single", count: 1 }))}>
               Download CSV
             </a>
             <a
               href={`/api/automation/purchase-invoices/export?ids=${view.id}&format=xlsx`}
               className={buttonClass("secondary")}
               aria-disabled={dirty}
-              onClick={(e) => dirty && (e.preventDefault(), setError("Save your changes first, then download."))}
+              onClick={(e) => (dirty ? (e.preventDefault(), setError("Save your changes first, then download.")) : track("invoice_export", { format: "xlsx", scope: "single", count: 1 }))}
             >
               Excel
             </a>

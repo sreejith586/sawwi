@@ -1,3 +1,4 @@
+import { ctaAttrs } from "@/lib/analytics/events";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -99,13 +100,13 @@ export default function LandingPage() {
               minutes, and shows you exactly what&apos;s missing.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/signup" className={`${buttonClass("primary")} h-11 px-5 text-[15px]`}>
+              <Link href="/signup" className={`${buttonClass("primary")} h-11 px-5 text-[15px]`} {...ctaAttrs("start_free", "hero")}>
                 Start free
               </Link>
               {demoEnabled() ? (
                 <TryDemoButton className="h-11 px-5 text-[15px]" />
               ) : (
-                <a href="#how" className={`${buttonClass("secondary")} h-11 px-5 text-[15px]`}>
+                <a href="#how" className={`${buttonClass("secondary")} h-11 px-5 text-[15px]`} {...ctaAttrs("see_how", "hero")}>
                   See how it works
                 </a>
               )}
@@ -212,7 +213,7 @@ export default function LandingPage() {
             ))}
           </ul>
           <p className="mt-6 text-center text-sm text-muted">
-            <Link href="/reconciliation-templates" className="underline decoration-border underline-offset-4 hover:text-foreground hover:decoration-foreground">
+            <Link href="/reconciliation-templates" {...ctaAttrs("template_catalogue", "hero")} className="underline decoration-border underline-offset-4 hover:text-foreground hover:decoration-foreground">
               Browse all {TEMPLATES.length} templates
             </Link>
           </p>
@@ -252,6 +253,7 @@ export default function LandingPage() {
           <p className="mx-auto mt-3 max-w-xl opacity-75">Set up takes two minutes. Bring last month&apos;s exports and see what you&apos;ve been missing.</p>
           <Link
             href="/signup"
+            {...ctaAttrs("start_free", "closing")}
             className="mt-8 inline-flex h-11 items-center rounded-lg bg-background px-5 text-[15px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
           >
             Create your workspace
@@ -331,7 +333,7 @@ async function Pricing() {
         <p className="text-sm font-medium text-success">Early access</p>
         <p className="mt-2 text-2xl font-semibold tracking-tight">Free while we&apos;re in early access</p>
         <p className="mt-2 text-sm text-muted">Every template, every export, your whole team. We&apos;ll give plenty of notice before any paid plans start.</p>
-        <Link href="/signup" className={`${buttonClass("primary")} mt-6`}>
+        <Link href="/signup" className={`${buttonClass("primary")} mt-6`} {...ctaAttrs("start_free", "pricing")}>
           Start free
         </Link>
       </div>
@@ -354,7 +356,7 @@ async function Pricing() {
               </li>
             ))}
           </ul>
-          <Link href="/signup" className={`${buttonClass(p.id === "growth" ? "primary" : "secondary")} mt-6`}>
+          <Link href="/signup" className={`${buttonClass(p.id === "growth" ? "primary" : "secondary")} mt-6`} {...ctaAttrs("choose_plan", "pricing")}>
             {p.id === "enterprise" ? "Start a trial, then talk to us" : `Start ${trialDays}-day free trial`}
           </Link>
         </div>

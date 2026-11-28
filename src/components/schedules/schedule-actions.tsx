@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useTransition } from "react";
 import { deleteScheduleAction, setSchedulePaused } from "@/app/actions/schedules";
 
@@ -9,7 +10,10 @@ export function ScheduleRowActions({ id, paused }: { id: string; paused: boolean
   const link = "text-sm text-muted hover:text-foreground disabled:opacity-40";
   return (
     <span className="flex justify-end gap-3 whitespace-nowrap">
-      <button type="button" disabled={pending} className={link} onClick={() => start(() => setSchedulePaused(id, !paused))}>
+      <button type="button" disabled={pending} className={link} onClick={() => {
+          track("settings_change", { setting: "schedule_pause", value: paused ? "resume" : "pause" });
+          start(() => setSchedulePaused(id, !paused));
+        }}>
         {paused ? "Resume" : "Pause"}
       </button>
       <button
@@ -17,7 +21,9 @@ export function ScheduleRowActions({ id, paused }: { id: string; paused: boolean
         disabled={pending}
         className={`${link} hover:text-danger`}
         onClick={() => {
-          if (confirm("Delete this schedule? Runs it started are kept.")) start(() => deleteScheduleAction(id));
+          if (!confirm("Delete this schedule? Runs it started are kept.")) return;
+          track("settings_change", { setting: "schedule_delete" });
+          start(() => deleteScheduleAction(id));
         }}
       >
         Delete

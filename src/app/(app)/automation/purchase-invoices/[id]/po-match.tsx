@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useState, useTransition } from "react";
 import { buttonClass } from "@/components/ui";
 import { money } from "@/components/automation/shared";
@@ -51,6 +52,7 @@ export function PoMatch(props: {
       const no = poInput.trim();
       if (!no) return props.onError("Type the purchase order number from Business Central.");
       const res = await orderLinesAction(props.viewId, { orderNumber: no });
+      track("invoice_link", { kind: "po", outcome: res.error ? "failed" : "ok" });
       if (res.error) return props.onError(res.error);
       const { all, allR } = merge(res.lines!, res.receipts ?? []);
       // Match against this PO only; the user confirms what it shows.
@@ -63,6 +65,7 @@ export function PoMatch(props: {
       const no = grnInput.trim();
       if (!no) return props.onError("Type the GRN (posted purchase receipt) number from Business Central.");
       const res = await orderLinesAction(props.viewId, { receiptNumber: no });
+      track("invoice_link", { kind: "grn", outcome: res.error ? "failed" : "ok" });
       if (res.error) return props.onError(res.error);
       const { all, allR } = merge(res.lines!, res.receipts!);
       // Match against this GRN, and its order for the PO lines.
@@ -73,6 +76,7 @@ export function PoMatch(props: {
     start(async () => {
       props.onError(null);
       const res = await orderLinesAction(props.viewId);
+      track("invoice_link", { kind: "rematch", outcome: res.error ? "failed" : "ok" });
       if (res.error) return props.onError(res.error);
       const { all, allR } = merge(res.lines!, res.receipts!);
       props.onChange(matchOrders({ ...draft, grnNumber: undefined, postTo: draft.postTo === "invoice" ? undefined : draft.postTo, poConfirmed: undefined }, all, allR));
@@ -125,7 +129,7 @@ export function PoMatch(props: {
 
       {(linked > 0 || withGrn > 0) && (
         <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[40rem] text-xs">
+          <table data-clarity-mask="True" className="w-full min-w-[40rem] text-xs">
             <thead className="bg-surface-muted text-left text-muted">
               <tr>
                 <th className="px-2 py-1.5 font-medium" colSpan={3}>
@@ -240,7 +244,10 @@ export function PoMatch(props: {
       {!props.locked && (
         <div className="mt-3 space-y-2">
           {linked > 0 && draft.postTo === "order" && !draft.poConfirmed && (
-            <button type="button" className={buttonClass("primary")} onClick={() => props.onChange({ ...draft, poConfirmed: true })} disabled={busy}>
+            <button type="button" className={buttonClass("primary")} onClick={() => {
+                track("invoice_match_confirm");
+                props.onChange({ ...draft, poConfirmed: true });
+              }} disabled={busy}>
               Confirm this match
             </button>
           )}

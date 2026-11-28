@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
@@ -58,6 +59,7 @@ export function RunWorkspace({
   const chatSlot = useChatPanelSlot();
   const ask = (intent: ChatIntent) => {
     setChatOpen(true, false);
+    track("reconciliation_chat", { intent: intent.kind });
     startChat(async () => apply(await sendChat(view.id, intent)));
   };
 
@@ -136,7 +138,14 @@ export function RunWorkspace({
             <button
               type="button"
               disabled={pending || (view.status !== "ready" && view.status !== "done")}
-              onClick={() => startTransition(async () => apply(await reconcileRun(view.id)))}
+              onClick={() =>
+                startTransition(async () => {
+                  const rerun = Boolean(view.report);
+                  const result = await reconcileRun(view.id);
+                  track("reconciliation_run", { outcome: result.error ? "failed" : "ok", rerun });
+                  apply(result);
+                })
+              }
               className={buttonClass("primary")}
             >
               {pending ? "Working…" : view.report ? "Run again" : "Run reconciliation"}
@@ -261,7 +270,9 @@ function SlotCard(props: {
       const json = (await res.json()) as { view?: RunView; error?: string };
       if (json.view) props.onView(json.view);
       if (json.error) props.onError(json.error);
+      track("reconciliation_upload", { file_count: files.length, file_type: fileTypeOf(files), outcome: json.error ? "failed" : "ok" });
     } catch {
+      track("reconciliation_upload", { file_count: files.length, file_type: fileTypeOf(files), outcome: "failed" });
       props.onError("Upload failed. Check your connection and try again.");
     } finally {
       clearTimeout(timer);
@@ -690,4 +701,10 @@ function SaveTemplate({ defaultTitle, onSave, busy, saved }: { defaultTitle: str
       </div>
     </form>
   );
+}
+
+/** The kind of files uploaded, for analytics: never their names. */
+function fileTypeOf(files: File[]): "pdf" | "csv" | "excel" | "mixed" {
+  const kinds = new Set(files.map((f) => (/\.pdf$/i.test(f.name) ? "pdf" : /\.xlsx?$/i.test(f.name) ? "excel" : "csv")));
+  return kinds.size === 1 ? ([...kinds][0] as "pdf" | "csv" | "excel") : "mixed";
 }

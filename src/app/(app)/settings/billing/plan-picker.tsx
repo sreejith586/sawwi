@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { requestPlan } from "@/app/actions/billing";
@@ -51,7 +52,7 @@ export function PlanPicker({
                 ))}
               </ul>
               {canManage && !isCurrent && checkoutPlans.includes(p.id) ? (
-                <Link href={`/checkout/${p.id}`} className={`${buttonClass("primary")} mt-5`}>
+                <Link href={`/checkout/${p.id}`} className={`${buttonClass("primary")} mt-5`} onClick={() => track("plan_upgrade_click", { plan: p.id, action: "checkout" })}>
                   Subscribe to {p.name}
                 </Link>
               ) : canManage && !isCurrent && subscribed && p.id !== "enterprise" ? (
@@ -62,7 +63,10 @@ export function PlanPicker({
                 <button
                   type="button"
                   disabled={!canManage || isCurrent || pending}
-                  onClick={() => start(async () => setError((await requestPlan(p.id)).error))}
+                  onClick={() => {
+                    track("plan_upgrade_click", { plan: p.id, action: "request" });
+                    start(async () => setError((await requestPlan(p.id)).error));
+                  }}
                   className={`${buttonClass(isCurrent ? "secondary" : "primary")} mt-5`}
                 >
                   {isCurrent ? "Your plan" : p.id === "enterprise" ? "Talk to us" : `Choose ${p.name}`}

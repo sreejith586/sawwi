@@ -13,7 +13,7 @@ export default function CheckoutLayout({ children }: { children: React.ReactNode
           </Link>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">{children}</main>
+      <main data-clarity-mask="True" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">{children}</main>
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-5 text-xs text-muted sm:px-6">
           <svg aria-hidden viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

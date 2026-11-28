@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useActionState } from "react";
 import { buttonClass } from "@/components/ui";
 import { saveEmailPrefs, type EmailPrefsState } from "@/app/actions/email";
@@ -11,7 +12,11 @@ const TOPICS = [
 ] as const;
 
 export function EmailPrefsForm({ initial, disabled }: { initial: EmailPrefs; disabled?: boolean }) {
-  const [state, action, pending] = useActionState<EmailPrefsState, FormData>(saveEmailPrefs, {});
+  const [state, action, pending] = useActionState<EmailPrefsState, FormData>(async (prev, form) => {
+    const result = await saveEmailPrefs(prev, form);
+    if (result.saved) track("settings_change", { setting: "email_prefs" });
+    return result;
+  }, {});
   const prefs = state.prefs ?? initial;
   return (
     <form action={action} className="space-y-4">

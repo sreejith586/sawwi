@@ -1,3 +1,4 @@
+import { ctaAttrs } from "@/lib/analytics/events";
 import Link from "next/link";
 import { isDemoOrg, untilNextReset } from "@/lib/demo/demo";
 import { getCurrentSession, orgEntitlement } from "@/lib/saas/session";
@@ -18,7 +19,7 @@ export async function PlanBanner() {
     <div className={`border-b px-4 py-2 text-center text-sm sm:px-8 ${blocked ? "border-danger/20 bg-danger-soft text-danger" : "border-warn/20 bg-warn-soft text-warn"}`}>
       {text}{" "}
       {e.ok || e.reason !== "suspended" ? (
-        <Link href="/settings/billing" className="font-medium underline underline-offset-4">
+        <Link href="/settings/billing" className="font-medium underline underline-offset-4" {...ctaAttrs("plan_upgrade", "plan_banner")}>
           {blocked ? "See plans" : "Pick a plan"}
         </Link>
       ) : null}
@@ -32,7 +33,7 @@ function DemoBanner({ resetIn }: { resetIn: string }) {
     <div className="border-b border-accent/20 bg-accent-soft px-4 py-2 text-center text-sm text-accent sm:px-8">
       You&apos;re in the live demo: invented data, shared with other visitors, reset in {resetIn} (00:00 UTC). Start a
       reconciliation and click <strong>Fill with demo data</strong>.{" "}
-      <Link href="/signup" className="font-medium underline underline-offset-4">
+      <Link href="/signup" className="font-medium underline underline-offset-4" {...ctaAttrs("start_free", "plan_banner")}>
         Create your own workspace
       </Link>
     </div>

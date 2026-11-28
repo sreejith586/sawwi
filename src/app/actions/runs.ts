@@ -1,5 +1,6 @@
 "use server";
 
+import { flashEvent } from "@/lib/analytics/flash-server";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/profile/session";
 import { queueReadyNotices } from "@/lib/email/notices";
@@ -13,7 +14,7 @@ import type { Run } from "@/lib/runs/types";
 import type { Country } from "@/lib/profile/options";
 import { buildRunView, type RunView } from "@/lib/runs/view";
 import { templateFor } from "@/lib/runs/templates";
-import { GENERIC_TEMPLATE_ID } from "@/lib/templates/custom";
+import { GENERIC_TEMPLATE_ID, isCustomId } from "@/lib/templates/custom";
 
 export type RunActionResult = { view?: RunView; error?: string };
 
@@ -26,6 +27,7 @@ export async function startRun(templateId: string) {
   const blocked = await runBlocker();
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
   const run = await createRun(orgKeyFor(profile), templateId);
+  await flashEvent("reconciliation_start", isCustomId(templateId) ? { template_kind: "custom" } : { template_kind: "catalogue", template: templateId });
   redirect(`/runs/${run.id}`);
 }
 
