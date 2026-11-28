@@ -73,7 +73,7 @@ export function PushDialog(props: { open: boolean; target: string; items: PushIt
           Nothing is posted. Sawwi checks each against Business Central for duplicates first.
         </p>
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
+          <table data-clarity-mask="True" className="w-full text-sm">
             <thead className="bg-surface-muted text-left text-xs text-muted">
               <tr>
                 <th className="px-3 py-2 font-medium">Vendor</th>
@@ -161,7 +161,7 @@ export function ConfirmPushDialog(props: {
         <h2 className="text-base font-semibold">{props.title}</h2>
         <div className="mt-1 text-sm text-muted">{props.body}</div>
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
+          <table data-clarity-mask="True" className="w-full text-sm">
             <thead className="bg-surface-muted text-left text-xs text-muted">
               <tr>
                 <th className="px-3 py-2 font-medium">{props.headers[0]}</th>

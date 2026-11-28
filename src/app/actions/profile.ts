@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { flashEvent } from "@/lib/analytics/flash-server";
 import { parseProfile, type ProfileErrors } from "@/lib/profile/profile";
 import { canManageTeam, getCurrentSession, markOnboarded } from "@/lib/saas/session";
 import { saveOrgProfile } from "@/lib/saas/store";
@@ -32,7 +33,18 @@ export async function saveProfile(_prev: SaveProfileState, formData: FormData): 
   });
   if (!profile) return { errors };
 
+  const firstTime = !session.org.profile;
   await saveOrgProfile(session.org.id, profile);
+  if (firstTime) {
+    await flashEvent("onboarding_complete", {
+      channel_count: profile.channels.length,
+      marketplace: profile.channels.includes("marketplace"),
+      webstore: profile.channels.includes("webstore"),
+      b2b: profile.channels.includes("b2b"),
+    });
+  } else {
+    await flashEvent("settings_change", { setting: "business_profile" });
+  }
   await markOnboarded();
   redirect("/home");
 }

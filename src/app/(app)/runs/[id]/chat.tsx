@@ -350,7 +350,7 @@ function BreakdownCard({ data, runId }: { data: Extract<ChatPayload, { type: "br
         </p>
         <ExcelButton href={href} />
       </div>
-      <table className="w-full text-xs">
+      <table data-clarity-mask="True" className="w-full text-xs">
         <thead className="text-left text-muted">
           <tr>
             <th className="px-3 py-1.5 font-medium">{data.byLabel}</th>

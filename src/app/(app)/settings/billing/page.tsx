@@ -69,7 +69,7 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
             <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.tone}`}>{status.label}</span>
             {org.stripeCustomerId && getStripe() && canManage && (
               <form action={openBillingPortal}>
-                <button type="submit" className={buttonClass("secondary")}>
+                <button type="submit" className={buttonClass("secondary")} data-track-upgrade="portal" data-track-plan={plan.id}>
                   Manage billing
                 </button>
               </form>

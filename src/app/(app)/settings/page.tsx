@@ -1,3 +1,5 @@
+import { buttonClass } from "@/components/ui";
+import { CookieSettingsButton } from "@/components/analytics/analytics";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -21,6 +23,8 @@ export default function SettingsPage() {
         <ThemeToggle />
       </section>
 
+      <CookieSettingsSection />
+
       <section id="profile" className="scroll-mt-20">
         <h2 className="text-sm font-semibold">Business profile</h2>
         <p className="mt-0.5 text-sm text-muted">Sawwi uses this to pick the reconciliations that apply to you.</p>
@@ -31,5 +35,18 @@ export default function SettingsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** Analytics cookies (D-97): shown only when GA4 or Clarity is configured. */
+function CookieSettingsSection() {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface p-5 [&:not(:has(button))]:hidden">
+      <div>
+        <h2 className="text-sm font-semibold">Analytics cookies</h2>
+        <p className="mt-0.5 text-sm text-muted">Change whether Google Analytics and Microsoft Clarity may set cookies in this browser.</p>
+      </div>
+      <CookieSettingsButton className={buttonClass("secondary")} />
+    </section>
   );
 }

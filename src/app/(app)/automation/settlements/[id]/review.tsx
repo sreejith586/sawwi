@@ -1,5 +1,7 @@
 "use client";
 
+import { outcomeOf } from "@/lib/analytics/events";
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -52,6 +54,7 @@ export function SettlementReview({ view, buckets, target, canEdit }: { view: Vie
       setError(null);
       if (dirty && !(await save())) return;
       const res = await approveSettlementsAction([view.id]);
+      track("automation_approve", { automation: "settlements", count: 1, ok_count: res.results?.filter((r) => r.ok).length ?? 0 });
       if (res.error) return setError(res.error);
       if (!res.results![0].ok) setError(res.results![0].message ?? "Couldn't approve.");
       router.refresh();
@@ -59,6 +62,11 @@ export function SettlementReview({ view, buckets, target, canEdit }: { view: Vie
   const onPush = () =>
     start(async () => {
       const res = await pushSettlementsAction([{ id: view.id, hash: view.hash }]);
+      {
+        const total = 1;
+        const ok = res.results?.filter((r) => r.ok).length ?? 0;
+        track("automation_push", { automation: "settlements", count: total, ok_count: ok, failed_count: total - ok, outcome: outcomeOf(ok, total) });
+      }
       setPushing(false);
       if (res.error) return setError(res.error);
       setNotice({ title: res.results![0].ok ? "Added to Business Central." : "Not pushed.", results: res.results! });
@@ -133,7 +141,7 @@ export function SettlementReview({ view, buckets, target, canEdit }: { view: Vie
         <section className="min-w-0">
           <h2 className="text-sm font-semibold">Amount types in the report</h2>
           <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[28rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[28rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">As the marketplace names it</th>
@@ -192,7 +200,7 @@ export function SettlementReview({ view, buckets, target, canEdit }: { view: Vie
             </label>
           </div>
           <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[28rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[28rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">Account</th>
@@ -258,7 +266,7 @@ export function SettlementReview({ view, buckets, target, canEdit }: { view: Vie
             )}
           </>
         )}
-        <a href={`/api/automation/settlements/export?ids=${view.id}`} className={buttonClass("secondary")}>
+        <a href={`/api/automation/settlements/export?ids=${view.id}`} className={buttonClass("secondary")} onClick={() => track("automation_export", { automation: "settlements", format: "csv" })}>
           Download CSV
         </a>
         {view.approvedAt && view.status === "approved" && <span className="text-xs text-muted">Approved {new Date(view.approvedAt).toLocaleString()}</span>}

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
+import { Analytics } from "@/components/analytics/analytics";
 import { InlineScript } from "@/components/inline-script";
 import { CHAT_PANEL_SCRIPT } from "@/lib/chat-panel";
 import { SIDEBAR_SCRIPT } from "@/lib/sidebar";
@@ -31,7 +33,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <InlineScript html={SIDEBAR_SCRIPT} />
         <InlineScript html={CHAT_PANEL_SCRIPT} />
       </head>
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans">
+        {children}
+        {/* GA4 + Clarity, only when an ID is set (D-97). Suspense: it reads the pathname. */}
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
+      </body>
     </html>
   );
 }

@@ -1,3 +1,4 @@
+import { ctaAttrs } from "@/lib/analytics/events";
 import Link from "next/link";
 import { Suspense } from "react";
 import { buttonClass } from "@/components/ui";
@@ -21,10 +22,10 @@ export function Logo() {
 
 const SignedOut = () => (
   <>
-    <Link href="/login" className="hidden h-9 items-center rounded-lg px-3 text-sm font-medium text-muted hover:text-foreground sm:inline-flex">
+    <Link href="/login" {...ctaAttrs("log_in", "header")} className="hidden h-9 items-center rounded-lg px-3 text-sm font-medium text-muted hover:text-foreground sm:inline-flex">
       Log in
     </Link>
-    <Link href="/signup" className={buttonClass("primary")}>
+    <Link href="/signup" className={buttonClass("primary")} {...ctaAttrs("start_free", "header")}>
       Start free
     </Link>
   </>
@@ -34,7 +35,7 @@ async function AuthActions() {
   const session = await getCurrentSession();
   if (!session) return <SignedOut />;
   return (
-    <Link href="/home" className={buttonClass("primary")}>
+    <Link href="/home" className={buttonClass("primary")} {...ctaAttrs("open_app", "header")}>
       Open Sawwi
     </Link>
   );

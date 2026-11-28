@@ -113,7 +113,7 @@ function LinksTable({ report, exportHref }: { report: ReportView; exportHref: st
   return (
     <Card title="How the files matched" actions={<ExcelButton href={exportHref} />}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table data-clarity-mask="True" className="w-full text-sm">
           <thead className="bg-surface-muted/60 text-left text-muted">
             <tr>
               <th className="px-4 py-2.5 font-medium">Files</th>
@@ -216,7 +216,7 @@ function ChecksTable({ report, exportBase, onPick }: { report: ReportView; expor
       }
     >
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table data-clarity-mask="True" className="w-full text-sm">
           <thead className="bg-surface-muted/60">
             <tr>
               <SortHeader label="Check" field="label" {...sort} onSort={(f) => setSort(nextSort(sort, f))} />
@@ -344,7 +344,7 @@ function ExceptionsTable({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table data-clarity-mask="True" className="w-full text-sm">
               <thead className="bg-surface-muted/60">
                 <tr>
                   <SortHeader label="Check" field="checkLabel" {...sort} onSort={(f) => setSort(nextSort(sort, f))} />

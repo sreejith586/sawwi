@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { invitesForEmail, markMemberJoined } from "@/lib/accounts/members";
+import { flashEvent } from "@/lib/analytics/flash-server";
 import { decodeProfileCookie, PROFILE_COOKIE } from "@/lib/profile/profile";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/lib/saas/password";
 import { sendSoon } from "@/lib/email/queue";
@@ -61,6 +62,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   }
   (await cookies()).delete(PROFILE_COOKIE);
   await startSession(user.id, org);
+  await flashEvent("sign_up", { invited });
   redirect(org.profile ? "/home" : "/onboarding");
 }
 
@@ -92,11 +94,13 @@ export async function logIn(_prev: AuthState, formData: FormData): Promise<AuthS
   if (!org) return { error: "This account isn't part of a workspace any more. Ask your team to invite you again.", values };
 
   await startSession(user.id, org);
+  await flashEvent("login");
   redirect(org.profile ? safeNext(formData.get("next"), "/home") : "/onboarding");
 }
 
 export async function signOut() {
   await endSession();
+  await flashEvent("logout");
   redirect("/");
 }
 

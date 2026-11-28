@@ -35,9 +35,36 @@ a person, never by an agent or committed to the repo.
 | `SAWWI_DEMO` | unset (demo on) | unset | `off` hides the public demo store. |
 | `RESEND_API_KEY` | Sensitive | Sensitive (same key is fine) | Sends email through Resend (D-45). Without it, emails are only logged. |
 | `EMAIL_FROM` | optional, default `Sawwi <sawwi@sawwiapp.ai>` | same | The sender. Must be on the domain verified in Resend. |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | `G-…` from GA4 | unset (or a separate test property) | Google Analytics 4 (D-97). Unset: nothing loads. Public by design (it's in the page), so not Sensitive. |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID` | Clarity project ID | unset | Microsoft Clarity (D-97). Unset: nothing loads. |
 | `CRON_SECRET` | Secret | Secret (a different one) | Protects `/api/cron/tick`; Vercel Cron sends it as a bearer token. `openssl rand -base64 32`. Without it, background jobs are off (D-42). |
 
 After changing a variable, **redeploy**: running deployments keep the values they were built with.
+
+### Analytics (GA4 and Clarity)
+
+Both are optional and independent (D-97). Set the IDs above and redeploy: `NEXT_PUBLIC_` values are
+built into the page. Visitors get a cookie banner; until they accept, GA4 runs cookieless (Consent
+Mode v2, all denied) and Clarity runs without cookies. The code never sends invoice contents, names,
+amounts, emails or record IDs, and page paths are sent as routes (`/runs/:id`). Settings to make in
+the tools themselves, once:
+
+1. **GA4 → Admin → Data streams → Web → Enhanced measurement:** turn off *Page changes based on
+   browser history events* (Sawwi sends its own page views with clean paths; the automatic ones
+   would carry IDs), *Site search*, *Form interactions* and *File downloads* (download links carry
+   invoice IDs). Scrolls and outbound clicks can stay on.
+2. **GA4 → Admin → Data collection:** leave Google signals off. **Data retention:** 2 months is enough.
+3. **GA4 → Admin → Custom definitions:** add event-scoped dimensions for the parameters you want in
+   reports (e.g. `location`, `outcome`, `source`, `action`, `setting`, `area`, `cta`) and metrics for
+   `count`, `ok_count`, `failed_count`. The full list is in `docs/ARCHITECTURE.md` §12.
+4. **Clarity → Settings → Setup:** turn on *Cookie consent* (Clarity then waits for Sawwi's consent
+   signal), keep masking at *Balanced* or stricter (the app also masks every signed-in screen in
+   code), and add your office IP under *IP blocking*.
+5. **Check:** open the site with the banner, accept, and watch GA4 → Realtime and Clarity → Live.
+
+There's no Content-Security-Policy header today. If one is added, allow `script-src`
+`https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms` and `connect-src`
+`https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.clarity.ms`.
 
 ### Stripe webhook
 

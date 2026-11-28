@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useActionState, useTransition } from "react";
 import { changeAccess, invite, remove, setActive, type InviteState } from "@/app/actions/accounts";
 import { Pill } from "@/components/data-table";
@@ -44,7 +45,10 @@ export function MembersPanel({ rows, teams, canManage }: { rows: MemberRow[]; te
             aria-label={`Access for ${r.name}`}
             value={r.accessKey}
             disabled={pending || r.statusKey === "deactivated"}
-            onChange={(e) => run(() => changeAccess(r.id, e.target.value))}
+            onChange={(e) => {
+              track("settings_change", { setting: "member_access", value: e.target.value });
+              run(() => changeAccess(r.id, e.target.value));
+            }}
             className="h-8 rounded-md border border-border bg-surface px-2 text-sm outline-none focus:border-foreground/40 disabled:opacity-50"
           >
             {ACCESS.map((a) => (
@@ -68,7 +72,10 @@ export function MembersPanel({ rows, teams, canManage }: { rows: MemberRow[]; te
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(() => setActive(r.id, r.statusKey === "deactivated"))}
+              onClick={() => {
+                track("settings_change", { setting: "member_status", value: r.statusKey === "deactivated" ? "activate" : "deactivate" });
+                run(() => setActive(r.id, r.statusKey === "deactivated"));
+              }}
               className="h-8 rounded-md px-2 text-sm text-muted hover:bg-surface-muted hover:text-foreground disabled:opacity-50"
             >
               {r.statusKey === "deactivated" ? "Reactivate" : "Deactivate"}
@@ -76,7 +83,11 @@ export function MembersPanel({ rows, teams, canManage }: { rows: MemberRow[]; te
             <button
               type="button"
               disabled={pending}
-              onClick={() => window.confirm(`Remove ${r.name} from the team?`) && run(() => remove(r.id))}
+              onClick={() => {
+                if (!window.confirm(`Remove ${r.name} from the team?`)) return;
+                track("settings_change", { setting: "member_remove" });
+                run(() => remove(r.id));
+              }}
               className="h-8 rounded-md px-2 text-sm text-danger hover:bg-danger-soft disabled:opacity-50"
             >
               Remove
@@ -122,7 +133,11 @@ export function MembersPanel({ rows, teams, canManage }: { rows: MemberRow[]; te
 }
 
 function InviteForm({ teams }: { teams: { value: string; label: string }[] }) {
-  const [state, action, pending] = useActionState<InviteState, FormData>(invite, { errors: {} });
+  const [state, action, pending] = useActionState<InviteState, FormData>(async (prev, form) => {
+    const result = await invite(prev, form);
+    if (result.invited) track("settings_change", { setting: "member_invite" });
+    return result;
+  }, { errors: {} });
   const v = state.values;
 
   return (

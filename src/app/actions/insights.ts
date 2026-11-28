@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { flashEvent } from "@/lib/analytics/flash-server";
 import { chat as runChat, ChatInputError, narrativeFor, type ChatIntent, type NarrativeView } from "@/lib/insights/chat";
 import { getProfile } from "@/lib/profile/session";
 import { getOwnedRun, orgKeyFor } from "@/lib/runs/access";
@@ -53,6 +54,7 @@ export async function startGenericRun(formData: FormData) {
     "sawwi",
     "A custom reconciliation: upload the two files and I'll ask which column is the matching key and which is the amount in each. Once it works, you can save it as a template.",
   );
+  await flashEvent("reconciliation_start", { template_kind: "generic" });
   redirect(`/runs/${run.id}`);
 }
 

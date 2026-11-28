@@ -22,7 +22,7 @@ export default function LogInPage() {
           <p className="font-medium">Just looking?</p>
           <p className="mt-1 text-muted">Open the live demo store: invented marketplace, webstore and ERP data you can reconcile in a few clicks. No account needed; it resets every day.</p>
           <div className="mt-3">
-            <TryDemoButton />
+            <TryDemoButton location="auth" />
           </div>
         </div>
       )}

@@ -13,6 +13,11 @@ cp .env.example .env.local   # add ANTHROPIC_API_KEY (optional, see below)
 pnpm dev                     # http://localhost:3000
 ```
 
+Analytics is off unless `NEXT_PUBLIC_GA_MEASUREMENT_ID` (Google Analytics 4) or
+`NEXT_PUBLIC_CLARITY_PROJECT_ID` (Microsoft Clarity) is set in `.env.local`; with neither, no script,
+cookie or banner loads. Events go through `track()` in `src/lib/analytics/track.ts`; the catalogue is
+in `docs/ARCHITECTURE.md` §12 (D-97).
+
 ```bash
 pnpm test        # unit + engine tests (never call the API)
 pnpm typecheck

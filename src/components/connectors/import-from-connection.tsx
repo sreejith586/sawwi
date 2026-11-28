@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useState } from "react";
 import { buttonClass } from "@/components/ui";
 import { slotFit } from "@/lib/connectors/slot-fit";
@@ -52,7 +53,9 @@ export function ImportFromConnection(props: {
       if (json.view) props.onView(json.view);
       if (json.error) props.onError(json.error);
       if (json.rows) setDone(`${json.rows.toLocaleString()} rows imported`);
+      track("connector_import", { outcome: json.error ? "failed" : "ok" });
     } catch {
+      track("connector_import", { outcome: "failed" });
       props.onError("The import didn't finish. Check your connection and try again.");
     } finally {
       setBusy(false);

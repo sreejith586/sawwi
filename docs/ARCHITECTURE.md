@@ -447,3 +447,59 @@ Reconciliation checks work after it's done; Automation does the work: a document
 - **Actions** (`lib/agent/actions.ts`, `agent_actions`, migration 11): approve (also confirming a suggested match), confirm_match, push (with each invoice's hash), read_with_ai, retry_failed, delete. Proposed by the agent, decided by the user at `/api/agent/actions/[id]` (proposer only, once, 30 minutes, `runBlocker`). The table is the audit trail.
 - **Limits:** `SAWWI_AGENT_CALLS_PER_DAY` per workspace (default 400, counted from `llm_usage` purpose `agent_chat`); conversations over 600,000 characters end.
 
+
+## 12. Analytics (D-97)
+
+Google Analytics 4 and Microsoft Clarity, each switched on by its env var (`NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_CLARITY_PROJECT_ID`). With neither, nothing loads: no script, cookie, banner or flash cookie.
+
+- **One helper:** `track(event, params)` (`lib/analytics/track.ts`) sends a gtag event and a Clarity event plus a Clarity tag per parameter. Events and their parameters are typed in `lib/analytics/events.ts`; `sanitizeParams` keeps only numbers, booleans and short slugs, so free text can't get through even by mistake.
+- **Loading** (`components/analytics/analytics.tsx`, in the root layout): the gtag and Clarity queues are set up in code on first use, consent defaults first; `next/script` then loads only the two tags. Clarity isn't loaded on `/reset-password` (its URL holds the token).
+- **Page views:** sent on every App Router navigation (`usePathname`) with `send_page_view: false` in the config. Paths are normalised (`lib/analytics/path.ts`): record IDs become `:id`, custom templates `:custom`, query strings and fragments are dropped. The page title is the route, and the referrer is the previous route (or only another site's origin).
+- **Server-side moments** (sign-up, log in, log out, demo, onboarding done, a run started) end in a redirect, so the server action calls `flashEvent()` (`lib/analytics/flash-server.ts`). It leaves the event in a 60-second `sawwi_ae` cookie, which the next page sends and deletes.
+- **Clicks on public pages** are server-rendered, so links carry `ctaAttrs(cta, location)` (`data-track-cta`) and one document listener sends `cta_click`. The billing portal button uses `data-track-upgrade`.
+- **Errors shown to the user** are the app's `role="alert"` elements: a MutationObserver sends `error_shown` with the route only, never the message.
+- **Consent (Consent Mode v2):** a banner asks once (`localStorage` `sawwi-analytics-consent`). Until "Accept", GA4's `analytics_storage` is denied (cookieless pings) and Clarity's `consentv2` is denied (no cookies). Ad storage, ad user data and ad personalisation are always denied; Google signals and ad personalisation are off. "Cookie settings" in the public footer and in Settings asks again.
+- **Masking:** `data-clarity-mask="True"` on the whole signed-in app, onboarding, sign-in forms and checkout, and again on the chat panel, the purchase invoice review and every data table, so they stay masked if the shell's mask is ever lifted. Public pages are recorded as they are.
+- **No CSP** is set today (`next.config.ts`, `proxy.ts`); docs/DEPLOY.md lists the domains to allow if one is added.
+
+### Events
+
+Every event also carries GA4's page fields (route only). Counts are numbers of invoices, files or items; never amounts.
+
+| Event | Parameters | Sent when |
+| --- | --- | --- |
+| `page_view` | `page_path`, `page_location`, `page_title` (all the normalised route) | Every page, including client-side navigation (GA4 only; Clarity follows navigation itself) |
+| `cta_click` | `cta`: start_free, log_in, try_demo, see_how, choose_plan, open_app, plan_upgrade, template_catalogue; `location`: header, hero, pricing, footer, closing, seo_page, auth, plan_banner | A marked call to action on the landing, SEO and auth pages, or the plan banner |
+| `sign_up` | `invited` (bool) | An account is created (server, flash) |
+| `login` | — | A successful log in (server, flash) |
+| `logout` | — | Sign out (server, flash) |
+| `demo_start` | — | "Try the live demo" signs in to the demo store (server, flash) |
+| `onboarding_step` | `step`: about, channels, marketplace, webstore, b2b; `step_number`; `step_count` | "Next" on a first-run onboarding step |
+| `onboarding_complete` | `channel_count`; `marketplace`, `webstore`, `b2b` (bools) | The first business profile is saved (server, flash) |
+| `connector_connect` | `provider` (connector id, e.g. shopify) | A connection is tested and saved |
+| `connector_connect_failed` | `provider` | Adding a connection fails |
+| `connector_disconnect` | `provider` | A connection is removed |
+| `connector_import` | `outcome`: ok, failed | "Import from a connection" on a run |
+| `reconciliation_start` | `template_kind`: catalogue, custom, generic; `template` (catalogue id only) | A run is started (server, flash) |
+| `reconciliation_upload` | `file_count`; `file_type`: pdf, csv, excel, mixed; `outcome` | Files uploaded to a run slot |
+| `reconciliation_run` | `outcome`: ok, failed; `rerun` (bool) | "Run reconciliation" / "Run again" |
+| `reconciliation_chat` | `intent`: fix_first, breakdown, email, explain, ask, about… | A question to a run's chat |
+| `invoice_upload` | `count`, `ok_count`, `failed_count`; `source`: pdf, photo, sample | Purchase invoice PDFs, phone photos or a demo sample are read |
+| `invoice_ai_read` | `count`, `ok_count`; `location`: queue, review | "Read with AI" (bulk or one) |
+| `invoice_retry` | `count`, `ok_count`; `location` | Retry of failed readings |
+| `invoice_link` | `kind`: po, grn, rematch; `outcome` | Link PO, Link GRN or "match again" |
+| `invoice_match_confirm` | — | Confirm a suggested PO/GRN match |
+| `invoice_approve` | `count`, `ok_count`; `location` | Approve (bulk or one) |
+| `invoice_push` | `count`, `ok_count`, `failed_count`; `outcome`: ok, partial, failed; `location` | Push to Business Central |
+| `invoice_export` | `format`: xlsx, csv; `scope`: selected, tab, single; `count` | Excel or CSV download |
+| `invoice_delete` | — | A draft is deleted |
+| `automation_approve` | `automation`: settlements, cod; `count`, `ok_count` | Settlement or COD batch approved |
+| `automation_push` | `automation`; `count`, `ok_count`, `failed_count`; `outcome` | Settlement or COD batch pushed |
+| `automation_export` | `automation`; `format`: csv | Settlement or COD CSV download |
+| `agent_message_sent` | `source`: typed, suggestion; `turn` | A message to Ask Sawwi (never its text) |
+| `agent_action_proposed` | `action`: approve, confirm_match, push, read_with_ai, retry_failed, delete; `count` | The agent shows an action card |
+| `agent_action_confirmed` | `action`; `count`, `ok_count`, `failed_count` | The user confirms a card |
+| `agent_action_cancelled` | `action`; `count` | The user cancels a card |
+| `settings_change` | `setting`: business_profile, email_prefs, theme, member_invite, member_access, member_status, member_remove, schedule_create, schedule_pause, schedule_delete, push_target, analytics_consent; `value` (a category, e.g. dark, weekly, editor) | A setting is changed |
+| `plan_upgrade_click` | `plan` (plan id); `action`: checkout, request, portal | Subscribe, Choose/Talk to us, or Manage billing |
+| `error_shown` | `area` (normalised route) | Any error alert (`role="alert"`) appears |

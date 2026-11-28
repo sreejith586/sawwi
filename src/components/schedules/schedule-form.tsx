@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import { useActionState, useState } from "react";
 import { createScheduleAction, type ScheduleActionState } from "@/app/actions/schedules";
 import { buttonClass } from "@/components/ui";
@@ -10,7 +11,11 @@ const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 =
 
 /** "Run this every …": makes a schedule that puts the template in the Due inbox each period. */
 export function ScheduleForm({ templateId, initial }: { templateId: string; initial: { cadence: Cadence; anchor: number } }) {
-  const [state, action, pending] = useActionState<ScheduleActionState, FormData>(createScheduleAction.bind(null, templateId), {});
+  const [state, action, pending] = useActionState<ScheduleActionState, FormData>(async (prev, form) => {
+    const result = await createScheduleAction(templateId, prev, form);
+    if (!result.error) track("settings_change", { setting: "schedule_create", value: String(form.get("cadence") ?? "") });
+    return result;
+  }, {});
   const [cadence, setCadence] = useState<Cadence>(initial.cadence);
   const [anchor, setAnchor] = useState(initial.anchor);
 

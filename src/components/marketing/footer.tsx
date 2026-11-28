@@ -1,3 +1,5 @@
+import { CookieSettingsButton } from "@/components/analytics/analytics";
+import { ctaAttrs } from "@/lib/analytics/events";
 import Link from "next/link";
 import { LogoLockup } from "@/components/brand/logo";
 import { SOLUTIONS } from "@/lib/seo/solutions";
@@ -40,14 +42,17 @@ export function MarketingFooter() {
               </Link>
             </li>
             <li>
-              <Link href="/signup" className="hover:text-foreground">
+              <Link href="/signup" className="hover:text-foreground" {...ctaAttrs("start_free", "footer")}>
                 Create an account
               </Link>
             </li>
             <li>
-              <Link href="/login" className="hover:text-foreground">
+              <Link href="/login" className="hover:text-foreground" {...ctaAttrs("log_in", "footer")}>
                 Log in
               </Link>
+            </li>
+            <li>
+              <CookieSettingsButton className="hover:text-foreground" />
             </li>
           </ul>
         </nav>

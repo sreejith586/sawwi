@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore, type ReactNode } from "react";
+import { track } from "@/lib/analytics/track";
 import { setThemePreference, type ThemePreference } from "@/lib/theme";
 
 // Light / System / Dark segmented switch.
@@ -63,7 +64,10 @@ export function ThemeToggle() {
           aria-label={o.label}
           title={o.value === "system" ? "Match system setting" : `${o.label} mode`}
           data-theme-option={o.value}
-          onClick={() => setThemePreference(o.value)}
+          onClick={() => {
+            setThemePreference(o.value);
+            track("settings_change", { setting: "theme", value: o.value });
+          }}
           className="theme-option grid size-6 place-items-center rounded-md text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           {o.icon}

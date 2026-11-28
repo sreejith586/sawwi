@@ -104,7 +104,7 @@ export function UsageDashboard(props: UsageDashboardProps) {
           US dollars per million tokens. {props.prices.source}. Updated {dayLabel(props.prices.asOf)}.
         </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
-          <table className="w-full text-sm">
+          <table data-clarity-mask="True" className="w-full text-sm">
             <thead className="border-b border-border bg-surface-muted/50 text-xs text-muted">
               <tr>
                 {["Model", "Input", "Cache read", "Cache write (1h)", "Output"].map((h, i) => (

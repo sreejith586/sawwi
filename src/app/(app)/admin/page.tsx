@@ -66,7 +66,7 @@ async function Overview() {
           {jobs.length === 0 ? (
             <p className="p-5 text-sm text-muted">Nothing has run yet. On Vercel this needs CRON_SECRET (docs/DEPLOY.md).</p>
           ) : (
-            <table className="w-full text-sm">
+            <table data-clarity-mask="True" className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Job</th>

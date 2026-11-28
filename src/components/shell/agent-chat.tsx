@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
@@ -99,6 +100,14 @@ function ActionCard({ action, onDecided }: { action: AgentAction; onDecided: (a:
     try {
       const res = await fetch(`/api/agent/actions/${action.id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decision }) });
       const json = (await res.json()) as { action?: AgentAction; error?: string };
+      if (json.action) {
+        const count = json.action.invoices.length;
+        if (json.action.status === "cancelled") track("agent_action_cancelled", { action: json.action.kind, count });
+        else {
+          const ok = json.action.results?.filter((r) => r.ok).length ?? 0;
+          track("agent_action_confirmed", { action: json.action.kind, count, ok_count: ok, failed_count: (json.action.results?.length ?? 0) - ok });
+        }
+      }
       if (json.error) setError(json.error);
       if (json.action) onDecided(json.action);
     } catch {
@@ -203,9 +212,11 @@ export function AgentChat({ fallback }: { fallback: ReactNode }) {
 
   if (state && !state.available) return <>{fallback}</>;
 
-  const send = async (message: string) => {
+  const send = async (message: string, source: "typed" | "suggestion" = "typed") => {
     const t = message.trim();
     if (!t || working) return;
+    // Never the message itself: only how it was sent and how far into the chat.
+    track("agent_message_sent", { source, turn: items.filter((i) => i.kind === "user").length + 1 });
     setText("");
     setWorking(true);
     setItems((x) => [...x, { kind: "user", text: t }]);
@@ -234,7 +245,10 @@ export function AgentChat({ fallback }: { fallback: ReactNode }) {
           const e = JSON.parse(line) as AgentEvent;
           if (e.type === "text") setItems((x) => [...x, { kind: "assistant", text: e.text }]);
           else if (e.type === "step") setItems((x) => [...x, { kind: "step", summary: e.summary, ok: e.ok }]);
-          else if (e.type === "proposal") setItems((x) => [...x, { kind: "action", action: e.action }]);
+          else if (e.type === "proposal") {
+            track("agent_action_proposed", { action: e.action.kind, count: e.action.invoices.length });
+            setItems((x) => [...x, { kind: "action", action: e.action }]);
+          }
           else if (e.type === "changed") router.refresh();
           else if (e.type === "done") setTranscript(e.messages);
           else if (e.type === "error") setItems((x) => [...x, { kind: "error", text: e.message }]);
@@ -301,7 +315,7 @@ export function AgentChat({ fallback }: { fallback: ReactNode }) {
               <button
                 key={s}
                 type="button"
-                onClick={() => void send(s)}
+                onClick={() => void send(s, "suggestion")}
                 className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-left transition hover:border-foreground/40 hover:bg-surface-muted"
               >
                 {s}

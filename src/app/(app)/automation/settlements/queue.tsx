@@ -1,5 +1,7 @@
 "use client";
 
+import { outcomeOf } from "@/lib/analytics/events";
+import { track } from "@/lib/analytics/track";
 import { uploadPresigned as uploadToBlob } from "@vercel/blob/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -144,7 +146,7 @@ function AccountsPanel(props: Pick<Props, "settings" | "buckets" | "erp" | "canE
           )}
 
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-[36rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[36rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">Amounts</th>
@@ -231,6 +233,7 @@ export function SettlementQueue(props: Props) {
     start(async () => {
       setError(null);
       const res = await approveSettlementsAction(ids);
+      track("automation_approve", { automation: "settlements", count: ids.length, ok_count: res.results?.filter((r) => r.ok).length ?? 0 });
       if (res.error) return setError(res.error);
       setNotice({ title: `${res.results!.filter((r) => r.ok).length} of ${ids.length} approved.`, results: res.results! });
       setSelected(new Set());
@@ -240,6 +243,11 @@ export function SettlementQueue(props: Props) {
     start(async () => {
       const items = props.rows.filter((r) => pushing?.includes(r.id)).map((r) => ({ id: r.id, hash: r.hash }));
       const res = await pushSettlementsAction(items);
+      {
+        const total = items.length;
+        const ok = res.results?.filter((r) => r.ok).length ?? 0;
+        track("automation_push", { automation: "settlements", count: total, ok_count: ok, failed_count: total - ok, outcome: outcomeOf(ok, total) });
+      }
       setPushing(null);
       if (res.error) return setError(res.error);
       setNotice({ title: `${res.results!.filter((r) => r.ok).length} of ${items.length} added to Business Central, unposted.`, results: res.results! });
@@ -360,7 +368,7 @@ export function SettlementQueue(props: Props) {
             ))}
           </div>
           {counts.approved > 0 && (
-            <a href="/api/automation/settlements/export?approved=1" className={`${buttonClass("secondary")} ml-auto`}>
+            <a href="/api/automation/settlements/export?approved=1" onClick={() => track("automation_export", { automation: "settlements", format: "csv" })} className={`${buttonClass("secondary")} ml-auto`}>
               Download approved as CSV
             </a>
           )}
@@ -372,7 +380,7 @@ export function SettlementQueue(props: Props) {
             <button type="button" className={buttonClass("primary")} disabled={busy || approvable.length === 0} onClick={() => approve(approvable.map((r) => r.id))}>
               Approve {approvable.length || ""}
             </button>
-            <a href={`/api/automation/settlements/export?ids=${picked.map((r) => r.id).join(",")}`} className={buttonClass("secondary")}>
+            <a href={`/api/automation/settlements/export?ids=${picked.map((r) => r.id).join(",")}`} onClick={() => track("automation_export", { automation: "settlements", format: "csv" })} className={buttonClass("secondary")}>
               Download CSV
             </a>
             {props.target && (
@@ -391,7 +399,7 @@ export function SettlementQueue(props: Props) {
           <p className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">{props.rows.length === 0 ? "No settlements yet." : "Nothing here."}</p>
         ) : (
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full min-w-[52rem] text-sm">
+            <table data-clarity-mask="True" className="w-full min-w-[52rem] text-sm">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   <th className="w-10 px-3 py-2">{props.canEdit && <input type="checkbox" aria-label="Select all shown" checked={allPicked} onChange={() => setSelected(allPicked ? new Set() : new Set(shown.map((r) => r.id)))} />}</th>

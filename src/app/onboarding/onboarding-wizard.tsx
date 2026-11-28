@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveProfile, type SaveProfileState } from "@/app/actions/profile";
 import { MultiChips, SingleChips, YesNo } from "@/components/chips";
+import { track } from "@/lib/analytics/track";
 import { buttonClass } from "@/components/ui";
 import {
   ACCOUNTING_SYSTEMS,
@@ -98,7 +99,11 @@ export function OnboardingWizard({
   const next = () => {
     const e = validateStep(current, draft);
     setLocalErrors(e);
-    if (Object.keys(e).length === 0) setStepIndex(index + 1);
+    if (Object.keys(e).length === 0) {
+      // Only the first run through onboarding, not edits to the profile in Settings.
+      if (!initial) track("onboarding_step", { step: current, step_number: index + 1, step_count: steps.length });
+      setStepIndex(index + 1);
+    }
   };
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
