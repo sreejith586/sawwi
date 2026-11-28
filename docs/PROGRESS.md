@@ -25,7 +25,7 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
-| Free plan (D-99) | `feature/free-plan` | this PR | Free plan session |
+| Free plan (D-99) | `feature/free-plan` | #51 | Free plan session |
 
 Merged on 28 Nov 2026: Vercel Web Analytics with cleaned paths (D-98, #48); Google Analytics 4 and Microsoft Clarity (D-97, #50); purchase invoices, three-way match and the chat agent (D-86–D-96, #47); QuickBooks Online, Xero and NetSuite connectors (D-80–D-85, #46, rebased on #47).
 
@@ -33,7 +33,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Recent changes
 
-- **Free plan** (D-99, `feature/free-plan`, this PR).
+- **Free plan** (D-99, `feature/free-plan`, #51).
   - **The plan:** Free, with no card:
     - 10 reconciliations and 25 purchase invoices a month;
     - 2 teammates and 1 connection;
