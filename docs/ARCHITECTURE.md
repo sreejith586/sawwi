@@ -460,6 +460,7 @@ Google Analytics 4 and Microsoft Clarity, each switched on by its env var (`NEXT
 - **Errors shown to the user** are the app's `role="alert"` elements: a MutationObserver sends `error_shown` with the route only, never the message.
 - **Consent (Consent Mode v2):** a banner asks once (`localStorage` `sawwi-analytics-consent`). Until "Accept", GA4's `analytics_storage` is denied (cookieless pings) and Clarity's `consentv2` is denied (no cookies). Ad storage, ad user data and ad personalisation are always denied; Google signals and ad personalisation are off. "Cookie settings" in the public footer and in Settings asks again.
 - **Masking:** `data-clarity-mask="True"` on the whole signed-in app, onboarding, sign-in forms and checkout, and again on the chat panel, the purchase invoice review and every data table, so they stay masked if the shell's mask is ever lifted. Public pages are recorded as they are.
+- **Vercel Web Analytics** (D-98): `VercelAnalytics` (`components/analytics/vercel-analytics.tsx`, in the root layout) adds Vercel's cookieless page views on Vercel deployments. Its `beforeSend` (`lib/analytics/vercel.ts`) sends the `normalizePath` route only, like GA4. Vercel gets no custom events; `track()` doesn't call it.
 - **No CSP** is set today (`next.config.ts`, `proxy.ts`); docs/DEPLOY.md lists the domains to allow if one is added.
 
 ### Events

@@ -16,7 +16,7 @@ pnpm dev                     # http://localhost:3000
 Analytics is off unless `NEXT_PUBLIC_GA_MEASUREMENT_ID` (Google Analytics 4) or
 `NEXT_PUBLIC_CLARITY_PROJECT_ID` (Microsoft Clarity) is set in `.env.local`; with neither, no script,
 cookie or banner loads. Events go through `track()` in `src/lib/analytics/track.ts`; the catalogue is
-in `docs/ARCHITECTURE.md` §12 (D-97).
+in `docs/ARCHITECTURE.md` §12 (D-97). Vercel Web Analytics also counts page views on Vercel deployments, cookieless and with cleaned paths (D-98).
 
 ```bash
 pnpm test        # unit + engine tests (never call the API)
