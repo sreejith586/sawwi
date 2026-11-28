@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     await cleanup();
     return Response.json({ error: "Uploads are off in the live demo. Try a sample remittance, or sign up to use your own." }, { status: 403 });
   }
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) {
     await cleanup();
     return Response.json({ error: blocked.message }, { status: 403 });

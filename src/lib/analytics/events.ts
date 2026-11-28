@@ -10,7 +10,7 @@ type Location = "queue" | "review";
 
 /** Marketing and landing calls to action, sent from `data-track-cta` attributes (see ctaAttrs). */
 export type CtaId = "start_free" | "log_in" | "try_demo" | "see_how" | "choose_plan" | "open_app" | "plan_upgrade" | "template_catalogue";
-export type CtaLocation = "header" | "hero" | "pricing" | "footer" | "closing" | "seo_page" | "auth" | "plan_banner";
+export type CtaLocation = "header" | "hero" | "pricing" | "footer" | "closing" | "seo_page" | "auth" | "plan_banner" | "limit_message";
 
 export type OnboardingStep = "about" | "channels" | "marketplace" | "webstore" | "b2b";
 
@@ -69,6 +69,8 @@ export type AnalyticsEvents = {
 
   settings_change: { setting: SettingName; value?: string };
   plan_upgrade_click: { plan: string; action: "checkout" | "request" | "portal" };
+  /** A plan limit refused something (D-99): which limit, on which plan. Categories only. */
+  plan_limit_hit: { limit: "runs" | "invoices" | "members" | "connectors" | "schedules" | "ai_reads" | "agent_calls"; plan: string };
   error_shown: { area: string };
 };
 
@@ -83,7 +85,7 @@ export const EVENT_NAMES = [
   "invoice_upload", "invoice_ai_read", "invoice_retry", "invoice_link", "invoice_match_confirm", "invoice_approve", "invoice_push", "invoice_export", "invoice_delete",
   "automation_approve", "automation_push", "automation_export",
   "agent_message_sent", "agent_action_proposed", "agent_action_confirmed", "agent_action_cancelled",
-  "settings_change", "plan_upgrade_click", "error_shown",
+  "settings_change", "plan_upgrade_click", "plan_limit_hit", "error_shown",
 ] as const satisfies readonly EventName[];
 
 // The compiler checks the list is complete: a missing name makes this `false` and fails the build.

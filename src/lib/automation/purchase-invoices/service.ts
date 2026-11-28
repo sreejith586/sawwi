@@ -10,6 +10,7 @@ import { ConnectorError, type ConnectorDeps, type ErpOpenOrderLine, type ErpRece
 import { extractPdf, PdfInputError } from "@/lib/pdf";
 import { llmAvailable, type LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
+import { planBlock } from "@/lib/saas/limits";
 import { addDays, daysBetween, draftFromInvoice, normInvoiceNo, reviewDraft, type Draft, type Review } from "./draft";
 import { AiReadError, compareReadings, draftFromExtraction, EXTRACTION_MODEL, readInvoiceWithAi, type AiReader, type AiReading, type Extraction } from "./ai";
 import { applyMatches, learnFromDraft, type MasterData } from "./matching";
@@ -368,6 +369,9 @@ async function aiGuard(orgKey: string, bytes: Uint8Array, callsSoFar: number, ca
   if (capped && callsSoFar >= AI_CALLS_PER_FILE) return `This PDF was already read by AI ${callsSoFar} times. Correct it by hand against the PDF.`;
   const pages = pdfPageCount(bytes);
   if (pages > AI_MAX_PAGES) return `It has ${pages} pages, more than the ${AI_MAX_PAGES} AI reading takes. Upload one invoice per PDF, or type it in.`;
+  // The plan's own daily allowance first (D-99: Free has a small one), then the platform cap.
+  const overPlan = await planBlock(orgKey, "ai_read");
+  if (overPlan) return overPlan.message;
   const used = await store.aiReadingsSince(orgKey, new Date(Date.now() - 24 * 3600_000).toISOString());
   if (used >= aiDailyLimit()) return `This workspace used its ${aiDailyLimit()} AI invoice readings for the last 24 hours. Try again later, or type it in.`;
   return undefined;
@@ -390,6 +394,9 @@ export async function capturePdf(
     return { capture: view, existing: true, failed: view.status === "failed" };
   }
   if (seen) return { capture: seen, existing: true };
+  // A new invoice counts toward the plan's monthly invoices (D-99); one seen before never does.
+  const overPlan = await planBlock(orgKey, "invoice");
+  if (overPlan) throw new CaptureError(`${file.name}: ${overPlan.message}`);
 
   const id = randomUUID();
   const storedPath = pdfKey(id);

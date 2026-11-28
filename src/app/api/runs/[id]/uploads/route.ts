@@ -22,7 +22,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/u
         const owned = await getOwnedRun(id);
         if (!owned) throw new Error("Run not found.");
         if (isDemoOrg(owned.run.orgKey)) throw new Error("Uploads are off in the live demo.");
-        const blocked = await runBlocker();
+        const blocked = await runBlocker("work");
         if (blocked) throw new Error(blocked.message);
         if (!pathname.startsWith(`incoming/${id}/`) || pathname.includes("..")) throw new Error("Uploads must go to this run.");
         const limits = { allowedContentTypes: UPLOAD_CONTENT_TYPES, maximumSizeInBytes: MAX_UPLOAD_BYTES, validUntil: Date.now() + 10 * 60_000 };

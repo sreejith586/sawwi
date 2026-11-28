@@ -3,6 +3,7 @@ import { anthropicClient } from "@/lib/anthropic";
 import { getDb } from "@/lib/db";
 import type { LlmUsage } from "@/lib/mapping/llm";
 import * as runStore from "@/lib/runs/store";
+import { planBlock } from "@/lib/saas/limits";
 import { AssistError } from "@/lib/automation/purchase-invoices/assist";
 import { CaptureError } from "@/lib/automation/purchase-invoices/service";
 import { ConnectorError } from "@/lib/connectors/types";
@@ -99,6 +100,9 @@ export async function runAgent(
   const system: Anthropic.Beta.BetaTextBlockParam[] = [{ type: "text", text: AGENT_INSTRUCTIONS, cache_control: CACHE }];
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    // The plan's daily allowance (D-99), then the platform cap (D-96).
+    const overPlan = await planBlock(ctx.orgKey, "agent_call");
+    if (overPlan) return emit({ type: "error", message: overPlan.message });
     if ((await callsSince(ctx.orgKey, new Date(Date.now() - 86_400_000).toISOString())) >= agentDailyLimit()) {
       return emit({ type: "error", message: `This workspace has used its ${agentDailyLimit()} assistant calls for the last 24 hours. Try again later.` });
     }

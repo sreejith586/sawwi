@@ -24,7 +24,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/runs/[id]/f
     return Response.json({ error: "Uploads are off in the live demo. Use “Fill with demo data”, or sign up to reconcile your own files." }, { status: 403 });
   }
   // A new file is new work on the run: viewers, suspended workspaces and ended trials can't (like pulls and reconciling).
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("work");
   if (blocked) {
     if (json && typeof json.slot === "string") await discardIncoming(id, json.slot, json.uploads);
     return Response.json({ error: blocked.message }, { status: 403 });

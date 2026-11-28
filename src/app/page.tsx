@@ -11,7 +11,7 @@ import { SOLUTIONS } from "@/lib/seo/solutions";
 import { TryDemoButton } from "@/components/demo/try-demo";
 import { buttonClass } from "@/components/ui";
 import { demoEnabled } from "@/lib/demo/enabled";
-import { PLANS } from "@/lib/saas/plans";
+import { planById, PLANS } from "@/lib/saas/plans";
 import { getSettings } from "@/lib/saas/store";
 import { TEMPLATES } from "@/lib/templates/catalog";
 import { GROUP_LABELS, type TemplateGroup } from "@/lib/templates/types";
@@ -327,12 +327,16 @@ function ProductPreview() {
 async function Pricing() {
   await connection();
   const { paywallEnabled, trialDays } = await getSettings();
+  const free = planById("free");
   if (!paywallEnabled) {
     return (
       <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-border bg-surface p-8 text-center">
         <p className="text-sm font-medium text-success">Early access</p>
         <p className="mt-2 text-2xl font-semibold tracking-tight">Free while we&apos;re in early access</p>
         <p className="mt-2 text-sm text-muted">Every template, every export, your whole team. We&apos;ll give plenty of notice before any paid plans start.</p>
+        <p className="mt-3 text-sm text-muted">
+          After that a Free plan stays, with no card: {free.runsPerMonth} reconciliations and {free.invoicesPerMonth} purchase invoices a month.
+        </p>
         <Link href="/signup" className={`${buttonClass("primary")} mt-6`} {...ctaAttrs("start_free", "pricing")}>
           Start free
         </Link>
@@ -340,7 +344,7 @@ async function Pricing() {
     );
   }
   return (
-    <div className="mt-12 grid gap-4 md:grid-cols-3">
+    <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {PLANS.filter((p) => p.public).map((p) => (
         <div key={p.id} className={`flex flex-col rounded-2xl border bg-surface p-6 ${p.id === "growth" ? "border-foreground ring-1 ring-foreground" : "border-border"}`}>
           <p className="font-semibold">{p.name}</p>
@@ -357,7 +361,7 @@ async function Pricing() {
             ))}
           </ul>
           <Link href="/signup" className={`${buttonClass(p.id === "growth" ? "primary" : "secondary")} mt-6`} {...ctaAttrs("choose_plan", "pricing")}>
-            {p.id === "enterprise" ? "Start a trial, then talk to us" : `Start ${trialDays}-day free trial`}
+            {p.id === "free" ? "Start free, no card" : p.id === "enterprise" ? "Start a trial, then talk to us" : `Start ${trialDays}-day free trial`}
           </Link>
         </div>
       ))}

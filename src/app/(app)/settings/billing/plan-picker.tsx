@@ -29,7 +29,7 @@ export function PlanPicker({
   return (
     <>
       {error && <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((p) => {
           const isCurrent = p.id === current;
           const isRequested = p.id === requested;
@@ -51,7 +51,12 @@ export function PlanPicker({
                   </li>
                 ))}
               </ul>
-              {canManage && !isCurrent && checkoutPlans.includes(p.id) ? (
+              {p.id === "free" && !isCurrent ? (
+                // Free is never bought or requested: a trial lands on it, a cancelled subscription drops to it (D-99).
+                <p className="mt-5 text-center text-sm text-muted">
+                  {current === "trial" ? "Where your workspace goes when the trial ends." : subscribed ? "Cancel in Manage billing to move to Free." : "Talk to us to move to Free."}
+                </p>
+              ) : canManage && !isCurrent && checkoutPlans.includes(p.id) ? (
                 <Link href={`/checkout/${p.id}`} className={`${buttonClass("primary")} mt-5`} onClick={() => track("plan_upgrade_click", { plan: p.id, action: "checkout" })}>
                   Subscribe to {p.name}
                 </Link>

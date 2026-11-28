@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { entitlement, planById, PLANS } from "@/lib/saas/plans";
+import { effectivePlan, entitlement, PLANS, usageRows } from "@/lib/saas/plans";
+import { LimitText } from "@/components/billing/limit-text";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 import { billingState, getSettings, openRequestForOrg } from "@/lib/saas/store";
 import { openBillingPortal } from "@/app/actions/checkout";
@@ -12,13 +13,12 @@ import { PlanPicker } from "./plan-picker";
 export const metadata: Metadata = { title: "Plan & billing" };
 
 const BLOCKED: Record<string, string> = {
-  trial_ended: "Your free trial has ended. Pick a plan to start new reconciliations. Your existing reports are still here.",
-  run_limit: "You've used all the reconciliations in your plan this month. Upgrade to keep going.",
+  run_limit: "You've used all the reconciliations in your plan this month. Upgrade to keep going; your existing reports are all still here.",
+  schedule_limit: "Scheduled reconciliations aren't included in your plan. Start them by hand, or upgrade to schedule them.",
   suspended: "This workspace is suspended. Contact support to restore access.",
   viewer: "You have view-only access. Ask a workspace admin for Editor access to start reconciliations.",
 };
 
-const trialOver = (iso: string) => new Date(iso).getTime() <= Date.now();
 const day = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 
 async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
@@ -28,8 +28,12 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
   const { org } = session;
   const settings = await getSettings();
   const state = await billingState(org);
-  const plan = planById(org.plan);
+  // A trial that has ended is the Free plan (D-99).
+  const plan = effectivePlan(state);
+  const trialEnded = org.plan === "trial" && plan.id === "free";
   const ent = entitlement(state, settings.paywallEnabled);
+  const rows = usageRows(plan, state);
+  const atLimit = settings.paywallEnabled && rows.some((r) => r.limit !== null && r.used >= r.limit);
   const request = await openRequestForOrg(org.id);
   const subscribed = Boolean(org.subscriptionStatus && ["active", "trialing", "past_due"].includes(org.subscriptionStatus));
   const checkoutPlans = settings.paywallEnabled && !subscribed ? PAID_PLANS.filter((p) => checkoutReady(p)) : [];
@@ -40,15 +44,17 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
       ? { label: "Suspended", tone: "bg-danger-soft text-danger" }
       : !settings.paywallEnabled
         ? { label: "Early access", tone: "bg-success-soft text-success" }
-        : ent.ok
-          ? { label: ent.reason === "trial" ? `Trial · ${ent.daysLeft} day${ent.daysLeft === 1 ? "" : "s"} left` : "Active", tone: "bg-success-soft text-success" }
-          : { label: ent.reason === "trial_ended" ? "Trial ended" : "Limit reached", tone: "bg-danger-soft text-danger" };
+        : atLimit
+          ? { label: "Limit reached", tone: "bg-danger-soft text-danger" }
+          : ent.ok && ent.reason === "trial"
+            ? { label: `Trial · ${ent.daysLeft} day${ent.daysLeft === 1 ? "" : "s"} left`, tone: "bg-success-soft text-success" }
+            : { label: "Active", tone: "bg-success-soft text-success" };
 
   return (
     <div className="space-y-10">
       {blocked && BLOCKED[blocked] && (
         <p role="alert" className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
-          {BLOCKED[blocked]}
+          <LimitText text={BLOCKED[blocked]} />
         </p>
       )}
 
@@ -61,8 +67,12 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
               {!settings.paywallEnabled
                 ? "Sawwi is free during early access. Plan limits aren't enforced yet."
                 : plan.id === "trial"
-                  ? `Trial ${trialOver(org.trialEndsAt) ? "ended" : "ends"} ${day(org.trialEndsAt)}.`
-                  : plan.price}
+                  ? `Trial ends ${day(org.trialEndsAt)}. Then the workspace moves to Free, unless you pick a plan.`
+                  : trialEnded
+                    ? `Your trial ended ${day(org.trialEndsAt)}. Free has no card and no end date; upgrade any time.`
+                    : plan.id === "free"
+                      ? "AED 0. No card needed; upgrade any time."
+                      : plan.price}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -84,9 +94,14 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
           </p>
         )}
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <Usage label="Reconciliations this month" used={state.runsThisMonth} limit={plan.runsPerMonth} />
-          <Usage label="Teammates (incl. pending invites)" used={state.members} limit={plan.members} />
+          {rows.map((r) => (
+            <Usage key={r.key} label={r.label} used={r.used} limit={r.limit} />
+          ))}
         </div>
+        <p className="mt-3 text-xs text-muted">
+          {plan.schedules ? "Scheduled reconciliations included." : "Scheduled reconciliations aren't included on Free; start reconciliations by hand."}
+          {settings.paywallEnabled ? "" : " Limits apply once paid plans start."}
+        </p>
       </section>
 
       <section>
@@ -100,7 +115,7 @@ async function Billing({ searchParams }: { searchParams: Promise<{ blocked?: str
         </p>
         <PlanPicker
           plans={PLANS.filter((p) => p.public)}
-          current={org.plan}
+          current={plan.id}
           requested={request?.plan}
           canManage={canManage}
           checkoutPlans={checkoutPlans}

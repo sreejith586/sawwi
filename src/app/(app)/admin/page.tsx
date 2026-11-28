@@ -24,7 +24,7 @@ async function Overview() {
   const rows = orgRows(orgs);
   const onTrial = rows.filter((o) => o.trialState === "Active").length;
   const trialEnded = rows.filter((o) => o.trialState === "Ended").length;
-  const paying = rows.filter((o) => o.planId !== "trial").length;
+  const paying = rows.filter((o) => o.planId !== "trial" && o.planId !== "free").length;
 
   return (
     <div className="space-y-10">
@@ -32,7 +32,7 @@ async function Overview() {
         <Stat label="Workspaces" value={orgs.length} />
         <Stat label="Users" value={users.length} />
         <Stat label="On trial" value={onTrial} />
-        <Stat label="Trial ended" value={trialEnded} tone={trialEnded ? "text-warn" : undefined} />
+        <Stat label="On Free" value={trialEnded + rows.filter((o) => o.planId === "free").length} />
         <Stat label="On a paid plan" value={paying} tone={paying ? "text-success" : undefined} />
       </div>
 

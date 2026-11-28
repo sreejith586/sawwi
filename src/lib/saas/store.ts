@@ -140,22 +140,46 @@ export async function extendTrial(orgId: string, days: number) {
   await getDb().run("UPDATE orgs SET trial_ends_at = ? WHERE id = ?", new Date(from + days * DAY).toISOString(), orgId);
 }
 
-export async function runsThisMonth(orgKey: string): Promise<number> {
+const monthStart = () => {
   const start = new Date();
   start.setUTCDate(1);
   start.setUTCHours(0, 0, 0, 0);
-  const r = (await getDb().get("SELECT COUNT(*) AS n FROM runs WHERE org_key = ? AND created_at >= ?", orgKey, start.toISOString())) as Row;
-  return Number(r.n);
+  return start.toISOString();
+};
+const dayAgo = () => new Date(Date.now() - DAY).toISOString();
+const count = async (sql: string, ...args: string[]) => Number(((await getDb().get(sql, ...args)) as Row).n);
+
+export async function runsThisMonth(orgKey: string): Promise<number> {
+  return count("SELECT COUNT(*) AS n FROM runs WHERE org_key = ? AND created_at >= ?", orgKey, monthStart());
 }
 
 export async function memberCount(org: Org): Promise<number> {
-  const users = Number(((await getDb().get("SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?", org.id)) as Row).n);
+  const users = await count("SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?", org.id);
   // Pending invites count toward the seat limit; accepted ones are already memberships.
   return users + (await countInvited(org.key));
 }
 
+/** Everything the plan limits count (D-99). Months are calendar months (UTC); "today" is the last 24 hours, like the AI caps. */
 export async function billingState(org: Org): Promise<BillingState> {
-  return { plan: org.plan, status: org.status, trialEndsAt: org.trialEndsAt, runsThisMonth: await runsThisMonth(org.key), members: await memberCount(org) };
+  const [runs, members, invoices, connectors, aiReads, agentCalls] = await Promise.all([
+    runsThisMonth(org.key),
+    memberCount(org),
+    count("SELECT COUNT(*) AS n FROM purchase_invoices WHERE org_key = ? AND created_at >= ?", org.key, monthStart()),
+    count("SELECT COUNT(*) AS n FROM connections WHERE org_key = ?", org.key),
+    count("SELECT COUNT(*) AS n FROM llm_usage WHERE org_key = ? AND purpose = 'invoice_extraction' AND created_at >= ?", org.key, dayAgo()),
+    count("SELECT COUNT(*) AS n FROM llm_usage WHERE org_key = ? AND purpose = 'agent_chat' AND created_at >= ?", org.key, dayAgo()),
+  ]);
+  return {
+    plan: org.plan,
+    status: org.status,
+    trialEndsAt: org.trialEndsAt,
+    runsThisMonth: runs,
+    members,
+    invoicesThisMonth: invoices,
+    connectors,
+    aiReadsToday: aiReads,
+    agentCallsToday: agentCalls,
+  };
 }
 
 // ─── Memberships ─────────────────────────────────────────────────────────

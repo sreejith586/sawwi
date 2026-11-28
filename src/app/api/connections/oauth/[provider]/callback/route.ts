@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { checkOAuthState, OAUTH_COOKIE, OAUTH_COOKIE_PATH, redirectUriFor } from "@/lib/connectors/oauth-flow";
 import { completeOAuthConnection } from "@/lib/connectors/service";
 import { ConnectorError } from "@/lib/connectors/types";
+import { listConnections } from "@/lib/connectors/store";
+import { blockFor } from "@/lib/saas/limits";
 import { canManageTeam, getCurrentSession } from "@/lib/saas/session";
 
 // Where QuickBooks and Xero send the user back (D-81). The state must match this browser's
@@ -17,6 +19,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/connections/
   jar.delete({ name: OAUTH_COOKIE, path: OAUTH_COOKIE_PATH });
   try {
     if (!canManageTeam(session.access)) throw new ConnectorError("Only workspace owners and admins can add connections.");
+    // A new connection counts toward the plan (D-99); signing in again to one already there doesn't.
+    if (!(await listConnections(session.org.key)).some((c) => c.provider === provider)) {
+      const overPlan = await blockFor(session.org, "connector");
+      if (overPlan) throw new ConnectorError(overPlan.message);
+    }
     checkOAuthState(pending, provider, session.org.key, query.get("state"));
     const c = await completeOAuthConnection(session.org.key, provider, query, redirectUriFor(provider), session.user.id);
     back.searchParams.set("connected", c.accountLabel);

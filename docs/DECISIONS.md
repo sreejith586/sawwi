@@ -1162,3 +1162,43 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
 - **Consequences:**
   - Counted only on Vercel deployments, once Web Analytics is switched on for the project in Vercel's dashboard. Locally it runs in development mode and sends nothing.
   - The script and its endpoint are same-origin (`/_vercel/insights/*`), so a future CSP needs no extra domain for it.
+
+### D-99: A limited Free plan, with no card: trials and cancelled subscriptions land on it instead of being blocked
+- **Context:** the user asked (28 Nov 2026) for a limited free plan. Before, a trial that ended, or a Stripe subscription that stopped, blocked all new work. Plan limits covered only reconciliations per month and teammates, and AI spend had only the platform caps (`SAWWI_AI_INVOICES_PER_DAY`, D-89; `SAWWI_AGENT_CALLS_PER_DAY`, D-96). Asked, the user chose:
+  - the "Lean" limits;
+  - keep the trial, then drop to Free;
+  - Free's limits follow the paywall switch.
+- **Decision:**
+  - **The plan:** "Free", AED 0, no card:
+    - 10 reconciliations and 25 purchase invoices a month (calendar month, UTC);
+    - 2 teammates, counting pending invites;
+    - 1 connection;
+    - no scheduled reconciliations;
+    - all templates;
+    - 10 AI invoice readings and 25 Ask Sawwi model calls in any 24 hours.
+  - **Where workspaces land:**
+    - Sign-up still starts the 14-day trial.
+    - A trial that has ended *is* Free: `effectivePlan()` works it out from `trial_ends_at`, so no job or migration is needed. An admin extending the trial puts it back on the trial.
+    - A Stripe subscription that stops (`canceled`, `unpaid`, `incomplete_expired`, `paused`) sets the plan to `free`. Before, it fell back to `trial`.
+  - **One place on the server:**
+    - `entitlement(state, paywall, action)` in `lib/saas/plans.ts` holds the rules (pure).
+    - `lib/saas/limits.ts` looks up usage and the paywall switch, and is the only caller that enforces them. `runBlocker(action)` uses it for signed-in work; the AI invoice reader (`aiGuard`, `capturePdf`) and the agent loop call `planBlock()` directly.
+    - The actions are `run`, `invoice`, `invite`, `connector`, `schedule`, `ai_read`, `agent_call`, and `work`. `work` is any other new work and checks only role and suspension.
+  - **Which limit each action checks:**
+    - Only *starting* a reconciliation counts against the monthly runs. Answering, uploading to or reconciling a run already started is `work`. Before, a workspace that had used its last run couldn't finish it.
+    - Settlement and COD captures are `work` too, rather than counting against reconciliations.
+    - Purchase invoices count when a new PDF is captured. The same file again never counts.
+    - Connections count when a new one is added. Signing in again to a connected provider doesn't.
+    - A schedule kept from a trial doesn't start runs on Free.
+  - **AI on Free:** a plan's daily AI allowance applies before the platform cap, so the tighter one wins. Paid plans have no plan AI allowance and keep the platform caps, as before.
+  - **Paywall switch:** off (early access) means no plan limit applies, Free's included. The platform AI caps apply either way.
+  - **Messages:** every limit message is plain and ends with "Upgrade in Plan & billing". `LimitText` turns that into a link wherever errors show:
+    - invoice upload and review, Ask Sawwi, schedules, connections, invites and the run page;
+    - the plan banner, which also shows a reached monthly limit.
+  - **Billing page:** shows the plan that applies, with usage against every limit. The Free card says how a workspace gets there (trial end, or cancelling in Manage billing); Free is never bought or requested.
+  - **Pricing page:** lists Free next to the paid plans ("Start free, no card"). In early access, it says a Free plan will stay.
+  - **Analytics:** `plan_limit_hit` with `limit` (category) and `plan` (id) is sent from `limits.ts` when enforcement refuses something. It goes out through the flash cookie where there's a response to carry it.
+- **Consequences:**
+  - Paid plans, prices and Stripe checkout are unchanged; upgrading from Free uses the same checkout.
+  - The admin console counts "On Free" (ended trials plus `free`) instead of "Trial ended". An ended trial shows as "Free (trial ended)".
+  - The limits are placeholders like the prices: edit `PLANS` in `plans.ts`.

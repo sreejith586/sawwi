@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (json) await discardIncomingPdfs(orgKey, json.uploads);
     return Response.json({ error: "Uploads are off in the live demo. Try a sample invoice, or sign up to capture your own." }, { status: 403 });
   }
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("invoice");
   if (blocked) {
     if (json) await discardIncomingPdfs(orgKey, json.uploads);
     return Response.json({ error: blocked.message }, { status: 403 });

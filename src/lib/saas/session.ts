@@ -4,7 +4,8 @@ import { cache } from "react";
 import { findMemberByEmail } from "@/lib/accounts/members";
 import { isDemoOrg } from "@/lib/demo/demo";
 import { resetDemoIfDue } from "@/lib/demo/workspace";
-import { entitlement, type Entitlement } from "./plans";
+import { blockFor, orgEntitlementFor } from "./limits";
+import type { Entitlement, LimitAction } from "./plans";
 import { ONBOARDED_COOKIE, SESSION_COOKIE } from "./cookies";
 import * as store from "./store";
 
@@ -78,8 +79,9 @@ export async function markOnboarded() {
   (await cookies()).set(ONBOARDED_COOKIE, "1", cookieOptions(new Date(Date.now() + 30 * 86_400_000)));
 }
 
-export async function orgEntitlement(org: store.Org, action: "run" | "invite" = "run"): Promise<Entitlement> {
-  return entitlement(await store.billingState(org), (await store.getSettings()).paywallEnabled, action);
+/** For display (banner, billing page): no analytics. Enforcement goes through runBlocker()/limits.ts. */
+export async function orgEntitlement(org: store.Org, action: LimitAction = "run"): Promise<Entitlement> {
+  return orgEntitlementFor(org, action);
 }
 
 export const canManageTeam = (access: store.MembershipAccess) => access === "owner" || access === "admin";
@@ -87,11 +89,14 @@ export const canRun = (access: store.MembershipAccess) => access !== "viewer";
 
 export type RunBlock = { reason: string; message: string };
 
-/** Why the signed-in user can't start or re-run a reconciliation right now, if anything. */
-export async function runBlocker(): Promise<RunBlock | undefined> {
+/**
+ * Why the signed-in user can't do this new work right now, if anything: role, suspension, then the
+ * plan limit for the action (D-99). "run" starts a reconciliation; "work" is anything else new
+ * (answering, re-running, approving) and only checks role and suspension.
+ */
+export async function runBlocker(action: LimitAction = "run"): Promise<RunBlock | undefined> {
   const session = await getCurrentSession();
   if (!session) return { reason: "signed_out", message: "Your session has ended. Log in again." };
   if (!canRun(session.access)) return { reason: "viewer", message: "Viewers can open reports but can't start reconciliations. Ask an admin for Editor access." };
-  const e = await orgEntitlement(session.org, "run");
-  return e.ok ? undefined : { reason: e.reason, message: e.message };
+  return blockFor(session.org, action);
 }

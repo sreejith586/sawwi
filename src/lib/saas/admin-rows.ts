@@ -1,5 +1,5 @@
 import { SUBSCRIPTION_LABELS } from "@/lib/stripe/plans";
-import { planById } from "./plans";
+import { effectivePlan, planById } from "./plans";
 import type { OrgOverview, UserOverview } from "./store";
 
 // Rows for the admin tables and their Excel exports (pure, no DB).
@@ -30,7 +30,8 @@ export function orgRows(orgs: OrgOverview[], now = Date.now()): OrgRow[] {
     id: o.id,
     name: o.name,
     owner: o.ownerEmail ?? "",
-    plan: planById(o.plan).name,
+    // A trial that has ended is on Free (D-99).
+    plan: o.plan === "trial" && effectivePlan(o, now).id === "free" ? "Free (trial ended)" : planById(o.plan).name,
     planId: o.plan,
     status: o.status === "suspended" ? "Suspended" : "Active",
     trialEnds: o.trialEndsAt,
@@ -40,7 +41,7 @@ export function orgRows(orgs: OrgOverview[], now = Date.now()): OrgRow[] {
     runs: o.runs,
     runsThisMonth: o.runsThisMonth,
     request: o.openRequest ? planById(o.openRequest).name : "",
-    billing: o.subscriptionStatus ? `Stripe · ${SUBSCRIPTION_LABELS[o.subscriptionStatus] ?? o.subscriptionStatus}` : o.plan === "trial" ? "" : "Manual",
+    billing: o.subscriptionStatus ? `Stripe · ${SUBSCRIPTION_LABELS[o.subscriptionStatus] ?? o.subscriptionStatus}` : o.plan === "trial" || o.plan === "free" ? "" : "Manual",
     created: o.createdAt,
   }));
 }

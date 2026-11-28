@@ -25,6 +25,7 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
+| Free plan (D-99) | `feature/free-plan` | this PR | Free plan session |
 
 Merged on 28 Nov 2026: Vercel Web Analytics with cleaned paths (D-98, #48); Google Analytics 4 and Microsoft Clarity (D-97, #50); purchase invoices, three-way match and the chat agent (D-86–D-96, #47); QuickBooks Online, Xero and NetSuite connectors (D-80–D-85, #46, rebased on #47).
 
@@ -32,6 +33,29 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Recent changes
 
+- **Free plan** (D-99, `feature/free-plan`, this PR).
+  - **The plan:** Free, with no card:
+    - 10 reconciliations and 25 purchase invoices a month;
+    - 2 teammates and 1 connection;
+    - no schedules, all templates;
+    - 10 AI invoice readings and 25 Ask Sawwi calls a day.
+  - **Where workspaces land:** a trial that ends now drops to Free instead of being blocked, and so does a cancelled or unpaid Stripe subscription. Sign-up still starts the 14-day trial.
+  - **Enforced in one place on the server** (`lib/saas/limits.ts`): runs, invoice captures, invites, connections (form and "Connect with …"), schedules, AI readings and every Ask Sawwi model call. Like the paid limits, it applies only once the paywall is on; the platform AI caps apply always.
+  - **Fixed on the way:** finishing a run already started no longer counts against the monthly run limit. Settlement and COD captures no longer count as reconciliations.
+  - **UI:**
+    - Limit messages are plain and link to Plan & billing.
+    - The billing page shows usage against all six limits and the Free card.
+    - Public pricing lists Free next to the paid plans; in early access it says Free will stay.
+    - The plan banner shows a reached monthly limit.
+  - **Analytics:** a new `plan_limit_hit` event (`limit`, `plan`; categories only).
+  - **Tests:** 14 new: the plan rules, and database-backed checks of trial → Free, each limit, the paywall switch and unchanged paid plans. The Stripe fallback test now expects `free`.
+  - **Checked in the browser** (dev server, a local database seeded with a workspace whose trial ended yesterday, 10 runs this month, paywall on):
+    - the banner names the Free run limit and links to Plan & billing;
+    - "Schedule" is refused with the plain message and link;
+    - "Start reconciliation" lands on Plan & billing with the run-limit notice;
+    - the billing page shows "Free", "Your trial ended …" and all six usage bars;
+    - pricing lists Free with "Start free, no card".
+    No console or server errors. Not checked live: Stripe checkout from Free (no test keys locally; the checkout code is unchanged).
 - **Vercel Web Analytics** (D-98, #48, Vercel's PR, rebased on #50).
   - Cookieless page views next to GA4 and Clarity.
   - Sent through a `beforeSend` filter, so Vercel gets the same routes as GA4 (`/runs/:id`), never a query string, token or record ID.
@@ -400,6 +424,7 @@ Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-5
 
 ## Open questions
 
+- **Free plan limits (D-99):** 10 reconciliations, 25 purchase invoices, 2 teammates, 1 connection, no schedules, and 10 AI readings and 25 Ask Sawwi calls a day are placeholders, like the prices. Revisit them once paid plans start (`PLANS` in `lib/saas/plans.ts`).
 - **Barcodes in the client's BC:** are they in the item's GTIN field (Sawwi matches on it, D-62) or kept as Item References (Sawwi would need to read those too)?
 - **Purchase invoices against POs (D-88), for the client's BC partner:**
   - Is the client on Business Central or Dynamics 365 Finance & Operations? Sawwi's connector is Business Central only.

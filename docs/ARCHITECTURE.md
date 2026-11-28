@@ -188,7 +188,13 @@ _Current:_ Next.js 16, TypeScript, Tailwind v4, Postgres (Neon in production via
 - **Public:** `/` intro page, `/signup`, `/login`, `/forgot-password`, `/reset-password` (D-46), and the SEO pages `/reconciliation/*` and `/reconciliation-templates/*` with `sitemap.xml`, `robots.txt` and `opengraph-image` (D-47). `src/proxy.ts` guards only the routes in its matcher, so these need no change there. Everything else needs a session (`src/proxy.ts` does an optimistic cookie check; `src/lib/saas/session.ts` re-validates against the DB in every page, action and route).
 - **Accounts:** email + scrypt password, DB-backed sessions (only the token hash is stored). Each sign-up creates a workspace (`orgs`) whose fixed `key` files its runs, mappings and members; the business profile lives on the workspace. Invited emails join the inviting workspace on sign-up or login.
 - **Roles:** owner / admin (team, profile, plan) / editor (run reconciliations) / viewer (read reports only).
-- **Paywall:** plans and limits in `src/lib/saas/plans.ts`, enforced by `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. No payment provider yet: "Choose plan" files a request that a superadmin approves.
+- **Paywall:** plans and limits in `src/lib/saas/plans.ts`, with the rules in `entitlement()`. Off by default (early access); a superadmin turns it on in `/admin`. Blocked workspaces keep read access to existing reports. Without Stripe, "Choose plan" files a request that a superadmin approves.
+- **Free plan (D-99):** no card. A trial that has ended is on Free (`effectivePlan()`, nothing written), and a Stripe subscription that stops drops to `free`. Free allows 10 reconciliations and 25 purchase invoices a month, 2 teammates, 1 connection, no schedules, and 10 AI invoice readings and 25 Ask Sawwi calls in any 24 hours.
+- **Limit enforcement (D-99):** one place, `src/lib/saas/limits.ts`. It reads the usage (`billingState()`) and the paywall switch, calls `entitlement(state, paywall, action)` and sends `plan_limit_hit` on a refusal.
+  - `runBlocker(action)` calls it for signed-in work: `run` (starting a reconciliation), `invoice`, `schedule`, or `work` (anything else new, which checks only role and suspension).
+  - Invites and connections call `blockFor()` with `invite` and `connector`.
+  - `capturePdf` (each new invoice), `aiGuard` (AI readings) and the agent loop (each model call) call `planBlock()`. A plan's AI allowance applies before the platform caps (`SAWWI_AI_INVOICES_PER_DAY`, `SAWWI_AGENT_CALLS_PER_DAY`), so the tighter one wins.
+  - Limit messages end with "Upgrade in Plan & billing", which `LimitText` (`components/billing/limit-text.tsx`) links to the billing page. The billing page lists usage against every limit (`usageRows()`).
 - **Card payments (Stripe):** `/checkout/[plan]` embeds Stripe Checkout (`ui_mode: embedded_page`, subscription mode) with card, Apple Pay / Google Pay and Link. Prices come from `STRIPE_PRICE_*`; one Stripe Customer per workspace. `/checkout/return` verifies the session belongs to the workspace and applies the plan at once; `/api/stripe/webhook` (signature-verified) keeps it in sync for renewals, failed payments, cancellations and portal changes. "Manage billing" opens Stripe's billing portal. Checkout is offered only while the paywall is on; Enterprise stays a request.
 - **Superadmin:** granted only via `SAWWI_SUPERADMIN_EMAILS`. Console at `/admin`: paywall, trial length, open sign-ups, plan requests, workspaces (plan, trial, suspend), users and AI usage across workspaces, with Excel exports.
 - **Storage:** Postgres (D-38). `src/lib/saas/store.ts` holds all SQL for this; tables are created in `src/lib/db.ts`.
@@ -470,7 +476,7 @@ Every event also carries GA4's page fields (route only). Counts are numbers of i
 | Event | Parameters | Sent when |
 | --- | --- | --- |
 | `page_view` | `page_path`, `page_location`, `page_title` (all the normalised route) | Every page, including client-side navigation (GA4 only; Clarity follows navigation itself) |
-| `cta_click` | `cta`: start_free, log_in, try_demo, see_how, choose_plan, open_app, plan_upgrade, template_catalogue; `location`: header, hero, pricing, footer, closing, seo_page, auth, plan_banner | A marked call to action on the landing, SEO and auth pages, or the plan banner |
+| `cta_click` | `cta`: start_free, log_in, try_demo, see_how, choose_plan, open_app, plan_upgrade, template_catalogue; `location`: header, hero, pricing, footer, closing, seo_page, auth, plan_banner, limit_message | A marked call to action on the landing, SEO and auth pages, the plan banner, or the upgrade link in a plan limit message |
 | `sign_up` | `invited` (bool) | An account is created (server, flash) |
 | `login` | — | A successful log in (server, flash) |
 | `logout` | — | Sign out (server, flash) |
@@ -503,4 +509,5 @@ Every event also carries GA4's page fields (route only). Counts are numbers of i
 | `agent_action_cancelled` | `action`; `count` | The user cancels a card |
 | `settings_change` | `setting`: business_profile, email_prefs, theme, member_invite, member_access, member_status, member_remove, schedule_create, schedule_pause, schedule_delete, push_target, analytics_consent; `value` (a category, e.g. dark, weekly, editor) | A setting is changed |
 | `plan_upgrade_click` | `plan` (plan id); `action`: checkout, request, portal | Subscribe, Choose/Talk to us, or Manage billing |
+| `plan_limit_hit` | `limit`: runs, invoices, members, connectors, schedules, ai_reads, agent_calls; `plan` (plan id, e.g. free) | The server refuses something because of a plan limit (D-99). Sent from `lib/saas/limits.ts` through the flash cookie; skipped where there's no response to carry it |
 | `error_shown` | `area` (normalised route) | Any error alert (`role="alert"`) appears |

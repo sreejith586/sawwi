@@ -24,7 +24,7 @@ export async function startRun(templateId: string) {
   // Catalogue templates and the workspace's own saved ones; the generic reco has its own setup form.
   if (templateId === GENERIC_TEMPLATE_ID || !await templateFor(orgKeyFor(profile), templateId)) throw new Error("Unknown template");
   // Plan, trial and role gate (a no-op while the paywall is off, except for viewers).
-  const blocked = await runBlocker();
+  const blocked = await runBlocker("run");
   if (blocked) redirect(`/settings/billing?blocked=${blocked.reason}`);
   const run = await createRun(orgKeyFor(profile), templateId);
   await flashEvent("reconciliation_start", isCustomId(templateId) ? { template_kind: "custom" } : { template_kind: "catalogue", template: templateId });
@@ -36,7 +36,8 @@ export async function startRun(templateId: string) {
 async function withRun(runId: string, fn: (run: Run, countries: Country[]) => Promise<unknown>): Promise<RunActionResult> {
   const owned = await getOwnedRun(runId);
   if (!owned) return { error: "Run not found." };
-  const blocked = await runBlocker();
+  // Finishing a run already started never counts against the monthly run limit (D-99).
+  const blocked = await runBlocker("work");
   if (blocked) return { error: blocked.message };
   try {
     await fn(owned.run, owned.profile.countries);

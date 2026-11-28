@@ -15,7 +15,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/agent/actio
   const decision = body.decision === "confirm" ? "confirm" : body.decision === "cancel" ? "cancel" : undefined;
   if (!decision) return Response.json({ error: "Confirm or cancel." }, { status: 400 });
   if (decision === "confirm") {
-    const blocked = await runBlocker();
+    const blocked = await runBlocker("work");
     if (blocked) return Response.json({ error: blocked.message }, { status: 403 });
   }
   try {
