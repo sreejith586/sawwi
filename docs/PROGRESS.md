@@ -25,15 +25,20 @@ _Updated in every commit. Newest first within each section._
 | UI polish (on request) | `ui-polish` | — | U/UX session |
 | Delete a PR's Neon preview database when it closes (D-59) | `ci/neon-preview-cleanup` | #39 | Magento↔BC session |
 | COD remittances → customer payments (D-74–D-77) | `feature/automation-cod-remittances` | #43 | Automation session |
-| Google Analytics 4 + Microsoft Clarity, consent banner, event tracking (D-97) | `feature/analytics-clarity-ga` | #50 | Analytics session |
 
-Merged on 28 Nov 2026: purchase invoices, three-way match and the chat agent (D-86–D-96, #47); QuickBooks Online, Xero and NetSuite connectors (D-80–D-85, #46, rebased on #47).
+Merged on 28 Nov 2026: Vercel Web Analytics with cleaned paths (D-98, #48); Google Analytics 4 and Microsoft Clarity (D-97, #50); purchase invoices, three-way match and the chat agent (D-86–D-96, #47); QuickBooks Online, Xero and NetSuite connectors (D-80–D-85, #46, rebased on #47).
 
 Merged on 8 Nov 2026: Phase 8 (#25, #26, #28), logo and wordmark (#27, #31), D-50 (#29), D-51 (#30), and the Magento ↔ Business Central stack D-52 to D-58 (#35, #32, #33, #34, #36, #37, #38).
 
 ## Recent changes
 
-- **Analytics: Google Analytics 4 and Microsoft Clarity** (D-97, `feature/analytics-clarity-ga`).
+- **Vercel Web Analytics** (D-98, #48, Vercel's PR, rebased on #50).
+  - Cookieless page views next to GA4 and Clarity.
+  - Sent through a `beforeSend` filter, so Vercel gets the same routes as GA4 (`/runs/:id`), never a query string, token or record ID.
+  - The component is renamed `VercelAnalytics` to avoid clashing with D-97's `Analytics`.
+  - 2 new tests.
+  - **Waits for the user:** switch on Web Analytics for the project in Vercel's dashboard.
+- **Analytics: Google Analytics 4 and Microsoft Clarity** (D-97, `feature/analytics-clarity-ga`, #50, merged 28 Nov 2026).
   - **Off by default:** loads only when `NEXT_PUBLIC_GA_MEASUREMENT_ID` or `NEXT_PUBLIC_CLARITY_PROJECT_ID` is set. With neither: no script, cookie or banner.
   - **One typed `track(event, params)`** sends to both (gtag event; Clarity event plus tags). 34 events cover landing and SEO CTAs, sign-up, log in and out, demo, onboarding steps, connectors, reconciliation runs, purchase invoices (upload, AI read, retry, link PO/GRN, confirm match, approve, push, Excel/CSV), settlements and COD, Ask Sawwi (message, card proposed, confirmed, cancelled), settings, upgrade clicks and every error alert. The list is in ARCHITECTURE §12.
   - **Page views** on every App Router navigation, with routes only (`/runs/:id`), no query strings.

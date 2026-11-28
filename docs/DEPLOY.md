@@ -41,7 +41,11 @@ a person, never by an agent or committed to the repo.
 
 After changing a variable, **redeploy**: running deployments keep the values they were built with.
 
-### Analytics (GA4 and Clarity)
+### Analytics (GA4, Clarity and Vercel Web Analytics)
+
+**Vercel Web Analytics** (D-98) needs no variable. Switch it on in Vercel → the project → Analytics → Enable, then redeploy. It's cookieless, so no consent is needed, and it gets cleaned routes only (`/runs/:id`, no query string). Its script and endpoint are same-origin (`/_vercel/insights/*`).
+
+**GA4 and Clarity:**
 
 Both are optional and independent (D-97). Set the IDs above and redeploy: `NEXT_PUBLIC_` values are
 built into the page. Visitors get a cookie banner; until they accept, GA4 runs cookieless (Consent

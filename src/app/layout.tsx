@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Analytics } from "@/components/analytics/analytics";
+import { VercelAnalytics } from "@/components/analytics/vercel-analytics";
 import { InlineScript } from "@/components/inline-script";
 import { CHAT_PANEL_SCRIPT } from "@/lib/chat-panel";
 import { SIDEBAR_SCRIPT } from "@/lib/sidebar";
@@ -39,6 +40,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <Analytics />
         </Suspense>
+        {/* Vercel Web Analytics: cookieless page views with the same cleaned paths (D-98). */}
+        <VercelAnalytics />
       </body>
     </html>
   );

@@ -1151,3 +1151,14 @@ One entry per decision. Add new entries at the bottom; never rewrite an old one.
   - **No CSP change:** there's no CSP today; DEPLOY.md lists the domains for when there is one. GA4's automatic history page views, site search, form and file-download tracking must be off in GA4's admin (they'd carry IDs); DEPLOY.md has the steps.
 - **Consequences:** a new key moment needs an entry in the catalogue (the compiler checks the name list), a `track()` call and a row in ARCHITECTURE §12. Visitors who decline still count in GA4's modelled, cookieless data. Analytics events never include record IDs, so a single invoice or run can't be followed across sessions.
 
+### D-98: Vercel Web Analytics alongside GA4 and Clarity, with the same cleaned page paths
+- **Context:** Vercel opened PR #48 to install Vercel Web Analytics (`@vercel/analytics`, `<Analytics />` in the root layout). The user asked (28 Nov 2026) to merge it properly after D-97 landed. As opened, it clashed with D-97's own `Analytics` component and would have sent every page's full URL, query string included: a password-reset token, a connector's account name (`?connected=`), search text.
+- **Decision:**
+  - **Kept, next to GA4 and Clarity:** it is cookieless and counts page views on Vercel's side, so it needs no consent and works even for visitors who decline the banner.
+  - **Same paths as GA4:** a `beforeSend` filter (`lib/analytics/vercel.ts`) sends the route from `normalizePath`: record IDs become `:id`, and query strings and fragments are dropped. A URL that can't be parsed isn't sent.
+  - **A client wrapper** (`components/analytics/vercel-analytics.tsx`, `VercelAnalytics`) so the filter can be passed from the server-rendered root layout, under a name that doesn't clash with D-97's `Analytics`.
+  - **No custom events:** key moments stay in `track()` (GA4 and Clarity). Vercel gets page views only.
+  - The version is pinned (`2.0.1`), like the other dependencies.
+- **Consequences:**
+  - Counted only on Vercel deployments, once Web Analytics is switched on for the project in Vercel's dashboard. Locally it runs in development mode and sends nothing.
+  - The script and its endpoint are same-origin (`/_vercel/insights/*`), so a future CSP needs no extra domain for it.
