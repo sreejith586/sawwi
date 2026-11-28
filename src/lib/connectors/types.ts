@@ -38,6 +38,29 @@ export type ConnectorDeps = {
   fetch: FetchLike;
   /** Waits between retries; tests pass a no-op. */
   sleep: (ms: number) => Promise<void>;
+  /**
+   * Stores changed credentials, e.g. a rotated OAuth refresh token (D-81). The service sets it
+   * for saved connections; without it a connector still works but refreshes on every call.
+   */
+  saveCredentials?: (next: Record<string, string>) => Promise<void>;
+};
+
+/** Sawwi's own registered app at a provider that signs in with OAuth 2.0 (D-81). */
+export type OAuthApp = { clientId: string; clientSecret: string };
+
+/**
+ * A connector the user connects by signing in at the provider ("Connect with …") instead of
+ * typing credentials (D-81). Sawwi's app keys come from the server's environment.
+ */
+export type OAuthSpec<C> = {
+  /** Sawwi's app at this provider, or null when this server has none configured. */
+  app(): OAuthApp | null;
+  /** The environment variables an operator sets, for the "not set up" message. */
+  envVars: string[];
+  /** Where to send the user to sign in and consent. */
+  authorizeUrl(app: OAuthApp, redirectUri: string, state: string): string;
+  /** Turns the callback's query (code, realm…) into credentials. Throws ConnectorError. */
+  complete(app: OAuthApp, query: URLSearchParams, redirectUri: string, deps: ConnectorDeps): Promise<C>;
 };
 
 export type Connector<C extends Record<string, string> = Record<string, string>> = {
@@ -51,6 +74,8 @@ export type Connector<C extends Record<string, string> = Record<string, string>>
   /** A short label for the account, e.g. the shop name, from a cheap read-only call. */
   test(credentials: C, deps: ConnectorDeps): Promise<{ accountLabel: string }>;
   pull(credentials: C, report: string, window: PullWindow, deps: ConnectorDeps): Promise<ParsedTable>;
+  /** Set for connectors that connect by signing in at the provider (D-81); their `fields` are empty. */
+  oauth?: OAuthSpec<C>;
   /** Writing draft purchase invoices (D-64). Only connectors that can are push targets. */
   purchaseInvoices?: PurchaseInvoiceWriter<C>;
   /** Writing unposted general journal lines (D-71). */

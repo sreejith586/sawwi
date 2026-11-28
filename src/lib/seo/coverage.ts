@@ -4,12 +4,27 @@ import type { Template } from "@/lib/templates/types";
 // where this map says so; everything else is "upload the export". The map is checked in tests
 // against each connector's own report list, so a page can't claim a connector that doesn't exist.
 
-export type ConnectorId = "shopify" | "magento" | "business-central";
+export type ConnectorId = "shopify" | "magento" | "business-central" | "quickbooks" | "xero" | "netsuite";
 
 export const CONNECTOR_NAMES: Record<ConnectorId, string> = {
   shopify: "Shopify",
   magento: "Magento 2 / Adobe Commerce",
   "business-central": "Microsoft Dynamics 365 Business Central",
+  quickbooks: "QuickBooks Online",
+  xero: "Xero",
+  netsuite: "Oracle NetSuite",
+};
+
+/** What QuickBooks Online and Xero both fill (D-82, D-83): same report ids. */
+const SMALL_BUSINESS_ACCOUNTING: Record<string, Record<string, string>> = {
+  "mkt-settlement-vs-sales": { sales: "sales_invoices" },
+  "mkt-b2b-payment-release": { b2b_invoices: "sales_invoices" },
+  "b2b-cash-application": { invoices: "sales_invoices" },
+  "b2b-price-compliance": { invoice_lines: "sales_invoice_lines" },
+  "b2b-returns-vs-credit-notes": { credit_notes: "sales_credit_memos" },
+  "p2p-three-way-match": { po: "purchase_order_lines", invoices: "purchase_invoice_lines" },
+  "web-erp-stock": { erp_stock: "items" },
+  "web-erp-prices": { erp_prices: "items" },
 };
 
 /** connector → template id → slot key → connector report id. */
@@ -46,6 +61,18 @@ export const CONNECTOR_COVERAGE: Record<ConnectorId, Record<string, Record<strin
     "web-erp-stock": { erp_stock: "items" },
     "web-erp-prices": { erp_prices: "items" },
     "web-erp-fx": { erp_invoices: "web_sales_invoices_fx" },
+  },
+  quickbooks: SMALL_BUSINESS_ACCOUNTING,
+  xero: SMALL_BUSINESS_ACCOUNTING,
+  netsuite: {
+    "mkt-settlement-vs-sales": { sales: "sales_invoices" },
+    "mkt-b2b-payment-release": { b2b_invoices: "sales_invoices" },
+    "b2b-cash-application": { invoices: "sales_invoices" },
+    "b2b-order-delivery-invoice": { orders: "sales_order_lines", deliveries: "sales_shipment_lines", invoices: "sales_invoice_lines" },
+    "b2b-price-compliance": { invoice_lines: "sales_invoice_lines" },
+    "b2b-returns-vs-credit-notes": { credit_notes: "sales_credit_memos" },
+    "p2p-three-way-match": { po: "purchase_order_lines", grn: "purchase_receipt_lines", invoices: "purchase_invoice_lines" },
+    "web-erp-stock": { erp_stock: "items" },
   },
 };
 
