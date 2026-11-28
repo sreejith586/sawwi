@@ -26,3 +26,14 @@ export function normalizePath(raw: string): string {
 
 /** Pages Clarity never records, even masked: their URL carries a secret (the reset token). */
 export const CLARITY_EXCLUDED = ["/reset-password"];
+
+/**
+ * Clarity records the full address of the page it loads on, query string included, so it isn't
+ * loaded where that carries a secret or a name: the reset link's token, or a connector sign-in's
+ * return (?connected=<account name>, ?error=<message>).
+ */
+export function clarityAllowed(pathname: string, search: string): boolean {
+  if (CLARITY_EXCLUDED.some((p) => pathname.startsWith(p))) return false;
+  const params = new URLSearchParams(search);
+  return !(params.has("connected") || params.has("error") || params.has("token"));
+}

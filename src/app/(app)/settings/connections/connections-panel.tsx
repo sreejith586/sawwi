@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { addConnectionAction, removeConnectionAction, type ConnectionActionState } from "@/app/actions/connections";
 import { Pill } from "@/components/data-table";
 import { QueryTable, type QueryColumn } from "@/components/query-table";
@@ -29,6 +29,11 @@ export function OAuthResult() {
   const params = useSearchParams();
   const connected = params.get("connected");
   const error = params.get("error");
+  // Once per return from the provider; the account name and message are never sent.
+  useEffect(() => {
+    if (connected) track("connector_connect", { provider: "oauth" });
+    else if (error) track("connector_connect_failed", { provider: "oauth" });
+  }, [connected, error]);
   if (error) {
     return (
       <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">

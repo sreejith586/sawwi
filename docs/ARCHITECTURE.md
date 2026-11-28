@@ -453,7 +453,7 @@ Reconciliation checks work after it's done; Automation does the work: a document
 Google Analytics 4 and Microsoft Clarity, each switched on by its env var (`NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_CLARITY_PROJECT_ID`). With neither, nothing loads: no script, cookie, banner or flash cookie.
 
 - **One helper:** `track(event, params)` (`lib/analytics/track.ts`) sends a gtag event and a Clarity event plus a Clarity tag per parameter. Events and their parameters are typed in `lib/analytics/events.ts`; `sanitizeParams` keeps only numbers, booleans and short slugs, so free text can't get through even by mistake.
-- **Loading** (`components/analytics/analytics.tsx`, in the root layout): the gtag and Clarity queues are set up in code on first use, consent defaults first; `next/script` then loads only the two tags. Clarity isn't loaded on `/reset-password` (its URL holds the token).
+- **Loading** (`components/analytics/analytics.tsx`, in the root layout): the gtag and Clarity queues are set up in code on first use, consent defaults first; `next/script` then loads only the two tags. Clarity isn't loaded on `/reset-password` (its URL holds the token) or on a page whose address carries `connected`, `error` or `token` (a connector sign-in's return names the account), because it records the full address.
 - **Page views:** sent on every App Router navigation (`usePathname`) with `send_page_view: false` in the config. Paths are normalised (`lib/analytics/path.ts`): record IDs become `:id`, custom templates `:custom`, query strings and fragments are dropped. The page title is the route, and the referrer is the previous route (or only another site's origin).
 - **Server-side moments** (sign-up, log in, log out, demo, onboarding done, a run started) end in a redirect, so the server action calls `flashEvent()` (`lib/analytics/flash-server.ts`). It leaves the event in a 60-second `sawwi_ae` cookie, which the next page sends and deletes.
 - **Clicks on public pages** are server-rendered, so links carry `ctaAttrs(cta, location)` (`data-track-cta`) and one document listener sends `cta_click`. The billing portal button uses `data-track-upgrade`.
@@ -476,7 +476,7 @@ Every event also carries GA4's page fields (route only). Counts are numbers of i
 | `demo_start` | — | "Try the live demo" signs in to the demo store (server, flash) |
 | `onboarding_step` | `step`: about, channels, marketplace, webstore, b2b; `step_number`; `step_count` | "Next" on a first-run onboarding step |
 | `onboarding_complete` | `channel_count`; `marketplace`, `webstore`, `b2b` (bools) | The first business profile is saved (server, flash) |
-| `connector_connect` | `provider` (connector id, e.g. shopify) | A connection is tested and saved |
+| `connector_connect` | `provider` (connector id, e.g. shopify; `oauth` for a "Connect with …" sign-in) | A connection is tested and saved, or a sign-in comes back connected |
 | `connector_connect_failed` | `provider` | Adding a connection fails |
 | `connector_disconnect` | `provider` | A connection is removed |
 | `connector_import` | `outcome`: ok, failed | "Import from a connection" on a run |

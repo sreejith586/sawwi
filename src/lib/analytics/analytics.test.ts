@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENT_NAMES_COMPLETE, outcomeOf, sanitizeParams } from "./events";
 import { encodeFlash, parseFlash } from "./flash";
-import { normalizePath } from "./path";
+import { clarityAllowed, normalizePath } from "./path";
 import { analyticsEnabled, clarityProjectId, gaMeasurementId, setConsent, track, trackPageView } from "./track";
 
 type FakeWindow = {
@@ -210,6 +210,16 @@ describe("normalizePath", () => {
     ["/x/123456/", "/x/:id"],
     ["/", "/"],
   ])("%s → %s", (raw, want) => expect(normalizePath(raw)).toBe(want));
+});
+
+describe("clarityAllowed", () => {
+  it("keeps Clarity off where the address carries a token, a name or a message", () => {
+    expect(clarityAllowed("/home", "")).toBe(true);
+    expect(clarityAllowed("/settings/connections", "")).toBe(true);
+    expect(clarityAllowed("/reset-password", "?token=abc")).toBe(false);
+    expect(clarityAllowed("/settings/connections", "?connected=Acme%20Trading")).toBe(false);
+    expect(clarityAllowed("/settings/connections", "?error=Xero%20refused")).toBe(false);
+  });
 });
 
 describe("flash cookie", () => {

@@ -6,7 +6,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { buttonClass } from "@/components/ui";
 import type { CtaId, CtaLocation } from "@/lib/analytics/events";
 import { FLASH_COOKIE, parseFlash } from "@/lib/analytics/flash";
-import { CLARITY_EXCLUDED, normalizePath } from "@/lib/analytics/path";
+import { clarityAllowed, normalizePath } from "@/lib/analytics/path";
 import {
   analyticsEnabled,
   clarityProjectId,
@@ -93,7 +93,15 @@ export function Analytics() {
   }, [enabled]);
 
   if (!enabled) return null;
-  const loadClarity = Boolean(clarityId) && !CLARITY_EXCLUDED.some((p) => pathname.startsWith(p));
+  return <Tags ga={ga} clarityId={clarityId} pathname={pathname} />;
+}
+
+const noSubscribe = () => () => {};
+
+function Tags({ ga, clarityId, pathname }: { ga: string; clarityId: string; pathname: string }) {
+  // Read once on the client; the tags only load there anyway.
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  const loadClarity = Boolean(clarityId) && clarityAllowed(pathname, search);
   return (
     <>
       {/* The queues and consent defaults are set up in track.ts before the first call, so only the tags load here. */}
